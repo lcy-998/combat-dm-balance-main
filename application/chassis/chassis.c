@@ -31,6 +31,9 @@
 #include "controller.h"
 #include "ins_task.h"
 #include "chassis_can_link.h"
+#include "rl_shadow.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
@@ -110,6 +113,8 @@ float F_roll_vmc, F_l_vmc, F_g_vmc, F_in_vmc, T_vmc;
 ctrl_pair tau_l, tau_r;
 float l_xx = 0.16, ttl = 1, ttr = 0;
 float a_xb, a_yb, a_zb, a_w_l, a_w_r, a_w;
+static float rl_heading_vx_raw;
+static uint32_t rl_snapshot_sequence;
 float F_l, F_r, T_l, T_r, P_l, P_r, F_n, MG;
 float setLangle, setRangle, setLangle_tar, setRangle_tar;
 float rotate;
@@ -468,7 +473,50 @@ void getStateData()
     // 速度需要滤波以防打滑
     float acc_b[3] = {-IMU_data->Accel[1], -IMU_data->Accel[0], IMU_data->Accel[2]};
     float eul_deg[3] = {roll * RAD_2_DEG, pitch * RAD_2_DEG, yaw * RAD_2_DEG};
+    rl_heading_vx_raw = s_dot;
     s_dot = WorldXSpeedKF(del_t, acc_b, eul_deg, s_dot, NULL);
+}
+
+static void PublishRLShadowSnapshot(void)
+{
+    RLShadowSnapshot sample = {0};
+    sample.sequence = ++rl_snapshot_sequence;
+    sample.tick_ms = xTaskGetTickCount();
+    sample.chassis_mode = chassis_cmd_recv.chassis_mode;
+    sample.chassis_ready = (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE && !chassis_status);
+    sample.roll_rad = roll;
+    sample.pitch_rad = pitch;
+    sample.roll_rate_rad_s = roll_dot;
+    sample.pitch_rate_rad_s = pitch_dot;
+    sample.yaw_rate_rad_s = yaw_dot;
+    sample.target_vx_m_s = v_cmd;
+    sample.target_yaw_rad_s = w_cmd;
+    sample.heading_vx_m_s = rl_heading_vx_raw;
+    sample.lqr_speed_m_s = s_dot;
+    sample.joint_angle_rad[0] = lfangle;
+    sample.joint_angle_rad[1] = lbangle;
+    sample.joint_angle_rad[2] = rfangle;
+    sample.joint_angle_rad[3] = rbangle;
+    sample.joint_rate_rad_s[0] = lfw;
+    sample.joint_rate_rad_s[1] = lbw;
+    sample.joint_rate_rad_s[2] = rfw;
+    sample.joint_rate_rad_s[3] = rbw;
+    /* Both model wheel joints have negative velocity during forward rolling. */
+    sample.wheel_rate_rad_s[0] = motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+    sample.wheel_rate_rad_s[1] = -motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+    sample.lqr_torque_nm[0] = lwt;
+    sample.lqr_torque_nm[1] = rwt;
+    sample.lqr_torque_nm[2] = lbt;
+    sample.lqr_torque_nm[3] = rbt;
+    if (sample.chassis_ready) {
+        sample.motor_torque_nm[0] = jiont_motorlf->ctrl.tor_set;
+        sample.motor_torque_nm[1] = jiont_motorlb->ctrl.tor_set;
+        sample.motor_torque_nm[2] = jiont_motorrf->ctrl.tor_set;
+        sample.motor_torque_nm[3] = jiont_motorrb->ctrl.tor_set;
+        sample.wheel_current_cmd[0] = lwi;
+        sample.wheel_current_cmd[1] = rwi;
+    }
+    RLShadowPublish(&sample);
 }
 
 void legLengthCalc()
@@ -1245,6 +1293,7 @@ void ChassisTask()
     vmcCalc();
     flyDetect();
     outputTorque();
+    PublishRLShadowSnapshot();
 
     chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
 #ifdef ONE_BOARD

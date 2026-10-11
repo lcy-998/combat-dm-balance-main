@@ -149,6 +149,8 @@ modules/message_center/message_center.c \
 modules/daemon/daemon.c \
 modules/alarm/buzzer.c \
 application/chassis/chassis.c \
+application/chassis/rl_observation.c \
+application/chassis/rl_shadow.c \
 application/cmd/robot_cmd.c \
 application/robot.c \
 Core/Src/i2c.c \
