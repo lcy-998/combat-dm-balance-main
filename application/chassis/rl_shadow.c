@@ -73,7 +73,8 @@ static int network_run(const float observation[RL_SHADOW_OBSERVATION_SIZE],
 }
 
 static void publish_debug(const RLShadowSnapshot *sample, const float *observation,
-                          const float *action, int status, uint32_t missed)
+                          const float *action, const RLShadowOutputPreview *preview,
+                          int status, uint32_t missed)
 {
     volatile RLShadowDebug *d = &g_rl_shadow_debug;
     d->publish_seq++;
@@ -90,6 +91,11 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
         d->chassis_ready = sample->chassis_ready;
         d->heading_vx_m_s = sample->heading_vx_m_s;
         d->lqr_speed_m_s = sample->lqr_speed_m_s;
+        d->target_vx_m_s = sample->target_vx_m_s;
+        d->lqr_wheel_torque_nm[0] = sample->lqr_torque_nm[0];
+        d->lqr_wheel_torque_nm[1] = sample->lqr_torque_nm[1];
+        d->measured_hip_angle_rad[0] = sample->joint_angle_rad[1];
+        d->measured_hip_angle_rad[1] = sample->joint_angle_rad[3];
         for (unsigned i = 0; i < 4; ++i) {
             d->lqr_torque_nm[i] = sample->lqr_torque_nm[i];
             d->motor_torque_nm[i] = sample->motor_torque_nm[i];
@@ -116,6 +122,21 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
             d->raw_action[i] = 0.0f;
         }
     }
+    if (preview != NULL) {
+        d->leg_scale_rad_per_action = preview->leg_scale_rad_per_action;
+        for (unsigned i = 0; i < 2; ++i) {
+            d->policy_wheel_torque_nm[i] = preview->wheel_forward_torque_nm[i];
+            d->policy_hip_q_target_rad[i] = preview->hip_model_target_rad[i];
+            d->policy_hip_target_angle_rad[i] = preview->hip_physical_target_rad[i];
+        }
+    } else {
+        d->leg_scale_rad_per_action = 0.0f;
+        for (unsigned i = 0; i < 2; ++i) {
+            d->policy_wheel_torque_nm[i] = 0.0f;
+            d->policy_hip_q_target_rad[i] = 0.0f;
+            d->policy_hip_target_angle_rad[i] = 0.0f;
+        }
+    }
     __DMB();
     d->publish_seq++;
 }
@@ -126,6 +147,7 @@ void RLShadowTask(void const *argument)
     RLShadowSnapshot sample;
     float observation[RL_SHADOW_OBSERVATION_SIZE];
     float action[RL_SHADOW_ACTION_SIZE];
+    RLShadowOutputPreview preview;
     uint32_t last_sequence = 0;
     uint32_t missed = 0;
     TickType_t wake = xTaskGetTickCount();
@@ -140,25 +162,25 @@ void RLShadowTask(void const *argument)
             wake = now;
         }
         if (xQueuePeek(snapshot_queue, &sample, 0) != pdPASS) {
-            publish_debug(NULL, NULL, NULL, RL_SHADOW_NO_SAMPLE, missed);
+            publish_debug(NULL, NULL, NULL, NULL, RL_SHADOW_NO_SAMPLE, missed);
             continue;
         }
         if (sample.sequence == last_sequence ||
             (TickType_t)(now - sample.tick_ms) > RL_SHADOW_MAX_AGE_TICKS) {
-            publish_debug(&sample, NULL, NULL, RL_SHADOW_STALE_SAMPLE, missed);
+            publish_debug(&sample, NULL, NULL, NULL, RL_SHADOW_STALE_SAMPLE, missed);
             continue;
         }
         last_sequence = sample.sequence;
         if (RLShadowBuildObservation(&sample, observation) != 0) {
-            publish_debug(&sample, NULL, NULL, RL_SHADOW_INVALID_INPUT, missed);
+            publish_debug(&sample, NULL, NULL, NULL, RL_SHADOW_INVALID_INPUT, missed);
             continue;
         }
         if (!ai_ready) {
-            publish_debug(&sample, observation, NULL, RL_SHADOW_AI_INIT_FAILED, missed);
+            publish_debug(&sample, observation, NULL, NULL, RL_SHADOW_AI_INIT_FAILED, missed);
             continue;
         }
         if (network_run(observation, action) != 0) {
-            publish_debug(&sample, observation, NULL, RL_SHADOW_AI_RUN_FAILED, missed);
+            publish_debug(&sample, observation, NULL, NULL, RL_SHADOW_AI_RUN_FAILED, missed);
             continue;
         }
         int valid_output = 1;
@@ -168,7 +190,11 @@ void RLShadowTask(void const *argument)
                 break;
             }
         }
+        if (valid_output && RLShadowConvertOutput(sample.target_vx_m_s, action, &preview) != 0) {
+            valid_output = 0;
+        }
         publish_debug(&sample, observation, valid_output ? action : NULL,
+                      valid_output ? &preview : NULL,
                       valid_output ? RL_SHADOW_OK : RL_SHADOW_INVALID_OUTPUT, missed);
     }
 }

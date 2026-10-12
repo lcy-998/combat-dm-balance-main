@@ -5,6 +5,7 @@
 
 #define RL_SHADOW_OBSERVATION_SIZE 25u
 #define RL_SHADOW_ACTION_SIZE 6u
+#define RL_SHADOW_HIP_ZERO_RAD (42.8966f * 0.01745329251994329577f)
 
 /* One complete chassis sample. The publisher owns no memory used by the reader. */
 typedef struct {
@@ -28,6 +29,14 @@ typedef struct {
     float motor_torque_nm[4];   /* physical lf, lb, rf, rb */
     float wheel_current_cmd[2];/* physical left, right; driver command units */
 } RLShadowSnapshot;
+
+/* Hypothetical consumer mapping for Ozone only; no policy action is executed. */
+typedef struct {
+    float leg_scale_rad_per_action;
+    float hip_model_target_rad[2];    /* physical left/right hip, model q */
+    float hip_physical_target_rad[2]; /* lbangle/rbangle coordinate */
+    float wheel_forward_torque_nm[2];/* physical left/right, forward positive */
+} RLShadowOutputPreview;
 
 enum {
     RL_SHADOW_OK = 0,
@@ -54,6 +63,13 @@ typedef struct {
     uint8_t chassis_ready;
     float observation[RL_SHADOW_OBSERVATION_SIZE]; /* scaled, dimensionless */
     float raw_action[RL_SHADOW_ACTION_SIZE];       /* dimensionless; never actuated */
+    float target_vx_m_s;
+    float leg_scale_rad_per_action;
+    float lqr_wheel_torque_nm[2];       /* physical left/right, forward positive */
+    float policy_wheel_torque_nm[2];    /* converted action, never actuated */
+    float measured_hip_angle_rad[2];   /* lbangle, rbangle */
+    float policy_hip_q_target_rad[2];  /* model right_hip, left_hip */
+    float policy_hip_target_angle_rad[2]; /* lbangle/rbangle coordinate */
     float lqr_torque_nm[4];
     float motor_torque_nm[4];
     float wheel_current_cmd[2];
@@ -67,6 +83,9 @@ void RLShadowQueueInit(void);
 void RLShadowPublish(const RLShadowSnapshot *sample);
 int RLShadowBuildObservation(const RLShadowSnapshot *sample,
                              float observation[RL_SHADOW_OBSERVATION_SIZE]);
+int RLShadowConvertOutput(float target_vx_m_s,
+                          const float raw_action[RL_SHADOW_ACTION_SIZE],
+                          RLShadowOutputPreview *preview);
 void RLShadowTask(void const *argument);
 void RLShadowTaskCreateFailed(void);
 
