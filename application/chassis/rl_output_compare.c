@@ -57,13 +57,15 @@ int RLShadowConvertOutput(float target_vx_m_s,
     }
 
     const float scale = leg_scale_at(target_vx_m_s);
-    const float left_hip_action = clipf(raw_action[1], -1.0f, 1.0f);
-    const float right_hip_action = clipf(raw_action[4], -1.0f, 1.0f);
+    const float lf_q = clipf(scale * clipf(raw_action[0], -1.0f, 1.0f), -2.58f, 2.58f);
+    const float lb_q = clipf(scale * clipf(raw_action[1], -1.0f, 1.0f), -3.08f, 3.08f);
+    const float rf_q = clipf(scale * clipf(raw_action[3], -1.0f, 1.0f), -2.58f, 2.58f);
+    const float rb_q = clipf(scale * clipf(raw_action[4], -1.0f, 1.0f), -3.08f, 3.08f);
     preview->leg_scale_rad_per_action = scale;
-    preview->hip_model_target_rad[0] = clipf(scale * left_hip_action, -3.08f, 3.08f);
-    preview->hip_model_target_rad[1] = clipf(scale * right_hip_action, -3.08f, 3.08f);
-    preview->hip_physical_target_rad[0] = RL_SHADOW_HIP_ZERO_RAD + preview->hip_model_target_rad[0];
-    preview->hip_physical_target_rad[1] = RL_SHADOW_HIP_ZERO_RAD - preview->hip_model_target_rad[1];
+    preview->joint_target_angle_rad[0] = RL_SHADOW_ACTIVE_ZERO_RAD + lf_q;
+    preview->joint_target_angle_rad[1] = RL_SHADOW_HIP_ZERO_RAD + lb_q;
+    preview->joint_target_angle_rad[2] = RL_SHADOW_ACTIVE_ZERO_RAD + rf_q;
+    preview->joint_target_angle_rad[3] = RL_SHADOW_HIP_ZERO_RAD - rb_q;
     preview->wheel_forward_torque_nm[0] = 5.5f * clipf(raw_action[2], -1.0f, 1.0f);
     preview->wheel_forward_torque_nm[1] = 5.5f * clipf(raw_action[5], -1.0f, 1.0f);
     return 0;

@@ -4,8 +4,6 @@
 #include <string.h>
 
 #define RL_PI 3.14159265358979323846f
-#define RL_DEG_TO_RAD (RL_PI / 180.0f)
-#define RL_ACTIVE_ZERO_RAD ((180.0f - 42.8919f) * RL_DEG_TO_RAD)
 
 static float clipf(float x, float lo, float hi)
 {
@@ -40,9 +38,9 @@ int RLShadowBuildObservation(const RLShadowSnapshot *s,
     o[8] = clipf(s->target_yaw_rad_s - yaw_rate, -2.0f, 2.0f);
 
     /* Model right = physical left. Slot 4 (model left_hip) has a reversed axis. */
-    o[9] = wrap_pi(s->joint_angle_rad[0] - RL_ACTIVE_ZERO_RAD);
+    o[9] = wrap_pi(s->joint_angle_rad[0] - RL_SHADOW_ACTIVE_ZERO_RAD);
     o[10] = wrap_pi(s->joint_angle_rad[1] - RL_SHADOW_HIP_ZERO_RAD);
-    o[11] = wrap_pi(s->joint_angle_rad[2] - RL_ACTIVE_ZERO_RAD);
+    o[11] = wrap_pi(s->joint_angle_rad[2] - RL_SHADOW_ACTIVE_ZERO_RAD);
     o[12] = -wrap_pi(s->joint_angle_rad[3] - RL_SHADOW_HIP_ZERO_RAD);
     o[13] = 0.05f * s->joint_rate_rad_s[0];
     o[14] = 0.05f * s->joint_rate_rad_s[1];

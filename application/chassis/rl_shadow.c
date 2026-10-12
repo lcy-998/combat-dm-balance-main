@@ -94,9 +94,8 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
         d->target_vx_m_s = sample->target_vx_m_s;
         d->lqr_wheel_torque_nm[0] = sample->lqr_torque_nm[0];
         d->lqr_wheel_torque_nm[1] = sample->lqr_torque_nm[1];
-        d->measured_hip_angle_rad[0] = sample->joint_angle_rad[1];
-        d->measured_hip_angle_rad[1] = sample->joint_angle_rad[3];
         for (unsigned i = 0; i < 4; ++i) {
+            d->measured_joint_angle_rad[i] = sample->joint_angle_rad[i];
             d->lqr_torque_nm[i] = sample->lqr_torque_nm[i];
             d->motor_torque_nm[i] = sample->motor_torque_nm[i];
         }
@@ -124,17 +123,19 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
     }
     if (preview != NULL) {
         d->leg_scale_rad_per_action = preview->leg_scale_rad_per_action;
+        for (unsigned i = 0; i < 4; ++i) {
+            d->policy_joint_target_angle_rad[i] = preview->joint_target_angle_rad[i];
+        }
         for (unsigned i = 0; i < 2; ++i) {
             d->policy_wheel_torque_nm[i] = preview->wheel_forward_torque_nm[i];
-            d->policy_hip_q_target_rad[i] = preview->hip_model_target_rad[i];
-            d->policy_hip_target_angle_rad[i] = preview->hip_physical_target_rad[i];
         }
     } else {
         d->leg_scale_rad_per_action = 0.0f;
+        for (unsigned i = 0; i < 4; ++i) {
+            d->policy_joint_target_angle_rad[i] = 0.0f;
+        }
         for (unsigned i = 0; i < 2; ++i) {
             d->policy_wheel_torque_nm[i] = 0.0f;
-            d->policy_hip_q_target_rad[i] = 0.0f;
-            d->policy_hip_target_angle_rad[i] = 0.0f;
         }
     }
     __DMB();

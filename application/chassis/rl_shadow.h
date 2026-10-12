@@ -5,6 +5,7 @@
 
 #define RL_SHADOW_OBSERVATION_SIZE 25u
 #define RL_SHADOW_ACTION_SIZE 6u
+#define RL_SHADOW_ACTIVE_ZERO_RAD ((180.0f - 42.8919f) * 0.01745329251994329577f)
 #define RL_SHADOW_HIP_ZERO_RAD (42.8966f * 0.01745329251994329577f)
 
 /* One complete chassis sample. The publisher owns no memory used by the reader. */
@@ -33,8 +34,7 @@ typedef struct {
 /* Hypothetical consumer mapping for Ozone only; no policy action is executed. */
 typedef struct {
     float leg_scale_rad_per_action;
-    float hip_model_target_rad[2];    /* physical left/right hip, model q */
-    float hip_physical_target_rad[2]; /* lbangle/rbangle coordinate */
+    float joint_target_angle_rad[4];  /* lfangle, lbangle, rfangle, rbangle coordinates */
     float wheel_forward_torque_nm[2];/* physical left/right, forward positive */
 } RLShadowOutputPreview;
 
@@ -67,9 +67,8 @@ typedef struct {
     float leg_scale_rad_per_action;
     float lqr_wheel_torque_nm[2];       /* physical left/right, forward positive */
     float policy_wheel_torque_nm[2];    /* converted action, never actuated */
-    float measured_hip_angle_rad[2];   /* lbangle, rbangle */
-    float policy_hip_q_target_rad[2];  /* model right_hip, left_hip */
-    float policy_hip_target_angle_rad[2]; /* lbangle/rbangle coordinate */
+    float measured_joint_angle_rad[4]; /* lfangle, lbangle, rfangle, rbangle */
+    float policy_joint_target_angle_rad[4]; /* same units, signs and zero positions */
     float lqr_torque_nm[4];
     float motor_torque_nm[4];
     float wheel_current_cmd[2];

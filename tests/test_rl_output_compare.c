@@ -34,26 +34,32 @@ int main(void)
         }
     }
 
+    action[0] = 0.25f;
     action[1] = 0.5f;
+    action[3] = -0.75f;
     action[4] = 0.5f;
     action[2] = 0.6f;
     action[5] = -0.5f;
     assert(RLShadowConvertOutput(1.0f, action, &preview) == 0);
-    near(preview.hip_model_target_rad[0], 0.11f);
-    near(preview.hip_model_target_rad[1], 0.11f);
-    near(preview.hip_physical_target_rad[0], RL_SHADOW_HIP_ZERO_RAD + 0.11f);
-    near(preview.hip_physical_target_rad[1], RL_SHADOW_HIP_ZERO_RAD - 0.11f);
+    near(preview.joint_target_angle_rad[0], RL_SHADOW_ACTIVE_ZERO_RAD + 0.055f);
+    near(preview.joint_target_angle_rad[1], RL_SHADOW_HIP_ZERO_RAD + 0.11f);
+    near(preview.joint_target_angle_rad[2], RL_SHADOW_ACTIVE_ZERO_RAD - 0.165f);
+    near(preview.joint_target_angle_rad[3], RL_SHADOW_HIP_ZERO_RAD - 0.11f);
     near(preview.wheel_forward_torque_nm[0], 3.3f);
     near(preview.wheel_forward_torque_nm[1], -2.75f);
 
+    action[0] = 2.0f;
     action[1] = 2.0f;
+    action[3] = -2.0f;
     action[4] = -2.0f;
     action[2] = 2.0f;
     action[5] = -2.0f;
     assert(RLShadowConvertOutput(10.0f, action, &preview) == 0);
     near(preview.leg_scale_rad_per_action, 0.286f);
-    near(preview.hip_model_target_rad[0], 0.286f);
-    near(preview.hip_model_target_rad[1], -0.286f);
+    near(preview.joint_target_angle_rad[0], RL_SHADOW_ACTIVE_ZERO_RAD + 0.286f);
+    near(preview.joint_target_angle_rad[1], RL_SHADOW_HIP_ZERO_RAD + 0.286f);
+    near(preview.joint_target_angle_rad[2], RL_SHADOW_ACTIVE_ZERO_RAD - 0.286f);
+    near(preview.joint_target_angle_rad[3], RL_SHADOW_HIP_ZERO_RAD + 0.286f);
     near(preview.wheel_forward_torque_nm[0], 5.5f);
     near(preview.wheel_forward_torque_nm[1], -5.5f);
     action[1] = NAN;
