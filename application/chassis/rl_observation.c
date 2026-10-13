@@ -15,6 +15,23 @@ static float wrap_pi(float angle)
     return remainderf(angle, 2.0f * RL_PI);
 }
 
+int RLShadowPositionPID(float odom_s_m, float target_s_m,
+                        float *target_vx_m_s)
+{
+    if (target_vx_m_s == NULL || !isfinite(odom_s_m) || !isfinite(target_s_m)) {
+        return -1;
+    }
+    const float error_m = target_s_m - odom_s_m;
+    if (!isfinite(error_m)) {
+        return -1;
+    }
+    /* Position PID: Kp=1, Ki=0, Kd=0 for the initial tuning. */
+    *target_vx_m_s = clipf(RL_SHADOW_POSITION_KP * error_m,
+                            -RL_SHADOW_TARGET_SPEED_LIMIT_M_S,
+                            RL_SHADOW_TARGET_SPEED_LIMIT_M_S);
+    return 0;
+}
+
 int RLShadowBuildObservation(const RLShadowSnapshot *s,
                              float o[RL_SHADOW_OBSERVATION_SIZE])
 {
@@ -48,7 +65,9 @@ int RLShadowBuildObservation(const RLShadowSnapshot *s,
     o[16] = 0.05f * s->joint_rate_rad_s[2];
     o[17] = -0.05f * s->joint_rate_rad_s[3];
     o[18] = 0.05f * s->wheel_rate_rad_s[1];
-    /* 19..24 are zero: no policy action has actually been executed. */
+    for (unsigned i = 0; i < RL_SHADOW_ACTION_SIZE; ++i) {
+        o[19u + i] = s->previous_action[i];
+    }
 
     for (unsigned i = 0; i < RL_SHADOW_OBSERVATION_SIZE; ++i) {
         if (!isfinite(o[i])) {

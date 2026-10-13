@@ -114,12 +114,7 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config)
     motor->motor_set = config->motor_set;
     motor->motor_can_instance = CANRegister(&config->can_init_config);
     motor->online = 1;
-    for (size_t i = 0; i < 100; i++)
-    {
-
-        DMMotorEnableMode(motor); // 使能电机模式,发送使能指令
-        CANTransmit(motor->motor_can_instance, 0.2);
-    }
+    /* Remain stopped during startup; the control task enables only on demand. */
 
     motor->ctrl.vel_set = 0.0;
     motor->ctrl.tor_set = 0.0; //   默认关闭，避免出问题
@@ -169,7 +164,8 @@ void DMMotorControl()
     for (size_t i = 0; i < idm; ++i)
     {
         motor = dmmotor_instance[i];
-        if (motor->stop_flag == MOTOR_STOP)
+        const uint8_t stopped = (motor->stop_flag == MOTOR_STOP);
+        if (stopped)
         {
             motor->ctrl.vel_set = 0.0;
             motor->ctrl.tor_set = 0.0;
@@ -181,7 +177,12 @@ void DMMotorControl()
         // memset(motor->motor_can_instance->tx_buff, 0, sizeof(motor->motor_can_instance->tx_buff));
         // memcpy(motor->motor_can_instance->tx_buff, &motor_controller->output_current, sizeof(float));
         // motor->motor_can_instance->tx_buff[6] = 0x01;
-        if (motor->online && motor->measure.state)
+        if (stopped && motor->ctrl.mode == 0)
+        {
+            /* Never send an enable frame while an emergency stop is active. */
+            mit_ctrl(motor);
+        }
+        else if (motor->online && motor->measure.state)
         {
             switch (motor->ctrl.mode) // 控制模式
             {
@@ -194,9 +195,13 @@ void DMMotorControl()
                 break;
             }
         }
-        else
+        else if (!stopped)
         {
             DMMotorEnableMode(motor);
+        }
+        else
+        {
+            pos_ctrl(motor);
         }
 
         CANTransmit(motor->motor_can_instance, 0.1);

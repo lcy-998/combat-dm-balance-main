@@ -28,6 +28,12 @@ int main(void)
     for (unsigned i = 9; i <= 12; ++i) near(o[i], 0.0f);
     for (unsigned i = 19; i < 25; ++i) near(o[i], 0.0f);
 
+    s.previous_action[0] = 0.25f;
+    s.previous_action[5] = -0.5f;
+    assert(RLShadowBuildObservation(&s, o) == 0);
+    near(o[19], 0.25f);
+    near(o[24], -0.5f);
+
     s.pitch_rad = 0.1f;          /* nose down */
     s.roll_rad = 0.2f;           /* lean right */
     s.roll_rate_rad_s = 2.0f;

@@ -31,12 +31,17 @@
 #include "controller.h"
 #include "ins_task.h"
 #include "chassis_can_link.h"
+#include "chassis_cmd_watchdog.h"
 #include "rl_shadow.h"
+#include "rl_control.h"
+#include "buzzer.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
+static Chassis_Ctrl_Cmd_s chassis_can_cmd;
+static ChassisCmdWatchdog chassis_cmd_watchdog;
 #endif
 #include "vel_meas.h"
 /* 根据robot_def.h中的macro自动计算的参数 */
@@ -77,6 +82,7 @@ static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
 #define LEG_RETRACT_TORQUE_SOFTSTART_RC 0.05f
 #define LEG_RETRACT_TORQUE_RELEASE_RC 0.01f
 #define V_CMD_MAX_ACCEL 100.0f
+#define CHASSIS_CMD_TIMEOUT_MS 50u
 
 /* 底盘应用包含的模块和信息存储,底盘是单例模式,因此不需要为底盘建立单独的结构体 */
 #ifdef CHASSIS_BOARD // 如果是底盘板,使用板载IMU获取底盘转动角速度
@@ -115,6 +121,15 @@ float l_xx = 0.16, ttl = 1, ttr = 0;
 float a_xb, a_yb, a_zb, a_w_l, a_w_r, a_w;
 static float rl_heading_vx_raw;
 static uint32_t rl_snapshot_sequence;
+static RLControlState rl_control_state;
+static RLControlLegRamp rl_leg_ramp;
+static BuzzzerInstance *rl_switch_buzzer;
+static uint32_t rl_buzzer_off_tick;
+static uint32_t rl_buzzer_gap_until_tick;
+static uint8_t rl_buzzer_on;
+static uint8_t rl_buzzer_pending;
+static octave_e rl_buzzer_pending_note;
+static uint8_t rl_joint_mode;
 float F_l, F_r, T_l, T_r, P_l, P_r, F_n, MG;
 float setLangle, setRangle, setLangle_tar, setRangle_tar;
 float rotate;
@@ -289,6 +304,9 @@ void ChassisInit()
     chassis_motor_config.can_init_config.tx_id = 1;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_l = DJIMotorInit(&chassis_motor_config);
+    /* The motor task may run before the first non-emergency chassis cycle. */
+    motor_l->motor_controller.current_feedforward_ptr = &lwi;
+    motor_r->motor_controller.current_feedforward_ptr = &rwi;
     jiontmotor.can_init_config.can_handle = &hfdcan1;
     jiontmotor.can_init_config.tx_id = 0x01;
     jiontmotor.can_init_config.rx_id = 0x11; // l电机的接收id
@@ -316,6 +334,12 @@ void ChassisInit()
     Lwheel = motor_l->measure.total_angle;
     WheelKfInit(&kf);
     IMU_data = INS_Init();
+    Buzzer_config_s rl_buzzer_config = {
+        .alarm_level = ALARM_LEVEL_LOW,
+        .octave = OCTAVE_5,
+        .loudness = 0.4f,
+    };
+    rl_switch_buzzer = BuzzerRegister(&rl_buzzer_config);
     // imu             = Ch040_USART_Init();
     // 发布订阅初始化,如果为双板,则需要can comm来传递消息
 #ifdef CHASSIS_BOARD
@@ -326,7 +350,7 @@ void ChassisInit()
         .can_module_callback = ChassisCanCtrlRxCallback,
         .id = &chassis_ctrl_rx_ctx,
     };
-    chassis_ctrl_rx_ctx.ctrl_dst = &chassis_cmd_recv;
+    chassis_ctrl_rx_ctx.ctrl_dst = &chassis_can_cmd;
     chassis_can = CANRegister(&can_config);
     CANSetDLC(chassis_can, sizeof(Chassis_Upload_Data_CAN_s));
     referee_data = UITaskInit(&huart1, &ui_data); // 裁判系统初始化,会同时初始化UI
@@ -484,12 +508,14 @@ static void PublishRLShadowSnapshot(void)
     sample.tick_ms = xTaskGetTickCount();
     sample.chassis_mode = chassis_cmd_recv.chassis_mode;
     sample.chassis_ready = (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE && !chassis_status);
+    sample.odom_s_m = s;
+    sample.target_s_m = s_tar;
+    sample.remote_vx_m_s = v_cmd;
     sample.roll_rad = roll;
     sample.pitch_rad = pitch;
     sample.roll_rate_rad_s = roll_dot;
     sample.pitch_rate_rad_s = pitch_dot;
     sample.yaw_rate_rad_s = yaw_dot;
-    sample.target_vx_m_s = v_cmd;
     sample.target_yaw_rad_s = w_cmd;
     sample.heading_vx_m_s = rl_heading_vx_raw;
     sample.lqr_speed_m_s = s_dot;
@@ -508,15 +534,27 @@ static void PublishRLShadowSnapshot(void)
     sample.lqr_torque_nm[1] = rwt;
     sample.lqr_torque_nm[2] = lbt;
     sample.lqr_torque_nm[3] = rbt;
+    /* Match the positive active/hip action axes used by the RL observation. */
+    sample.motor_torque_nm[0] = -jiont_motorlf->measure.tor;
+    sample.motor_torque_nm[1] = -jiont_motorlb->measure.tor;
+    sample.motor_torque_nm[2] = jiont_motorrf->measure.tor;
+    sample.motor_torque_nm[3] = -jiont_motorrb->measure.tor;
+    memcpy(sample.previous_action, rl_control_state.previous_action,
+           sizeof(sample.previous_action));
     if (sample.chassis_ready) {
-        sample.motor_torque_nm[0] = jiont_motorlf->ctrl.tor_set;
-        sample.motor_torque_nm[1] = jiont_motorlb->ctrl.tor_set;
-        sample.motor_torque_nm[2] = jiont_motorrf->ctrl.tor_set;
-        sample.motor_torque_nm[3] = jiont_motorrb->ctrl.tor_set;
         sample.wheel_current_cmd[0] = lwi;
         sample.wheel_current_cmd[1] = rwi;
     }
     RLShadowPublish(&sample);
+}
+
+static int ChassisNormalLQRState(void)
+{
+    return chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
+           !chassis_status && !(jumpingflag && clockcent < 200u) &&
+           !upstair_flag && !upstair_flag0 &&
+           fabs(theta_l) <= LEG_SWING_CUTOFF_RAD &&
+           fabs(theta_r) <= LEG_SWING_CUTOFF_RAD;
 }
 
 void legLengthCalc()
@@ -530,12 +568,12 @@ void legLengthCalc()
     {
     case 1:
 
-        l_xx -= 0.002f * 0.03f;
+        l_xx -= 0.002f * 0.3f;
         break;
     case -1:
         // jumpingflag = 1;
         // clockcent = 0;
-        l_xx += 0.002f * 0.03f;
+        l_xx += 0.002f * 0.3f;
         break;
     case 2:
         upstair_flag0 = 1;
@@ -553,6 +591,12 @@ void legLengthCalc()
     // 腿长限位
     l_xx = fmax(0.16f, l_xx);
     l_xx = fmin(0.36f, l_xx);
+
+    /* Extend the target over the first five seconds of normal LQR operation. */
+    const int can_extend = ChassisNormalLQRState() &&
+                           !(reset_time >= 5000 && F_n < 80.0f);
+    l_xx = RLControlLegRampStep(&rl_leg_ramp, xTaskGetTickCount(),
+                                can_extend, l_xx);
 
     // 腿长差补偿拟通过roll补偿解决，当然之前的计算方法也可以保留，后续验证后再决定是否加入
     l_tar = l_xx;
@@ -855,6 +899,75 @@ static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_
     return mapped;
 }
 
+static void ResetRLJointMode(void)
+{
+    if (!rl_joint_mode)
+        return;
+    DMMotorInstance *joint[4] = {jiont_motorlf, jiont_motorlb,
+                                 jiont_motorrf, jiont_motorrb};
+    for (unsigned i = 0; i < 4u; ++i)
+    {
+        joint[i]->ctrl.kp_set = 0.0f;
+        joint[i]->ctrl.kd_set = 0.0f;
+        DMMotorSetPos(joint[i], 0.0f, 0.0f);
+    }
+    rl_joint_mode = 0u;
+}
+
+static void ApplyRLJointOutput(const float target[4], float blend)
+{
+    DMMotorInstance *joint[4] = {jiont_motorlf, jiont_motorlb,
+                                 jiont_motorrf, jiont_motorrb};
+    for (unsigned i = 0; i < 4u; ++i)
+    {
+        float position, torque, kp, kd;
+        RLControlBlendJoint(joint[i]->measure.pos, joint[i]->ctrl.tor_set,
+                            target[i], blend, &position, &torque, &kp, &kd);
+        DMMotorSetPos(joint[i], position, 0.0f);
+        DMMotorSetTorque(joint[i], torque);
+        joint[i]->ctrl.kp_set = kp;
+        joint[i]->ctrl.kd_set = kd;
+    }
+    rl_joint_mode = 1u;
+}
+
+static void StartRLBeep(uint32_t now_tick, octave_e note)
+{
+    rl_switch_buzzer->octave = note;
+    AlarmSetStatus(rl_switch_buzzer, ALARM_ON);
+    rl_buzzer_off_tick = now_tick + pdMS_TO_TICKS(100u);
+    rl_buzzer_on = 1u;
+}
+
+static void RequestRLBeep(uint32_t now_tick, octave_e note)
+{
+    if (rl_switch_buzzer == NULL)
+        return;
+    if (rl_buzzer_on || (int32_t)(now_tick - rl_buzzer_gap_until_tick) < 0)
+    {
+        rl_buzzer_pending = 1u;
+        rl_buzzer_pending_note = note;
+    }
+    else
+        StartRLBeep(now_tick, note);
+}
+
+static void ServiceRLBeep(uint32_t now_tick)
+{
+    if (rl_buzzer_on && (int32_t)(now_tick - rl_buzzer_off_tick) >= 0)
+    {
+        AlarmSetStatus(rl_switch_buzzer, ALARM_OFF);
+        rl_buzzer_on = 0u;
+        rl_buzzer_gap_until_tick = now_tick + pdMS_TO_TICKS(50u);
+    }
+    if (!rl_buzzer_on && rl_buzzer_pending &&
+        (int32_t)(now_tick - rl_buzzer_gap_until_tick) >= 0)
+    {
+        rl_buzzer_pending = 0u;
+        StartRLBeep(now_tick, rl_buzzer_pending_note);
+    }
+}
+
 void outputTorque()
 {
     // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
@@ -874,6 +987,24 @@ void outputTorque()
     rbjt = +Rleg->tor - tau_r.tau2 - rbt / 2 - spring_tor_r * arm_sin_f32(rmangle);
     float leg_retract_tor_l = 0.0f;
     float leg_retract_tor_r = 0.0f;
+
+    const uint32_t now_tick = xTaskGetTickCount();
+    ServiceRLBeep(now_tick);
+    RLShadowCommand rl_command;
+    const RLShadowCommand *rl_command_ptr =
+        (RLShadowReadCommand(&rl_command) == 0) ? &rl_command : NULL;
+    const int rl_normal_lqr = ChassisNormalLQRState();
+    RLControlDecision rl_decision = RLControlStep(&rl_control_state, now_tick,
+                                                 rl_normal_lqr, rl_command_ptr);
+    if (rl_decision.exit_beep && rl_joint_mode)
+    {
+        /* Do: emergency; Re: stand-up/special-motion protection; Mi: invalid RL command. */
+        const octave_e exit_note = chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE
+            ? OCTAVE_1 : (rl_normal_lqr ? OCTAVE_3 : OCTAVE_2);
+        RequestRLBeep(now_tick, exit_note);
+    }
+    if (!rl_decision.active)
+        ResetRLJointMode();
 
     // 非双下
     if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE)
@@ -1150,6 +1281,39 @@ void outputTorque()
                 if (rwi < -8192)
                     rwi = -8192;
 
+                if (rl_decision.active)
+                {
+                    const float encoder_now[4] = {
+                        jiont_motorlf->measure.pos, jiont_motorlb->measure.pos,
+                        jiont_motorrf->measure.pos, jiont_motorrb->measure.pos};
+                    const float encoder_offset[4] = {
+                        LF_ENCODE_OFFSET, LB_ENCODE_OFFSET,
+                        RF_ENCODE_OFFSET, RB_ENCODE_OFFSET};
+                    float encoder_target[4], rl_wheel_current[2];
+                    if (RLControlMapOutput(&rl_command.output, encoder_now,
+                                           encoder_offset, encoder_target,
+                                           rl_wheel_current) == 0)
+                    {
+                        ApplyRLJointOutput(encoder_target, rl_decision.blend);
+                        lwi = RLControlBlendCurrent(lwi, rl_wheel_current[0],
+                                                    rl_decision.blend);
+                        rwi = RLControlBlendCurrent(rwi, rl_wheel_current[1],
+                                                    rl_decision.blend);
+                        if (rl_decision.beep)
+                            RequestRLBeep(now_tick, OCTAVE_5);
+                    }
+                    else
+                    {
+                        if (rl_decision.beep)
+                            rl_control_state.beeped = 0u;
+                        RLControlDecision lost =
+                            RLControlStep(&rl_control_state, now_tick, 1, NULL);
+                        if (lost.exit_beep && rl_joint_mode)
+                            RequestRLBeep(now_tick, OCTAVE_3);
+                        ResetRLJointMode();
+                    }
+                }
+
                 if (!upstair_flag0)
                 {
                     upstair_flag0_cnt = 0;
@@ -1169,6 +1333,20 @@ void ChassisTask()
 #ifdef ONE_BOARD
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
 #endif
+#ifdef CHASSIS_BOARD
+    Chassis_Ctrl_Cmd_s received_cmd;
+    uint32_t rx_sequence, rx_tick;
+    taskENTER_CRITICAL();
+    rx_sequence = chassis_ctrl_rx_ctx.rx_sequence;
+    rx_tick = chassis_ctrl_rx_ctx.last_rx_tick_ms;
+    received_cmd = chassis_can_cmd;
+    taskEXIT_CRITICAL();
+    if (ChassisCmdWatchdogFresh(&chassis_cmd_watchdog, rx_sequence, rx_tick,
+                                HAL_GetTick(), CHASSIS_CMD_TIMEOUT_MS))
+        chassis_cmd_recv = received_cmd;
+    else
+        memset(&chassis_cmd_recv, 0, sizeof(chassis_cmd_recv));
+#endif
 
     chassis_wz_cmd = chassis_cmd_recv.wz;
 
@@ -1187,6 +1365,8 @@ void ChassisTask()
     standup_gimbal_reset_flag = (standup_gimbal_reset_cnt >= STANDUP_GIMBAL_RESET_CONFIRM_CNT);
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
+        lwi = 0.0f;
+        rwi = 0.0f;
         DJIMotorStop(motor_l);
         DJIMotorStop(motor_r);
         DMMotorStop(jiont_motorlb);

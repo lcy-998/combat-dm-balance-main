@@ -21,6 +21,9 @@ volatile RLShadowDebug g_rl_shadow_debug;
 static StaticQueue_t snapshot_queue_control;
 static uint8_t snapshot_queue_storage[sizeof(RLShadowSnapshot)];
 static QueueHandle_t snapshot_queue;
+static StaticQueue_t command_queue_control;
+static uint8_t command_queue_storage[sizeof(RLShadowCommand)];
+static QueueHandle_t command_queue;
 
 AI_ALIGNED(32) static uint8_t network_activations[AI_NETWORK_DATA_ACTIVATION_1_SIZE];
 static ai_handle network_handle = AI_HANDLE_NULL;
@@ -31,7 +34,10 @@ void RLShadowQueueInit(void)
 {
     snapshot_queue = xQueueCreateStatic(1u, sizeof(RLShadowSnapshot),
                                         snapshot_queue_storage, &snapshot_queue_control);
+    command_queue = xQueueCreateStatic(1u, sizeof(RLShadowCommand),
+                                       command_queue_storage, &command_queue_control);
     configASSERT(snapshot_queue != NULL);
+    configASSERT(command_queue != NULL);
 }
 
 void RLShadowPublish(const RLShadowSnapshot *sample)
@@ -40,6 +46,12 @@ void RLShadowPublish(const RLShadowSnapshot *sample)
         /* Length one means the 8 ms consumer always receives the latest 5 ms sample. */
         (void)xQueueOverwrite(snapshot_queue, sample);
     }
+}
+
+int RLShadowReadCommand(RLShadowCommand *command)
+{
+    return (command != NULL && command_queue != NULL &&
+            xQueuePeek(command_queue, command, 0) == pdPASS) ? 0 : -1;
 }
 
 void RLShadowTaskCreateFailed(void)
@@ -76,6 +88,20 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
                           const float *action, const RLShadowOutputPreview *preview,
                           int status, uint32_t missed)
 {
+    RLShadowCommand command = {0};
+    command.output_tick_ms = xTaskGetTickCount();
+    if (sample != NULL) {
+        command.snapshot_sequence = sample->sequence;
+        command.snapshot_tick_ms = sample->tick_ms;
+    }
+    if (status == RL_SHADOW_OK && sample != NULL && sample->chassis_ready &&
+        action != NULL && preview != NULL) {
+        command.valid = 1u;
+        memcpy(command.raw_action, action, sizeof(command.raw_action));
+        command.output = *preview;
+    }
+    (void)xQueueOverwrite(command_queue, &command);
+
     volatile RLShadowDebug *d = &g_rl_shadow_debug;
     d->publish_seq++;
     __DMB();
@@ -89,6 +115,10 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
         d->snapshot_tick_ms = sample->tick_ms;
         d->chassis_mode = sample->chassis_mode;
         d->chassis_ready = sample->chassis_ready;
+        d->odom_s_m = sample->odom_s_m;
+        d->target_s_m = sample->target_s_m;
+        d->position_error_m = sample->target_s_m - sample->odom_s_m;
+        d->remote_vx_m_s = sample->remote_vx_m_s;
         d->heading_vx_m_s = sample->heading_vx_m_s;
         d->lqr_speed_m_s = sample->lqr_speed_m_s;
         d->target_vx_m_s = sample->target_vx_m_s;
@@ -172,6 +202,13 @@ void RLShadowTask(void const *argument)
             continue;
         }
         last_sequence = sample.sequence;
+        float target_vx_m_s;
+        if (RLShadowPositionPID(sample.odom_s_m, sample.target_s_m,
+                                &target_vx_m_s) != 0) {
+            publish_debug(&sample, NULL, NULL, NULL, RL_SHADOW_INVALID_INPUT, missed);
+            continue;
+        }
+        sample.target_vx_m_s = target_vx_m_s;
         if (RLShadowBuildObservation(&sample, observation) != 0) {
             publish_debug(&sample, NULL, NULL, NULL, RL_SHADOW_INVALID_INPUT, missed);
             continue;
