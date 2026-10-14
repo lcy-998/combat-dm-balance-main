@@ -203,7 +203,7 @@ void RLShadowTask(void const *argument)
         }
         last_sequence = sample.sequence;
         float target_vx_m_s;
-        if (RLShadowPositionPID(sample.odom_s_m, sample.target_s_m,
+        if (RLShadowRemoteVelocity(sample.remote_vx_m_s,
                                 &target_vx_m_s) != 0) {
             publish_debug(&sample, NULL, NULL, NULL, RL_SHADOW_INVALID_INPUT, missed);
             continue;
