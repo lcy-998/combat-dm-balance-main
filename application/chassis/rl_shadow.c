@@ -115,6 +115,8 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
         d->snapshot_tick_ms = sample->tick_ms;
         d->chassis_mode = sample->chassis_mode;
         d->chassis_ready = sample->chassis_ready;
+        d->rl_active = sample->rl_active;
+        d->rl_activation_sequence = sample->rl_activation_sequence;
         d->odom_s_m = sample->odom_s_m;
         d->target_s_m = sample->target_s_m;
         d->position_error_m = sample->target_s_m - sample->odom_s_m;
@@ -179,6 +181,7 @@ void RLShadowTask(void const *argument)
     float observation[RL_SHADOW_OBSERVATION_SIZE];
     float action[RL_SHADOW_ACTION_SIZE];
     RLShadowOutputPreview preview;
+    RLShadowPositionTarget position_target = {0};
     uint32_t last_sequence = 0;
     uint32_t missed = 0;
     TickType_t wake = xTaskGetTickCount();
@@ -202,6 +205,13 @@ void RLShadowTask(void const *argument)
             continue;
         }
         last_sequence = sample.sequence;
+        float target_s_m;
+        if (RLShadowUpdatePositionTarget(&position_target, &sample, now,
+                                         &target_s_m) != 0) {
+            publish_debug(&sample, NULL, NULL, NULL, RL_SHADOW_INVALID_INPUT, missed);
+            continue;
+        }
+        sample.target_s_m = target_s_m;
         float target_vx_m_s;
         if (RLShadowPositionPID(sample.odom_s_m, sample.target_s_m,
                                 &target_vx_m_s) != 0) {

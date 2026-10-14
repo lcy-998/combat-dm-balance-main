@@ -15,6 +15,54 @@ static float wrap_pi(float angle)
     return remainderf(angle, 2.0f * RL_PI);
 }
 
+int RLShadowUpdatePositionTarget(RLShadowPositionTarget *state,
+                                 const RLShadowSnapshot *sample,
+                                 uint32_t now_tick_ms, float *target_s_m)
+{
+    if (state == NULL || sample == NULL || target_s_m == NULL) {
+        return -1;
+    }
+    if (!isfinite(sample->odom_s_m) || !isfinite(sample->target_s_m) ||
+        !isfinite(sample->remote_vx_m_s)) {
+        state->active = 0u;
+        state->zero_latched = 0u;
+        return -1;
+    }
+    if (!sample->rl_active) {
+        state->active = 0u;
+        state->zero_latched = 0u;
+        *target_s_m = sample->target_s_m;
+        return 0;
+    }
+
+    const uint32_t elapsed_ms = (uint32_t)(now_tick_ms - state->last_tick_ms);
+    if (!state->active ||
+        state->activation_sequence != sample->rl_activation_sequence ||
+        elapsed_ms > RL_SHADOW_POSITION_MAX_DT_MS) {
+        state->target_s_m = sample->odom_s_m;
+        state->active = 1u;
+        state->zero_latched = (sample->remote_vx_m_s == 0.0f);
+    } else if (sample->remote_vx_m_s == 0.0f) {
+        if (!state->zero_latched) {
+            state->target_s_m = sample->odom_s_m;
+            state->zero_latched = 1u;
+        }
+    } else {
+        state->zero_latched = 0u;
+        const float next_target = state->target_s_m +
+                                  sample->remote_vx_m_s * (0.001f * (float)elapsed_ms);
+        if (!isfinite(next_target)) {
+            state->active = 0u;
+            return -1;
+        }
+        state->target_s_m = next_target;
+    }
+    state->last_tick_ms = now_tick_ms;
+    state->activation_sequence = sample->rl_activation_sequence;
+    *target_s_m = state->target_s_m;
+    return 0;
+}
+
 int RLShadowPositionPID(float odom_s_m, float target_s_m,
                         float *target_vx_m_s)
 {

@@ -34,6 +34,7 @@
 #include "chassis_cmd_watchdog.h"
 #include "rl_shadow.h"
 #include "rl_control.h"
+#include "wheel_friction.h"
 #include "buzzer.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -112,6 +113,7 @@ static float Rwheel, Lwheel;
 static float chassis_wz_cmd;
 float lfangle, rfangle, lbangle, rbangle, lmangle, rmangle, lfw, lbw, rfw, rbw;
 float lbt, rbt, lwt, rwt, lwi, rwi, lfjt, lbjt, rfjt, rbjt;
+float wheel_friction_torque_nm[2]; /* physical left/right, forward positive */
 float l_tar, r_tar, sol_alpha, sol_beta;
 double ChangeL;
 float v_cmd, w_cmd, phi_tar = 0, s_tar, theta_bal = 0.129f, miu = 0.8f; // 4.0f;
@@ -122,6 +124,7 @@ float a_xb, a_yb, a_zb, a_w_l, a_w_r, a_w;
 static float rl_heading_vx_raw;
 static uint32_t rl_snapshot_sequence;
 static RLControlState rl_control_state;
+static uint32_t rl_activation_sequence;
 static RLControlLegRamp rl_leg_ramp;
 static BuzzzerInstance *rl_switch_buzzer;
 static uint32_t rl_buzzer_off_tick;
@@ -159,6 +162,7 @@ static uint16_t standup_gimbal_reset_cnt = 0;
 static uint16_t step2_retract_confirm_cnt = 0;
 static float leg_retract_torque_scale = 0.0f;
 static float v_cmd_last = 0.0f;
+static uint8_t position_hold_latched = 0u;
 static referee_info_t *referee_data;       // 用于获取裁判系统的数据
 static Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
 
@@ -508,6 +512,8 @@ static void PublishRLShadowSnapshot(void)
     sample.tick_ms = xTaskGetTickCount();
     sample.chassis_mode = chassis_cmd_recv.chassis_mode;
     sample.chassis_ready = (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE && !chassis_status);
+    sample.rl_active = rl_joint_mode;
+    sample.rl_activation_sequence = rl_activation_sequence;
     sample.odom_s_m = s;
     sample.target_s_m = s_tar;
     sample.remote_vx_m_s = v_cmd;
@@ -699,7 +705,10 @@ void setTargetData()
 
     // 每次复位仅执行一次的代码，机器人死亡时的数据需要更新防止抽风
     if (!done)
+    {
         ++done, phi_tar = phi, s_tar = s;
+        position_hold_latched = 0u;
+    }
     if (w_cmd != 0)
         phi_tar = phi + w_cmd * 0.002f;
     else
@@ -707,10 +716,20 @@ void setTargetData()
         phi_tar = phi;
     }
     // absds = SpeedEstimation(del_t, imu->ch040_data, s_zdot);//要更改
-    if (v_cmd != 0)
+    if (v_cmd == 0.0f)
     {
-        s_tar = s + v_cmd * 0.003f + 1.2;
+        if (!position_hold_latched)
+        {
+            s_tar = s;
+            position_hold_latched = 1u;
+        }
     }
+    else
+    {
+        position_hold_latched = 0u;
+        s_tar = s + v_cmd * 0.003f;
+    }
+
     del_t = DWT_GetDeltaT(&balance_dwt_cnt);
     // if(fabs(absds)<0.0001) s_tar =s;
 
@@ -916,6 +935,8 @@ static void ResetRLJointMode(void)
 
 static void ApplyRLJointOutput(const float target[4], float blend)
 {
+    if (!rl_joint_mode)
+        ++rl_activation_sequence;
     DMMotorInstance *joint[4] = {jiont_motorlf, jiont_motorlb,
                                  jiont_motorrf, jiont_motorrb};
     for (unsigned i = 0; i < 4u; ++i)
@@ -987,6 +1008,8 @@ void outputTorque()
     rbjt = +Rleg->tor - tau_r.tau2 - rbt / 2 - spring_tor_r * arm_sin_f32(rmangle);
     float leg_retract_tor_l = 0.0f;
     float leg_retract_tor_r = 0.0f;
+    wheel_friction_torque_nm[0] = 0.0f;
+    wheel_friction_torque_nm[1] = 0.0f;
 
     const uint32_t now_tick = xTaskGetTickCount();
     ServiceRLBeep(now_tick);
@@ -1264,13 +1287,6 @@ void outputTorque()
                 DMMotorSetTorque(jiont_motorrf, rfjt);
                 DMMotorSetTorque(jiont_motorrb, rbjt);
 
-                // 作用不明确的反向抵消静止速度的力矩,可以让它在某些情况下更稳地停在目标点,但也可能会引入震荡,因此暂时放在这里,如果需要调整可以修改这个部分的代码
-                if (v_cmd <= 0.03)
-                {
-                    lwi += s_dot * 500;
-                    rwi -= s_dot * 500;
-                }
-
                 // 电流限位
                 if (lwi > 8192)
                     lwi = 8192;
@@ -1312,6 +1328,23 @@ void outputTorque()
                             RequestRLBeep(now_tick, OCTAVE_3);
                         ResetRLJointMode();
                     }
+                }
+
+                if (ChassisNormalLQRState())
+                {
+                    const float left_speed_rad_s =
+                        -motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+                    const float right_speed_rad_s =
+                        motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+                    float compensated_current;
+                    if (WheelFrictionCompensate(WHEEL_FRICTION_LEFT, left_speed_rad_s,
+                                                lwi, &wheel_friction_torque_nm[0],
+                                                &compensated_current) == 0)
+                        lwi = compensated_current;
+                    if (WheelFrictionCompensate(WHEEL_FRICTION_RIGHT, right_speed_rad_s,
+                                                rwi, &wheel_friction_torque_nm[1],
+                                                &compensated_current) == 0)
+                        rwi = compensated_current;
                 }
 
                 if (!upstair_flag0)

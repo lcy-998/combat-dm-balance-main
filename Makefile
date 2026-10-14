@@ -152,6 +152,7 @@ application/chassis/chassis.c \
 application/chassis/rl_observation.c \
 application/chassis/rl_output_compare.c \
 application/chassis/rl_control.c \
+application/chassis/wheel_friction.c \
 application/chassis/rl_shadow.c \
 application/cmd/robot_cmd.c \
 application/robot.c \

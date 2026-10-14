@@ -5,8 +5,9 @@
 
 #define RL_SHADOW_OBSERVATION_SIZE 25u
 #define RL_SHADOW_ACTION_SIZE 6u
-#define RL_SHADOW_POSITION_KP 1.0f
+#define RL_SHADOW_POSITION_KP -1.0f
 #define RL_SHADOW_TARGET_SPEED_LIMIT_M_S 2.2f
+#define RL_SHADOW_POSITION_MAX_DT_MS 24u
 #define RL_SHADOW_ACTIVE_ZERO_RAD ((180.0f - 42.8919f) * 0.01745329251994329577f)
 #define RL_SHADOW_HIP_ZERO_RAD (42.8966f * 0.01745329251994329577f)
 
@@ -16,6 +17,8 @@ typedef struct {
     uint32_t tick_ms;
     int32_t chassis_mode;
     uint8_t chassis_ready;
+    uint8_t rl_active;
+    uint32_t rl_activation_sequence;
     float odom_s_m;
     float target_s_m;
     float remote_vx_m_s;
@@ -36,6 +39,14 @@ typedef struct {
     float wheel_current_cmd[2];/* physical left, right; driver command units */
     float previous_action[RL_SHADOW_ACTION_SIZE]; /* last action applied by chassis */
 } RLShadowSnapshot;
+
+typedef struct {
+    uint32_t last_tick_ms;
+    uint32_t activation_sequence;
+    float target_s_m;
+    uint8_t active;
+    uint8_t zero_latched;
+} RLShadowPositionTarget;
 
 /* Converted policy output in chassis joint and physical wheel coordinates. */
 typedef struct {
@@ -77,6 +88,8 @@ typedef struct {
     int32_t status;
     int32_t chassis_mode;
     uint8_t chassis_ready;
+    uint8_t rl_active;
+    uint32_t rl_activation_sequence;
     float odom_s_m;
     float target_s_m;
     float position_error_m;
@@ -101,6 +114,9 @@ extern volatile RLShadowDebug g_rl_shadow_debug;
 void RLShadowQueueInit(void);
 void RLShadowPublish(const RLShadowSnapshot *sample);
 int RLShadowReadCommand(RLShadowCommand *command);
+int RLShadowUpdatePositionTarget(RLShadowPositionTarget *state,
+                                 const RLShadowSnapshot *sample,
+                                 uint32_t now_tick_ms, float *target_s_m);
 int RLShadowPositionPID(float odom_s_m, float target_s_m,
                         float *target_vx_m_s);
 int RLShadowBuildObservation(const RLShadowSnapshot *sample,
