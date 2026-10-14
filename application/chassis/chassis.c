@@ -905,13 +905,16 @@ static void ResetRLJointMode(void)
         return;
     DMMotorInstance *joint[4] = {jiont_motorlf, jiont_motorlb,
                                  jiont_motorrf, jiont_motorrb};
+    taskENTER_CRITICAL();
     for (unsigned i = 0; i < 4u; ++i)
     {
         joint[i]->ctrl.kp_set = 0.0f;
+        joint[i]->ctrl.host_position_pd = 0u;
         joint[i]->ctrl.kd_set = 0.0f;
         DMMotorSetPos(joint[i], 0.0f, 0.0f);
     }
     rl_joint_mode = 0u;
+    taskEXIT_CRITICAL();
 }
 
 static void ApplyRLJointOutput(const float target[4], float blend)
@@ -927,6 +930,7 @@ static void ApplyRLJointOutput(const float target[4], float blend)
         DMMotorSetTorque(joint[i], torque);
         joint[i]->ctrl.kp_set = kp;
         joint[i]->ctrl.kd_set = kd;
+        joint[i]->ctrl.host_position_pd = 1u;
     }
     rl_joint_mode = 1u;
 }
@@ -1259,6 +1263,9 @@ void outputTorque()
                 UpdateLegRetractTorqueScale(false);
                 rwi = rwt / 0.00036 * 19.0f / REDUCE_RATIO;
                 lwi = -lwt / 0.00036 * 19.0f / REDUCE_RATIO; // negative
+                /* Publish the LQR/RL joint command as one update. The motor
+                   task must not send LQR torque with the previous RL gains. */
+                taskENTER_CRITICAL();
                 DMMotorSetTorque(jiont_motorlf, lfjt);
                 DMMotorSetTorque(jiont_motorlb, lbjt);
                 DMMotorSetTorque(jiont_motorrf, rfjt);
@@ -1313,6 +1320,8 @@ void outputTorque()
                         ResetRLJointMode();
                     }
                 }
+
+                taskEXIT_CRITICAL();
 
                 if (!upstair_flag0)
                 {

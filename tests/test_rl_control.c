@@ -25,12 +25,21 @@ int main(void)
     command.output_tick_ms = 10100u;
     d = RLControlStep(&state, 10100u, 1, &command);
     assert(d.active && d.beep);
-    near(d.blend, 0.0f);
+    near(d.blend, 1.0f);
+    near(state.previous_action[0], 0.5f);
+    float switch_position, switch_torque, switch_kp, switch_kd;
+    RLControlBlendJoint(0.0f, 4.0f, 1.0f, d.blend,
+                        &switch_position, &switch_torque, &switch_kp, &switch_kd);
+    near(switch_position, 1.0f);
+    near(switch_torque, 0.0f);
+    near(switch_kp, 60.0f);
+    near(switch_kd, 2.0f);
+    near(RLControlBlendCurrent(100.0f, -100.0f, d.blend), -100.0f);
     command.snapshot_tick_ms = 10200u;
     command.output_tick_ms = 10200u;
     d = RLControlStep(&state, 10200u, 1, &command);
-    near(d.blend, 0.5f);
-    near(state.previous_action[0], 0.25f);
+    near(d.blend, 1.0f);
+    near(state.previous_action[0], 0.5f);
     command.snapshot_tick_ms = 10300u;
     command.output_tick_ms = 10300u;
     d = RLControlStep(&state, 10300u, 1, &command);
@@ -45,7 +54,7 @@ int main(void)
     command.output_tick_ms = 10330u;
     d = RLControlStep(&state, 10330u, 1, &command);
     assert(d.active && !d.beep);
-    near(d.blend, 0.0f);
+    near(d.blend, 1.0f);
 
     command.raw_action[1] = NAN;
     d = RLControlStep(&state, 10331u, 1, &command);
@@ -93,7 +102,7 @@ int main(void)
     assert(RLControlMapOutput(&output, encoder_now, encoder_offset,
                               target, current) == 0);
     near(target[0], -0.8f);
-    near(target[1], -3.3f);
+    near(target[1], -3.3f + 6.283185307f);
     near(target[2], 1.2f);
     near(target[3], -0.5f);
     assert(current[0] < 0.0f && current[1] > 0.0f);
@@ -105,6 +114,28 @@ int main(void)
     assert(RLControlMapOutput(&output, encoder_now, encoder_offset,
                               target, current) == 0);
     near(current[0], -8192.0f);
+
+    /* Canonical targets remain valid across encoder boundaries because the
+       motor task now computes shortest-angle PD on the MCU. */
+    float boundary_now[4] = {6.2f, -6.2f, 6.2f, -6.2f};
+    output.joint_target_angle_rad[0] = encoder_offset[0] - 0.1f;
+    assert(RLControlMapOutput(&output, boundary_now, encoder_offset,
+                              target, current) == 0);
+    output.joint_target_angle_rad[0] = encoder_offset[0] + 0.1f;
+    output.joint_target_angle_rad[1] = encoder_offset[1] + 0.1f;
+    assert(RLControlMapOutput(&output, boundary_now, encoder_offset,
+                              target, current) == 0);
+
+    /* Both sides of the encoder range give small periodic position errors. */
+    output.joint_target_angle_rad[1] = encoder_offset[1] - 0.1f;
+    output.joint_target_angle_rad[2] = encoder_offset[2] - 0.1f;
+    output.joint_target_angle_rad[3] = encoder_offset[3] + 0.1f;
+    assert(RLControlMapOutput(&output, boundary_now, encoder_offset,
+                              target, current) == 0);
+    for (unsigned i = 0; i < 4u; ++i) {
+        assert(fabsf(remainderf(target[i] - boundary_now[i], 6.283185307f)) < 0.1f);
+        assert(fabsf(target[i]) <= 6.283f);
+    }
 
     float position, torque, kp, kd;
     RLControlBlendJoint(0.0f, 4.0f, 1.0f, 0.5f,

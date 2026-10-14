@@ -57,15 +57,14 @@ RLControlDecision RLControlStep(RLControlState *state, uint32_t now_tick,
     }
     if (!state->active) {
         state->active = 1u;
-        state->blend_since_tick = now_tick;
         if (!state->beeped) {
             state->beeped = 1u;
             decision.beep = 1u;
         }
     }
     decision.active = 1u;
-    decision.blend = clampf((float)(uint32_t)(now_tick - state->blend_since_tick) /
-                            (float)RL_CONTROL_BLEND_MS, 0.0f, 1.0f);
+    /* The first valid RL cycle takes full control, including re-entry. */
+    decision.blend = 1.0f;
     for (unsigned i = 0; i < RL_SHADOW_ACTION_SIZE; ++i) {
         state->previous_action[i] = decision.blend * clampf(command->raw_action[i], -1.0f, 1.0f);
     }
@@ -105,12 +104,13 @@ int RLControlMapOutput(const RLShadowOutputPreview *output,
         encoder_target == NULL || wheel_current == NULL) return -1;
     for (unsigned i = 0; i < 4u; ++i) {
         if (!isfinite(output->joint_target_angle_rad[i]) ||
-            !isfinite(encoder_now[i]) || !isfinite(encoder_offset[i])) return -1;
+            !isfinite(encoder_now[i]) || !isfinite(encoder_offset[i]) ||
+            fabsf(encoder_now[i]) > RL_MOTOR_POS_LIMIT) return -1;
         const float raw = (i < 2u) ? encoder_offset[i] - output->joint_target_angle_rad[i]
                                    : output->joint_target_angle_rad[i] - encoder_offset[i];
-        float mapped = encoder_now[i] + remainderf(raw - encoder_now[i], RL_TWO_PI);
-        if (mapped > RL_MOTOR_POS_LIMIT) mapped -= RL_TWO_PI;
-        if (mapped < -RL_MOTOR_POS_LIMIT) mapped += RL_TWO_PI;
+        /* The motor task uses MCU shortest-angle PD, so keep the reference
+           canonical and recompute its error from fresh feedback at each send. */
+        float mapped = remainderf(raw, RL_TWO_PI);
         if (!isfinite(mapped) || mapped < -RL_MOTOR_POS_LIMIT ||
             mapped > RL_MOTOR_POS_LIMIT) return -1;
         encoder_target[i] = mapped;
@@ -130,7 +130,7 @@ void RLControlBlendJoint(float encoder_now, float lqr_torque,
                          float *position, float *torque, float *kp, float *kd)
 {
     blend = clampf(blend, 0.0f, 1.0f);
-    *position = encoder_now + blend * (encoder_target - encoder_now);
+    *position = encoder_now + blend * remainderf(encoder_target - encoder_now, RL_TWO_PI);
     *torque = (1.0f - blend) * lqr_torque;
     *kp = 60.0f * blend;
     *kd = 2.0f * blend;
