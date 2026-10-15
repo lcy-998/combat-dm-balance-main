@@ -1,11 +1,12 @@
 #include "rl_control.h"
+#include "wheel_friction.h"
 
 #include <math.h>
 #include <string.h>
 
 #define RL_TWO_PI 6.2831853071795864769f
 #define RL_MOTOR_POS_LIMIT 6.283f
-#define RL_WHEEL_CURRENT_PER_NM (19.0f / (0.00036f * (268.0f / 17.0f)))
+#define RL_WHEEL_CURRENT_PER_NM WHEEL_CURRENT_PER_NM
 
 static float clampf(float x, float lo, float hi)
 {
@@ -118,10 +119,9 @@ int RLControlMapOutput(const RLShadowOutputPreview *output,
     for (unsigned i = 0; i < 2u; ++i) {
         if (!isfinite(output->wheel_forward_torque_nm[i])) return -1;
     }
-    wheel_current[0] = clampf(-output->wheel_forward_torque_nm[0] * RL_WHEEL_CURRENT_PER_NM,
-                              -8192.0f, 8192.0f);
-    wheel_current[1] = clampf(output->wheel_forward_torque_nm[1] * RL_WHEEL_CURRENT_PER_NM,
-                              -8192.0f, 8192.0f);
+    /* Keep drive headroom until feedback + feedforward are combined at1kHz. */
+    wheel_current[0] = -output->wheel_forward_torque_nm[0] * RL_WHEEL_CURRENT_PER_NM;
+    wheel_current[1] = output->wheel_forward_torque_nm[1] * RL_WHEEL_CURRENT_PER_NM;
     return 0;
 }
 
@@ -138,6 +138,6 @@ void RLControlBlendJoint(float encoder_now, float lqr_torque,
 
 float RLControlBlendCurrent(float lqr_current, float rl_current, float blend)
 {
-    return clampf((1.0f - blend) * lqr_current + blend * rl_current,
-                  -8192.0f, 8192.0f);
+    blend = clampf(blend, 0.0f, 1.0f);
+    return (1.0f - blend) * lqr_current + blend * rl_current;
 }

@@ -3,8 +3,6 @@
 #include <math.h>
 #include <stddef.h>
 
-#define WHEEL_CURRENT_PER_NM (19.0f / (0.00036f * (268.0f / 17.0f)))
-#define WHEEL_CURRENT_LIMIT 8192.0f
 
 typedef struct {
     float viscous_nm_per_rad_s;
@@ -45,5 +43,24 @@ int WheelFrictionCompensate(unsigned wheel, float forward_speed_rad_s,
     *friction_torque_nm = compensation;
     *compensated_current = clamp_current(base_current +
                                          motor_sign * compensation * WHEEL_CURRENT_PER_NM);
+    return 0;
+}
+
+/* Exact physical-left/right values from the training fit_compensated profile.
+ * Active compensation only; mechanical B/C are physically present, not applied
+ * a second time in firmware. Total residual D is approximately .052. */
+int WheelRLCompensate(unsigned wheel, float speed, float drive_current,
+                      float *correction_nm, float *motor_current)
+{
+    static const float dfb[2] = {0.0494515f, 0.05133043f};
+    static const float cff[2] = {0.053699f, 0.051843f};
+    if (correction_nm) *correction_nm = 0.0f;
+    if (motor_current) *motor_current = 0.0f;
+    if (wheel > WHEEL_FRICTION_RIGHT || !correction_nm || !motor_current ||
+        !isfinite(speed) || !isfinite(drive_current)) return -1;
+    const float sign = wheel == WHEEL_FRICTION_LEFT ? -1.0f : 1.0f;
+    const float drive = sign * drive_current / WHEEL_CURRENT_PER_NM;
+    *correction_nm = -dfb[wheel] * speed + cff[wheel] * tanhf(speed / 0.1f);
+    *motor_current = clamp_current(sign * (drive + *correction_nm) * WHEEL_CURRENT_PER_NM);
     return 0;
 }
