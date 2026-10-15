@@ -12,5 +12,6 @@ void ChassisInit();
  * 
  */
 void ChassisTask();
+void ChassisWheelControlTick(void);
 
 #endif // CHASSIS_H

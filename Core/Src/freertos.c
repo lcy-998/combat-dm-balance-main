@@ -25,6 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "rl_shadow.h"
+#include "robot_def.h"
 
 /* USER CODE END Includes */
 
@@ -48,6 +50,7 @@
 
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
+osThreadId rlShadowTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -55,6 +58,7 @@ osThreadId defaultTaskHandle;
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
+void StartRLShadowTask(void const * argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -139,6 +143,16 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
+  /* Shadow policy: 1024 FreeRTOS stack words (4 KiB on Cortex-M7). */
+#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+  osThreadDef(rlShadowTask, StartRLShadowTask, osPriorityBelowNormal, 0, 1024);
+  rlShadowTaskHandle = osThreadCreate(osThread(rlShadowTask), NULL);
+  if (rlShadowTaskHandle == NULL) {
+    RLShadowTaskCreateFailed();
+    Error_Handler();
+  }
+#endif
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -163,6 +177,16 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END StartDefaultTask */
+}
+
+/* USER CODE BEGIN Header_StartRLShadowTask */
+/* The policy runs for observation only; it never sends motor commands. */
+/* USER CODE END Header_StartRLShadowTask */
+void StartRLShadowTask(void const * argument)
+{
+  /* USER CODE BEGIN StartRLShadowTask */
+  RLShadowTask(argument);
+  /* USER CODE END StartRLShadowTask */
 }
 
 /* Private application code --------------------------------------------------*/
