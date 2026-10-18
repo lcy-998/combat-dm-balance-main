@@ -5,7 +5,6 @@
 
 #define RL_SHADOW_OBSERVATION_SIZE 25u
 #define RL_SHADOW_ACTION_SIZE 6u
-#define RL_SHADOW_POSITION_KP -1.0f
 #define RL_SHADOW_TARGET_SPEED_LIMIT_M_S 2.2f
 #define RL_SHADOW_POSITION_MAX_DT_MS 24u
 #define RL_SHADOW_ACTIVE_ZERO_RAD ((180.0f - 42.8919f) * 0.01745329251994329577f)
@@ -27,7 +26,7 @@ typedef struct {
     float roll_rate_rad_s;
     float pitch_rate_rad_s;
     float yaw_rate_rad_s;
-    float target_vx_m_s;        /* position PID result, filled by RL task */
+    float target_vx_m_s;        /* limited remote speed, filled by RL task */
     float target_yaw_rad_s;
     float heading_vx_m_s;
     float lqr_speed_m_s;
@@ -96,7 +95,7 @@ typedef struct {
     float remote_vx_m_s;
     float observation[RL_SHADOW_OBSERVATION_SIZE]; /* scaled, dimensionless */
     float raw_action[RL_SHADOW_ACTION_SIZE];       /* dimensionless policy output */
-    float target_vx_m_s;       /* position PID output to policy */
+    float target_vx_m_s;       /* limited remote speed sent to policy */
     float leg_scale_rad_per_action;
     float lqr_wheel_torque_nm[2];       /* physical left/right, forward positive */
     float policy_wheel_torque_nm[2];    /* converted action */
@@ -117,7 +116,7 @@ int RLShadowReadCommand(RLShadowCommand *command);
 int RLShadowUpdatePositionTarget(RLShadowPositionTarget *state,
                                  const RLShadowSnapshot *sample,
                                  uint32_t now_tick_ms, float *target_s_m);
-int RLShadowPositionPID(float odom_s_m, float target_s_m,
+int RLShadowRemoteVelocity(float remote_vx_m_s,
                         float *target_vx_m_s);
 int RLShadowBuildObservation(const RLShadowSnapshot *sample,
                              float observation[RL_SHADOW_OBSERVATION_SIZE]);

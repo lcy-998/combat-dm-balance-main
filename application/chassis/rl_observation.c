@@ -63,18 +63,14 @@ int RLShadowUpdatePositionTarget(RLShadowPositionTarget *state,
     return 0;
 }
 
-int RLShadowPositionPID(float odom_s_m, float target_s_m,
+int RLShadowRemoteVelocity(float remote_vx_m_s,
                         float *target_vx_m_s)
 {
-    if (target_vx_m_s == NULL || !isfinite(odom_s_m) || !isfinite(target_s_m)) {
+    if (target_vx_m_s == NULL || !isfinite(remote_vx_m_s)) {
         return -1;
     }
-    const float error_m = target_s_m - odom_s_m;
-    if (!isfinite(error_m)) {
-        return -1;
-    }
-    /* Position PID: Kp=1, Ki=0, Kd=0 for the initial tuning. */
-    *target_vx_m_s = clipf(RL_SHADOW_POSITION_KP * error_m,
+    /* Direct remote speed command; odometry does not drive the policy target. */
+    *target_vx_m_s = clipf(remote_vx_m_s,
                             -RL_SHADOW_TARGET_SPEED_LIMIT_M_S,
                             RL_SHADOW_TARGET_SPEED_LIMIT_M_S);
     return 0;
