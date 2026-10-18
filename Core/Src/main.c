@@ -29,6 +29,7 @@
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
+#include "app_x-cube-ai.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -54,12 +55,12 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#define W25Qxx_NumByteToTest   	32*1024					// ²âÊÔÊý¾ÝµÄ³¤¶È£¬32K
+#define W25Qxx_NumByteToTest   	32*1024					// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÝµÄ³ï¿½ï¿½È£ï¿½32K
 
-int32_t OSPI_Status ; 		 //¼ì²â±êÖ¾Î»
+int32_t OSPI_Status ; 		 //ï¿½ï¿½ï¿½ï¿½Ö¾Î»
 
-uint8_t  W25Qxx_WriteBuffer[W25Qxx_NumByteToTest];		//	Ð´Êý¾ÝÊý×é
-uint8_t  W25Qxx_ReadBuffer[W25Qxx_NumByteToTest];		//	¶ÁÊý¾ÝÊý×é
+uint8_t  W25Qxx_WriteBuffer[W25Qxx_NumByteToTest];		//	Ð´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+uint8_t  W25Qxx_ReadBuffer[W25Qxx_NumByteToTest];		//	ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -83,6 +84,13 @@ int main(void)
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
+/* Enable the CPU Cache */
+
+  /* Enable I-Cache---------------------------------------------------------*/
+  SCB_EnableICache();
+
+  /* Enable D-Cache---------------------------------------------------------*/
+  SCB_EnableDCache();
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -123,8 +131,9 @@ int main(void)
   MX_UART8_Init();
   MX_UART9_Init();
   MX_I2C2_Init();
+  MX_X_CUBE_AI_Init();
   /* USER CODE BEGIN 2 */
-  RobotInit(); // Î¨Ò»µÄ³õÊ¼»¯º¯Êý
+  RobotInit(); // Î¨Ò»ï¿½Ä³ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   LOGINFO("[main] SystemInit() and RobotInit() done");
   /* USER CODE END 2 */
 

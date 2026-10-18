@@ -31,6 +31,11 @@
 #include "controller.h"
 #include "ins_task.h"
 #include "chassis_can_link.h"
+#include "rl_shadow.h"
+#include "rl_control.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include <math.h>
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
@@ -126,6 +131,8 @@ uint8_t chassis_status = 1; // 0正常 1复位中
 float v_set = 0, radior, radiol;
 uint64_t cent = 0;
 static float del_t;
+static uint8_t chassis_lqr_output_valid;
+static RLControlLegRamp rl_leg_ramp;
 static uint32_t balance_dwt_cnt;
 float phi1, phi4, Lphi1, Lphi4, Rphi1, Rphi4;
 float LFtor, LBtor, RFtor, RBtor;
@@ -471,6 +478,15 @@ void getStateData()
     s_dot = WorldXSpeedKF(del_t, acc_b, eul_deg, s_dot, NULL);
 }
 
+static int ChassisNormalLQRState(void)
+{
+    return chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
+           !chassis_status && !(jumpingflag && clockcent < 200u) &&
+           !upstair_flag && !upstair_flag0 &&
+           fabsf(theta_l) <= (PI / 4.0f) &&
+           fabsf(theta_r) <= (PI / 4.0f);
+}
+
 void legLengthCalc()
 {
     // 复位时腿长压低
@@ -505,6 +521,11 @@ void legLengthCalc()
     // 腿长限位
     l_xx = fmax(0.16f, l_xx);
     l_xx = fmin(0.36f, l_xx);
+
+    const int can_extend = ChassisNormalLQRState() &&
+                           !(reset_time >= 5000 && F_n < 80.0f);
+    l_xx = RLControlLegRampStep(&rl_leg_ramp, xTaskGetTickCount(),
+                                can_extend, l_xx);
 
     // 腿长差补偿拟通过roll补偿解决，当然之前的计算方法也可以保留，后续验证后再决定是否加入
     l_tar = l_xx;
@@ -809,6 +830,7 @@ static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_
 
 void outputTorque()
 {
+    chassis_lqr_output_valid = 0u;
     // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
     // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
 
@@ -1078,8 +1100,9 @@ void outputTorque()
 
                 // 前面的数字是3508转矩常数复合电流离散值,由于电流环代码有锅，需要直接输入离散值，修改电机时一定会处理这部分，因此亦不作为宏
                 UpdateLegRetractTorqueScale(false);
-                rwi = rwt / 0.00036 * 19.0f / REDUCE_RATIO;
-                lwi = -lwt / 0.00036 * 19.0f / REDUCE_RATIO; // negative
+                rwi = rwt * RL_MOTION31_WHEEL_CURRENT_PER_NM;
+                lwi = -lwt * RL_MOTION31_WHEEL_CURRENT_PER_NM; // negative
+                taskENTER_CRITICAL();
                 DMMotorSetTorque(jiont_motorlf, lfjt);
                 DMMotorSetTorque(jiont_motorlb, lbjt);
                 DMMotorSetTorque(jiont_motorrf, rfjt);
@@ -1102,11 +1125,14 @@ void outputTorque()
                 if (rwi < -8192)
                     rwi = -8192;
 
+                taskEXIT_CRITICAL();
+
                 if (!upstair_flag0)
                 {
                     upstair_flag0_cnt = 0;
                     upstair_flag0_latch = 0;
                 }
+                chassis_lqr_output_valid = 1u;
             }
         }
         // 直接写入离散值
@@ -1245,6 +1271,39 @@ void ChassisTask()
     vmcCalc();
     flyDetect();
     outputTorque();
+
+    /* Motion31 observes the current controller state; preview targets are never applied. */
+    RLShadowSnapshot shadow = {0};
+    static uint32_t shadow_sequence;
+    shadow.sequence = ++shadow_sequence;
+    shadow.tick_ms = xTaskGetTickCount();
+    shadow.lqr_pitch_rad = pitch;
+    /* Convert the existing LQR attitude convention to the model body frame. */
+    RLMotion31MapLqrAttitude(&shadow.motion, roll, pitch,
+                             roll_dot, pitch_dot, yaw_dot);
+    RLMotion31MapJointAngles(&shadow.motion, rbangle, rfangle, lbangle, lfangle,
+                             jiont_motorrb->measure.vel, jiont_motorrf->measure.vel,
+                             -jiont_motorlb->measure.vel, -jiont_motorlf->measure.vel);
+    /* Model wheel positive is backward on both sides; LQR motor signs are
+       left-negative/right-positive for forward travel. */
+    RLMotion31MapWheelMotorSpeeds(&shadow.motion,
+                                  motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD,
+                                  motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD);
+    shadow.motion.command_vx_m_s = v_cmd;
+    shadow.motion.command_yaw_rad_s = w_cmd;
+    shadow.motion.command_height_m = 0.34f;
+    shadow.motion.lqr_leg_torque_motor_nm[0] = lfjt;
+    shadow.motion.lqr_leg_torque_motor_nm[1] = lbjt;
+    shadow.motion.lqr_leg_torque_motor_nm[2] = rfjt;
+    shadow.motion.lqr_leg_torque_motor_nm[3] = rbjt;
+    shadow.motion.lqr_wheel_torque_forward_nm[0] = lwt;
+    shadow.motion.lqr_wheel_torque_forward_nm[1] = rwt;
+    shadow.motion.lqr_torque_valid = chassis_lqr_output_valid;
+    shadow.chassis_ready = (uint8_t)(chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
+                                     !chassis_status);
+    shadow.rl_active = 0u;
+    /* The shadow task supplies its own virtual previous policy targets. */
+    RLShadowPublish(&shadow);
 
     chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
 #ifdef ONE_BOARD

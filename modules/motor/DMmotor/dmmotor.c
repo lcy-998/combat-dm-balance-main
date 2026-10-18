@@ -3,6 +3,9 @@
 #include "general_def.h"
 #include "daemon.h"
 #include "bsp_dwt.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "dm_position_pd.h"
 
 uint8_t idm = 0;
 static DMMotorInstance *dmmotor_instance[DM_MOTOR_MX_CNT] = {NULL};
@@ -171,6 +174,7 @@ void DMMotorControl()
         motor = dmmotor_instance[i];
         if (motor->stop_flag == MOTOR_STOP)
         {
+            motor->ctrl.host_position_pd = 0u;
             motor->ctrl.vel_set = 0.0;
             motor->ctrl.tor_set = 0.0;
             motor->ctrl.kp_set = 0.0;
@@ -223,22 +227,45 @@ void mit_ctrl(DMMotorInstance *motor) //
 {
     uint8_t data[8];
     uint16_t pos_tmp, vel_tmp, kp_tmp, kd_tmp, tor_tmp;
+    motor_ctrl_t command;
+    float position, velocity;
+    taskENTER_CRITICAL();
+    command = motor->ctrl;
+    position = motor->measure.pos;
+    velocity = motor->measure.vel;
+    taskEXIT_CRITICAL();
+
+    motor->host_position_error_rad = 0.0f;
+    if (command.host_position_pd) {
+        const float torque_limit = motor->motor_set.flag
+            ? motor->motor_set.TorMXSet : DMT_MAX;
+        command.tor_set = DMPositionPDTorque(command.pos_set, command.vel_set,
+                                             position, velocity,
+                                             command.kp_set, command.kd_set,
+                                             command.tor_set, torque_limit,
+                                             &motor->host_position_error_rad);
+        command.pos_set = 0.0f;
+        command.vel_set = 0.0f;
+        command.kp_set = 0.0f;
+        command.kd_set = 0.0f;
+    }
+    motor->sent_torque_nm = command.tor_set;
 
     if (motor->motor_set.flag)
     {
-        pos_tmp = float_to_uint(motor->ctrl.pos_set, -motor->motor_set.PosMXSet, motor->motor_set.PosMXSet, 16);
-        vel_tmp = float_to_uint(motor->ctrl.vel_set, -motor->motor_set.VelMXSet, motor->motor_set.VelMXSet, 12);
-        kp_tmp = float_to_uint(motor->ctrl.kp_set, 0.0f, motor->motor_set.KpMXSet, 12);
-        kd_tmp = float_to_uint(motor->ctrl.kd_set, 0.0f, motor->motor_set.KdMXSet, 12);
-        tor_tmp = float_to_uint(motor->ctrl.tor_set, -motor->motor_set.TorMXSet, motor->motor_set.TorMXSet, 12);
+        pos_tmp = float_to_uint(command.pos_set, -motor->motor_set.PosMXSet, motor->motor_set.PosMXSet, 16);
+        vel_tmp = float_to_uint(command.vel_set, -motor->motor_set.VelMXSet, motor->motor_set.VelMXSet, 12);
+        kp_tmp = float_to_uint(command.kp_set, 0.0f, motor->motor_set.KpMXSet, 12);
+        kd_tmp = float_to_uint(command.kd_set, 0.0f, motor->motor_set.KdMXSet, 12);
+        tor_tmp = float_to_uint(command.tor_set, -motor->motor_set.TorMXSet, motor->motor_set.TorMXSet, 12);
     }
     else
     {
-        pos_tmp = float_to_uint(motor->ctrl.pos_set, DMP_MIN, DMP_MAX, 16);
-        vel_tmp = float_to_uint(motor->ctrl.vel_set, DMV_MIN, DMV_MAX, 12);
-        kp_tmp = float_to_uint(motor->ctrl.kp_set, DMKP_MIN, DMKP_MAX, 12);
-        kd_tmp = float_to_uint(motor->ctrl.kd_set, DMKD_MIN, DMKD_MAX, 12);
-        tor_tmp = float_to_uint(motor->ctrl.tor_set, DMT_MIN, DMT_MAX, 12);
+        pos_tmp = float_to_uint(command.pos_set, DMP_MIN, DMP_MAX, 16);
+        vel_tmp = float_to_uint(command.vel_set, DMV_MIN, DMV_MAX, 12);
+        kp_tmp = float_to_uint(command.kp_set, DMKP_MIN, DMKP_MAX, 12);
+        kd_tmp = float_to_uint(command.kd_set, DMKD_MIN, DMKD_MAX, 12);
+        tor_tmp = float_to_uint(command.tor_set, DMT_MIN, DMT_MAX, 12);
     }
     data[0] = (pos_tmp >> 8);
     data[1] = pos_tmp;
