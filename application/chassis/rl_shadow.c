@@ -11,7 +11,7 @@
 #include <string.h>
 
 #define RL_SHADOW_PERIOD_TICKS pdMS_TO_TICKS(8u)
-#define RL_SHADOW_MAX_AGE_TICKS pdMS_TO_TICKS(24u)
+#define RL_SHADOW_MAX_AGE_TICKS pdMS_TO_TICKS(12u)
 
 _Static_assert(AI_NETWORK_IN_1_SIZE == RL_SHADOW_OBSERVATION_SIZE, "policy input size mismatch");
 _Static_assert(AI_NETWORK_OUT_1_SIZE == RL_SHADOW_ACTION_SIZE, "policy output size mismatch");
@@ -181,7 +181,6 @@ void RLShadowTask(void const *argument)
     float observation[RL_SHADOW_OBSERVATION_SIZE];
     float action[RL_SHADOW_ACTION_SIZE];
     RLShadowOutputPreview preview;
-    RLShadowPositionTarget position_target = {0};
     uint32_t last_sequence = 0;
     uint32_t missed = 0;
     TickType_t wake = xTaskGetTickCount();

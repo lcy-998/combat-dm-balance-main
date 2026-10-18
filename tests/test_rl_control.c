@@ -1,4 +1,5 @@
 #include "rl_control.h"
+#include "wheel_friction.h"
 
 #include <assert.h>
 #include <math.h>
@@ -113,7 +114,7 @@ int main(void)
     output.wheel_forward_torque_nm[0] = 5.5f;
     assert(RLControlMapOutput(&output, encoder_now, encoder_offset,
                               target, current) == 0);
-    near(current[0], -8192.0f);
+    near(current[0], -output.wheel_forward_torque_nm[0] * WHEEL_CURRENT_PER_NM);
 
     /* Canonical targets remain valid across encoder boundaries because the
        motor task now computes shortest-angle PD on the MCU. */

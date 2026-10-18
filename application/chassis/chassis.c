@@ -14,7 +14,7 @@
 #include "chassis.h"
 #include "robot_def.h"
 #include "dji_motor.h"
-#include "DMmotor.h"
+#include "dmmotor.h"
 #include "super_cap.h"
 #include "message_center.h"
 #include "LQR.h"
@@ -113,6 +113,9 @@ static float Rwheel, Lwheel;
 static float chassis_wz_cmd;
 float lfangle, rfangle, lbangle, rbangle, lmangle, rmangle, lfw, lbw, rfw, rbw;
 float lbt, rbt, lwt, rwt, lwi, rwi, lfjt, lbjt, rfjt, rbjt;
+static float wheel_send_current[2];
+static float wheel_drive_snapshot[2];
+static uint8_t wheel_rl_snapshot;
 float wheel_friction_torque_nm[2]; /* physical left/right, forward positive */
 float l_tar, r_tar, sol_alpha, sol_beta;
 double ChangeL;
@@ -266,14 +269,14 @@ void ChassisInit()
                 .Kd = 0.0, // 0
                 .IntegralLimit = 800,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 8192,
+                .MaxOut = WHEEL_CURRENT_LIMIT,
             }},
         .controller_setting_init_config = {
             .feedforward_flag = CURRENT_FEEDFORWARD,
             .angle_feedback_source = MOTOR_FEED,
             .speed_feedback_source = MOTOR_FEED,
-            .outer_loop_type = SPEED_LOOP,
-            .close_loop_type = SPEED_LOOP,
+            .outer_loop_type = OPEN_LOOP,
+            .close_loop_type = OPEN_LOOP,
         },
         .motor_type = M3508,
     };
@@ -309,8 +312,8 @@ void ChassisInit()
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_l = DJIMotorInit(&chassis_motor_config);
     /* The motor task may run before the first non-emergency chassis cycle. */
-    motor_l->motor_controller.current_feedforward_ptr = &lwi;
-    motor_r->motor_controller.current_feedforward_ptr = &rwi;
+    motor_l->motor_controller.current_feedforward_ptr = &wheel_send_current[0];
+    motor_r->motor_controller.current_feedforward_ptr = &wheel_send_current[1];
     jiontmotor.can_init_config.can_handle = &hfdcan1;
     jiontmotor.can_init_config.tx_id = 0x01;
     jiontmotor.can_init_config.rx_id = 0x11; // l电机的接收id
@@ -486,7 +489,7 @@ void getStateData()
     // 摆角转动应该会带动轮子编码器的值改变，这里没考虑，后续验证后加入
     // 机体倾角对摆角影响已经消除
     s = R_W * (-motor_l->measure.total_angle / REDUCE_RATIO + Lwheel / REDUCE_RATIO + motor_r->measure.total_angle / REDUCE_RATIO - Rwheel / REDUCE_RATIO) / 2 * DEGREE_2_RAD,
-    s_dot = R_W * (-motor_l->measure.speed_aps / REDUCE_RATIO + Lleg->result->w + motor_r->measure.speed_aps / REDUCE_RATIO + Rleg->result->w) / 2 * DEGREE_2_RAD,
+    s_dot = R_W * ((-motor_l->measure.speed_aps + motor_r->measure.speed_aps) / REDUCE_RATIO * DEGREE_2_RAD + Lleg->result->w + Rleg->result->w) / 2,
     phi = yaw,
     phi_dot = yaw_dot,
     theta_l = (PI / 2 - Lleg->result->theta0) + pitch,
@@ -1295,14 +1298,14 @@ void outputTorque()
                 DMMotorSetTorque(jiont_motorrb, rbjt);
 
                 // 电流限位
-                if (lwi > 8192)
-                    lwi = 8192;
-                if (lwi < -8192)
-                    lwi = -8192;
-                if (rwi > 8192)
-                    rwi = 8192;
-                if (rwi < -8192)
-                    rwi = -8192;
+                if (lwi > WHEEL_CURRENT_LIMIT)
+                    lwi = WHEEL_CURRENT_LIMIT;
+                if (lwi < -WHEEL_CURRENT_LIMIT)
+                    lwi = -WHEEL_CURRENT_LIMIT;
+                if (rwi > WHEEL_CURRENT_LIMIT)
+                    rwi = WHEEL_CURRENT_LIMIT;
+                if (rwi < -WHEEL_CURRENT_LIMIT)
+                    rwi = -WHEEL_CURRENT_LIMIT;
 
                 if (rl_decision.active)
                 {
@@ -1339,7 +1342,7 @@ void outputTorque()
 
                 taskEXIT_CRITICAL();
 
-                if (ChassisNormalLQRState())
+                if (ChassisNormalLQRState() && !rl_joint_mode)
                 {
                     const float left_speed_rad_s =
                         -motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
@@ -1364,8 +1367,8 @@ void outputTorque()
             }
         }
         // 直接写入离散值
-        motor_l->motor_controller.current_feedforward_ptr = &lwi;
-        motor_r->motor_controller.current_feedforward_ptr = &rwi;
+        motor_l->motor_controller.current_feedforward_ptr = &wheel_send_current[0];
+        motor_r->motor_controller.current_feedforward_ptr = &wheel_send_current[1];
     }
 }
 
@@ -1515,6 +1518,11 @@ void ChassisTask()
     vmcCalc();
     flyDetect();
     outputTorque();
+    taskENTER_CRITICAL();
+    wheel_drive_snapshot[0] = lwi;
+    wheel_drive_snapshot[1] = rwi;
+    wheel_rl_snapshot = rl_joint_mode;
+    taskEXIT_CRITICAL();
     PublishRLShadowSnapshot();
 
     chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
@@ -1529,4 +1537,26 @@ void ChassisTask()
 
     CANTransmit(chassis_can, 0.01);
 #endif // CHASSIS_BOARD
+}
+
+/* Called immediately before DJI send at1kHz. Targets and RL mode are read as
+ * one snapshot. Wheel encoder source/filter matches PublishRL observation.
+ * Leg PD remains in DMMotorControl at2ms. */
+void ChassisWheelControlTick(void)
+{
+    if (motor_l == NULL || motor_r == NULL) return;
+    taskENTER_CRITICAL();
+    float left = wheel_drive_snapshot[0], right = wheel_drive_snapshot[1];
+    const uint8_t use_rl = wheel_rl_snapshot;
+    const float wl = -motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+    const float wr = motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+    taskEXIT_CRITICAL();
+    if (use_rl) {
+        if (WheelRLCompensate(WHEEL_FRICTION_LEFT, wl, left,
+                             &wheel_friction_torque_nm[0], &left) != 0) left = 0;
+        if (WheelRLCompensate(WHEEL_FRICTION_RIGHT, wr, right,
+                             &wheel_friction_torque_nm[1], &right) != 0) right = 0;
+    }
+    wheel_send_current[0] = isfinite(left) ? fminf(fmaxf(left, -WHEEL_CURRENT_LIMIT), WHEEL_CURRENT_LIMIT) : 0;
+    wheel_send_current[1] = isfinite(right) ? fminf(fmaxf(right, -WHEEL_CURRENT_LIMIT), WHEEL_CURRENT_LIMIT) : 0;
 }

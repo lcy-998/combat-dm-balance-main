@@ -45,9 +45,9 @@ int main(void)
     near(torque, 0.0f);
     near(current, 0.0f);
 
-    assert(WheelFrictionCompensate(WHEEL_FRICTION_LEFT, 50.0f, -8192.0f,
+    assert(WheelFrictionCompensate(WHEEL_FRICTION_LEFT, 50.0f, -16384.0f,
                                     &torque, &current) == 0);
-    near(current, -8192.0f);
+    near(current, -16384.0f);
     assert(WheelFrictionCompensate(WHEEL_FRICTION_LEFT, NAN, 1000.0f,
                                     &torque, &current) != 0);
     puts("wheel friction tests passed");
