@@ -273,6 +273,15 @@ int main(void)
     near(limited[2], -5.5f);
     near(limited[5], 5.5f);
 
+    s.joint_position_rad[0] = 3.11f;
+    assert(RLMotion31BuildObservation(&s, observation) == 0);
+    near(observation[6], 3.11f / 1.5f);
+    s.joint_position_rad[0] = 0.1f;
+    s.joint_position_rad[1] = 2.61f;
+    assert(RLMotion31BuildObservation(&s, observation) == 0);
+    near(observation[7], 2.61f / 1.5f);
+    s.joint_position_rad[1] = -0.2f;
+
     s.joint_velocity_rad_s[2] = NAN;
     assert(RLMotion31BuildObservation(&s, observation) != 0);
     assert(RLMotion31DecodeOutput(NULL, target) != 0);
