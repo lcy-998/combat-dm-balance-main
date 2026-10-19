@@ -178,6 +178,7 @@ void RLShadowTask(void const *argument)
 {
     (void)argument;
     RLShadowSnapshot sample;
+    RLShadowPositionTarget position_target = {0};
     float observation[RL_SHADOW_OBSERVATION_SIZE];
     float action[RL_SHADOW_ACTION_SIZE];
     RLShadowOutputPreview preview;

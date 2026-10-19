@@ -1,0 +1,225 @@
+ST Edge AI Core v2.0.0-20049
+Created date          : 2026-10-19 15:18:42
+Parameters            : generate --target stm32h7 --name tjb_network -m D:/Combat/2026_10_15-20_16__motion31_u1600_detailed/actor.onnx --compression none --verbosity 1 --workspace D:/APP-CA~1/tmp/mxAI_workspace1719504238340010182533222131757237 --output C:/Users/18167/.stm32cubemx/tjb_network_output
+
+Exec/report summary (generate)
+------------------------------------------------------------------------------------------
+model file         :   D:\Combat\2026_10_15-20_16__motion31_u1600_detailed\actor.onnx     
+type               :   onnx                                                               
+c_name             :   tjb_network                                                        
+compression        :   none                                                               
+options            :   allocate-inputs, allocate-outputs                                  
+optimization       :   balanced                                                           
+target/series      :   stm32h7                                                            
+workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace1719504238340010182533222131757237   
+output dir         :   C:\Users\18167\.stm32cubemx\tjb_network_output                     
+model_fmt          :   float                                                              
+model_name         :   actor                                                              
+model_hash         :   0x799951eb0791e675b7a0f667ba31537f                                 
+params #           :   14,630 items (57.15 KiB)                                           
+------------------------------------------------------------------------------------------
+input 1/1          :   'observation', f32(1x31), 124 Bytes, activations                   
+output 1/1         :   'mean_action', f32(1x6), 24 Bytes, activations                     
+macc               :   17,154                                                             
+weights (ro)       :   58,520 B (57.15 KiB) (1 segment)                                   
+activations (rw)   :   768 B (768 B) (1 segment) *                                        
+ram (total)        :   768 B (768 B) = 768 + 0 + 0                                        
+------------------------------------------------------------------------------------------
+(*) 'input'/'output' buffers can be used from the activations buffer
+
+Model name - actor
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+m_id   layer (type,original)                         oshape         param/size        macc               connected to   | c_size          c_macc            c_type                
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+1      mlp_0_weight (Placeholder, Gemm)              [b:128,c:31]   3,968/15,872                                        | +512(+3.2%)     +4,096(+100.0%)   Dense_[0]             
+       mlp_0_bias (Placeholder, Gemm)                [b:128]        128/512                                             | -512(-100.0%)                     
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+3      mlp_2_weight (Placeholder, Gemm)              [b:64,c:128]   8,192/32,768                                        | +256(+0.8%)     +8,256(+100.0%)   Dense_[2]             
+       mlp_2_bias (Placeholder, Gemm)                [b:64]         64/256                                              | -256(-100.0%)                     
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+5      mlp_4_weight (Placeholder, Gemm)              [b:32,c:64]    2,048/8,192                                         | +128(+1.6%)     +2,080(+100.0%)   Dense_[4]             
+       mlp_4_bias (Placeholder, Gemm)                [b:32]         32/128                                              | -128(-100.0%)                     
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+7      mlp_6_weight (Placeholder, Gemm)              [b:6,c:32]     192/768                                             | +24(+3.1%)      +198(+100.0%)     Dense_[6]             
+       mlp_6_bias (Placeholder, Gemm)                [b:6]          6/24                                                | -24(-100.0%)                      
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+0      observation (Input, )                         [b:1,c:31]                                                         |                                   
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+1      _mlp_mlp_0_Gemm_output_0 (Gemm, Gemm)         [b:1,c:128]                     4,096                observation   |                 -4,096(-100.0%)   
+                                                                                                         mlp_0_weight   | 
+                                                                                                           mlp_0_bias   | 
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+2      _mlp_mlp_1_Elu_output_0 (Nonlinearity, Elu)   [b:1,c:128]                     1,536   _mlp_mlp_0_Gemm_output_0   |                 -128(-8.3%)       Nonlinearity_[1]      
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+3      _mlp_mlp_2_Gemm_output_0 (Gemm, Gemm)         [b:1,c:64]                      8,256    _mlp_mlp_1_Elu_output_0   |                 -8,256(-100.0%)   
+                                                                                                         mlp_2_weight   | 
+                                                                                                           mlp_2_bias   | 
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+4      _mlp_mlp_3_Elu_output_0 (Nonlinearity, Elu)   [b:1,c:64]                        768   _mlp_mlp_2_Gemm_output_0   |                 -64(-8.3%)        Nonlinearity_[3]      
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+5      _mlp_mlp_4_Gemm_output_0 (Gemm, Gemm)         [b:1,c:32]                      2,080    _mlp_mlp_3_Elu_output_0   |                 -2,080(-100.0%)   
+                                                                                                         mlp_4_weight   | 
+                                                                                                           mlp_4_bias   | 
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+6      _mlp_mlp_5_Elu_output_0 (Nonlinearity, Elu)   [b:1,c:32]                        384   _mlp_mlp_4_Gemm_output_0   |                 -32(-8.3%)        Nonlinearity_[5]      
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+7      _mlp_mlp_6_Gemm_output_0 (Gemm, Gemm)         [b:1,c:6]                         198    _mlp_mlp_5_Elu_output_0   |                 -198(-100.0%)     
+                                                                                                         mlp_6_weight   | 
+                                                                                                           mlp_6_bias   | 
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+8      mean_action (Nonlinearity, Tanh)              [b:1,c:6]                          60   _mlp_mlp_6_Gemm_output_0   |                                   Nonlinearity_[o][7]   
+------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
+model/c-model: macc=17,378/17,154 -224(-1.3%) weights=58,520/58,520  activations=--/768 io=--/0
+
+
+
+Generated C-graph summary
+------------------------------------------------------------------------------------------------------------------------
+model name            : actor
+c-name                : tjb_network
+c-node #              : 8
+c-array #             : 17
+activations size      : 768 (1 segment)
+weights size          : 58520 (1 segment)
+macc                  : 17154
+inputs                : ['observation_output']
+outputs               : ['mean_action_output']
+
+C-Arrays (17)
+------ ---------------------------------- ------------ ------------------------- ------------- --------- 
+c_id   name (*_array)                     item/size    domain/mem-pool           c-type        comment   
+------ ---------------------------------- ------------ ------------------------- ------------- --------- 
+0      _mlp_mlp_0_Gemm_output_0_bias      128/512      weights/weights           const float             
+1      _mlp_mlp_0_Gemm_output_0_output    128/512      activations/**default**   float                   
+2      _mlp_mlp_0_Gemm_output_0_weights   3968/15872   weights/weights           const float             
+3      _mlp_mlp_1_Elu_output_0_output     128/512      activations/**default**   float                   
+4      _mlp_mlp_2_Gemm_output_0_bias      64/256       weights/weights           const float             
+5      _mlp_mlp_2_Gemm_output_0_output    64/256       activations/**default**   float                   
+6      _mlp_mlp_2_Gemm_output_0_weights   8192/32768   weights/weights           const float             
+7      _mlp_mlp_3_Elu_output_0_output     64/256       activations/**default**   float                   
+8      _mlp_mlp_4_Gemm_output_0_bias      32/128       weights/weights           const float             
+9      _mlp_mlp_4_Gemm_output_0_output    32/128       activations/**default**   float                   
+10     _mlp_mlp_4_Gemm_output_0_weights   2048/8192    weights/weights           const float             
+11     _mlp_mlp_5_Elu_output_0_output     32/128       activations/**default**   float                   
+12     _mlp_mlp_6_Gemm_output_0_bias      6/24         weights/weights           const float             
+13     _mlp_mlp_6_Gemm_output_0_output    6/24         activations/**default**   float                   
+14     _mlp_mlp_6_Gemm_output_0_weights   192/768      weights/weights           const float             
+15     mean_action_output                 6/24         activations/**default**   float         /output   
+16     observation_output                 31/124       activations/**default**   float         /input    
+------ ---------------------------------- ------------ ------------------------- ------------- --------- 
+
+C-Layers (8)
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+c_id   name (*_layer)             id   layer_type      macc   rom     tensors                               shape (array id)   
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+0      _mlp_mlp_0_Gemm_output_0   1    Dense           4096   16384   I: observation_output                 f32(1x31) (16)     
+                                                                      W: _mlp_mlp_0_Gemm_output_0_weights   f32(128x31) (2)    
+                                                                      W: _mlp_mlp_0_Gemm_output_0_bias      f32(128) (0)       
+                                                                      O: _mlp_mlp_0_Gemm_output_0_output    f32(1x128) (1)     
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+1      _mlp_mlp_1_Elu_output_0    2    Nonlinearity    1408   0       I: _mlp_mlp_0_Gemm_output_0_output    f32(1x128) (1)     
+                                                                      O: _mlp_mlp_1_Elu_output_0_output     f32(1x128) (3)     
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+2      _mlp_mlp_2_Gemm_output_0   3    Dense           8256   33024   I: _mlp_mlp_1_Elu_output_0_output     f32(1x128) (3)     
+                                                                      W: _mlp_mlp_2_Gemm_output_0_weights   f32(64x128) (6)    
+                                                                      W: _mlp_mlp_2_Gemm_output_0_bias      f32(64) (4)        
+                                                                      O: _mlp_mlp_2_Gemm_output_0_output    f32(1x64) (5)      
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+3      _mlp_mlp_3_Elu_output_0    4    Nonlinearity    704    0       I: _mlp_mlp_2_Gemm_output_0_output    f32(1x64) (5)      
+                                                                      O: _mlp_mlp_3_Elu_output_0_output     f32(1x64) (7)      
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+4      _mlp_mlp_4_Gemm_output_0   5    Dense           2080   8320    I: _mlp_mlp_3_Elu_output_0_output     f32(1x64) (7)      
+                                                                      W: _mlp_mlp_4_Gemm_output_0_weights   f32(32x64) (10)    
+                                                                      W: _mlp_mlp_4_Gemm_output_0_bias      f32(32) (8)        
+                                                                      O: _mlp_mlp_4_Gemm_output_0_output    f32(1x32) (9)      
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+5      _mlp_mlp_5_Elu_output_0    6    Nonlinearity    352    0       I: _mlp_mlp_4_Gemm_output_0_output    f32(1x32) (9)      
+                                                                      O: _mlp_mlp_5_Elu_output_0_output     f32(1x32) (11)     
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+6      _mlp_mlp_6_Gemm_output_0   7    Dense           198    792     I: _mlp_mlp_5_Elu_output_0_output     f32(1x32) (11)     
+                                                                      W: _mlp_mlp_6_Gemm_output_0_weights   f32(6x32) (14)     
+                                                                      W: _mlp_mlp_6_Gemm_output_0_bias      f32(6) (12)        
+                                                                      O: _mlp_mlp_6_Gemm_output_0_output    f32(1x6) (13)      
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+7      mean_action                8    Nonlinearity    60     0       I: _mlp_mlp_6_Gemm_output_0_output    f32(1x6) (13)      
+                                                                      O: mean_action_output                 f32(1x6) (15)      
+------ -------------------------- ---- --------------- ------ ------- ------------------------------------- ------------------ 
+
+
+
+Number of operations per c-layer
+------- ------ ---------------------------------------- -------- -------------- 
+c_id    m_id   name (type)                                   #op           type 
+------- ------ ---------------------------------------- -------- -------------- 
+0       1      _mlp_mlp_0_Gemm_output_0 (Dense)            4,096   smul_f32_f32 
+1       2      _mlp_mlp_1_Elu_output_0 (Nonlinearity)      1,408     op_f32_f32 
+2       3      _mlp_mlp_2_Gemm_output_0 (Dense)            8,256   smul_f32_f32 
+3       4      _mlp_mlp_3_Elu_output_0 (Nonlinearity)        704     op_f32_f32 
+4       5      _mlp_mlp_4_Gemm_output_0 (Dense)            2,080   smul_f32_f32 
+5       6      _mlp_mlp_5_Elu_output_0 (Nonlinearity)        352     op_f32_f32 
+6       7      _mlp_mlp_6_Gemm_output_0 (Dense)              198   smul_f32_f32 
+7       8      mean_action (Nonlinearity)                     60     op_f32_f32 
+------- ------ ---------------------------------------- -------- -------------- 
+total                                                     17,154 
+
+Number of operation types
+---------------- -------- ----------- 
+operation type          #           % 
+---------------- -------- ----------- 
+smul_f32_f32       14,630       85.3% 
+op_f32_f32          2,524       14.7% 
+
+Complexity report (model)
+------ ------------------------- ------------------------- ------------------------- ------ 
+m_id   name                      c_macc                    c_rom                     c_id   
+------ ------------------------- ------------------------- ------------------------- ------ 
+1      mlp_0_weight              ||||||||          23.9%   ||||||||          28.0%   [0]    
+3      mlp_2_weight              ||||||||||||||||  48.1%   ||||||||||||||||  56.4%   [2]    
+5      mlp_4_weight              ||||              12.1%   ||||              14.2%   [4]    
+7      mlp_6_weight              |                  1.2%   |                  1.4%   [6]    
+2      _mlp_mlp_1_Elu_output_0   |||                8.2%   |                  0.0%   [1]    
+4      _mlp_mlp_3_Elu_output_0   ||                 4.1%   |                  0.0%   [3]    
+6      _mlp_mlp_5_Elu_output_0   |                  2.1%   |                  0.0%   [5]    
+8      mean_action               |                  0.3%   |                  0.0%   [7]    
+------ ------------------------- ------------------------- ------------------------- ------ 
+macc=17,154 weights=58,520 act=768 ram_io=0
+ 
+ Requested memory size by section - "stm32h7" target
+ -------------------- ------ -------- ------- ----- 
+ module                 text   rodata    data   bss 
+ -------------------- ------ -------- ------- ----- 
+ tjb_network.o           612      124   2,232   160 
+ tjb_network_data.o       48       16      88     0 
+ lib (toolchain)*          0        0       0     0 
+ -------------------- ------ -------- ------- ----- 
+ RT total**              660      140   2,320   160 
+ -------------------- ------ -------- ------- ----- 
+ weights                   0   58,520       0     0 
+ activations               0        0       0   768 
+ io                        0        0       0     0 
+ -------------------- ------ -------- ------- ----- 
+ TOTAL                   660   58,660   2,320   928 
+ -------------------- ------ -------- ------- ----- 
+ *  toolchain objects (libm/libgcc*)
+ ** RT AI runtime objects (kernels+infrastructure)
+  
+  Summary - "stm32h7" target
+  --------------------------------------------------
+               FLASH (ro)     %*   RAM (rw)       % 
+  --------------------------------------------------
+  RT total          3,120   5.1%      2,480   76.4% 
+  --------------------------------------------------
+  TOTAL            61,640             3,248         
+  --------------------------------------------------
+  *  rt/total
+
+
+Generated files (7)
+-------------------------------------------------------------------------- 
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data_params.h   
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data_params.c   
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data.h          
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data.c          
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_config.h        
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network.h               
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network.c               
