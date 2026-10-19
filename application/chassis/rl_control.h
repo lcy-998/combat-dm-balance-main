@@ -6,7 +6,7 @@
 #define RL_CONTROL_LEG_RAMP_MS 5000u
 #define RL_CONTROL_LQR_HOLD_AFTER_RAMP_MS 5000u
 #define RL_CONTROL_COMMAND_MAX_AGE_MS 24u
-#define RL_CONTROL_LEG_TARGET_M 0.35f
+#define RL_CONTROL_LEG_TARGET_M 0.28f
 
 typedef struct {
     uint32_t wait_start_tick;

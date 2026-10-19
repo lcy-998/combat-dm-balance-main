@@ -31,6 +31,26 @@ static ai_handle network_handle = AI_HANDLE_NULL;
 static ai_buffer *network_input;
 static ai_buffer *network_output;
 
+static uint32_t input_error_mask(const RLMotion31Snapshot *motion)
+{
+    uint32_t mask = 0u;
+    for (size_t i = 0; i < 4u; ++i) {
+        if (!isfinite(motion->joint_position_rad[i])) mask |= 1u << i;
+    }
+    for (size_t i = 0; i < 3u; ++i) {
+        if (!isfinite(motion->gyro_model_rad_s[i])) mask |= 1u << 4;
+        if (!isfinite(motion->gravity_model[i])) mask |= 1u << 5;
+    }
+    for (size_t i = 0; i < 6u; ++i) {
+        if (!isfinite(motion->joint_velocity_rad_s[i])) mask |= 1u << 6;
+        if (!isfinite(motion->previous_target[i])) mask |= 1u << 7;
+    }
+    if (!isfinite(motion->command_vx_m_s) ||
+        !isfinite(motion->command_yaw_rad_s) ||
+        !isfinite(motion->command_height_m)) mask |= 1u << 8;
+    return mask;
+}
+
 void RLShadowQueueInit(void)
 {
     snapshot_queue = xQueueCreateStatic(1u, sizeof(RLShadowSnapshot),
@@ -203,6 +223,7 @@ void RLShadowTask(void const *argument)
     float previous_shadow_target[RL_MOTION31_ACTION_SIZE] = {0};
     uint8_t previous_shadow_target_valid = 0u;
     if (snapshot_queue == NULL || network_init() != 0) {
+        g_rl_shadow_debug.failure = 1u;
         publish_debug(NULL, NULL);
         publish_command(NULL, NULL, NULL, NULL, 0);
         vTaskSuspend(NULL);
@@ -211,8 +232,8 @@ void RLShadowTask(void const *argument)
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&wake, RL_SHADOW_PERIOD);
-        memset((void *)g_rl_shadow_debug.observation, 0,
-               sizeof(g_rl_shadow_debug.observation));
+        g_rl_shadow_debug.observation_valid = 0u;
+        g_rl_shadow_debug.input_error_mask = 0u;
         g_rl_shadow_debug.rl_wheel_target_valid = 0u;
         g_rl_shadow_debug.rl_target_valid = 0u;
         g_rl_shadow_debug.rl_target_theta_valid = 0u;
@@ -221,16 +242,22 @@ void RLShadowTask(void const *argument)
             memset(previous_shadow_target, 0, sizeof(previous_shadow_target));
             previous_shadow_target_valid = 0u;
             g_rl_shadow_debug.stage = 0u;
+            g_rl_shadow_debug.failure = 2u;
             publish_debug(NULL, NULL);
             publish_command(NULL, NULL, NULL, NULL, 0);
             continue;
         }
         g_rl_shadow_debug.sequence = sample.sequence;
         TickType_t now = xTaskGetTickCount();
+        g_rl_shadow_debug.snapshot_age_ms = (uint32_t)(now - sample.tick_ms);
+        for (size_t i = 0; i < 4u; ++i) {
+            g_rl_shadow_debug.input_joint_position_rad[i] = sample.motion.joint_position_rad[i];
+        }
         if ((TickType_t)(now - sample.tick_ms) > RL_SHADOW_MAX_AGE) {
             memset(previous_shadow_target, 0, sizeof(previous_shadow_target));
             previous_shadow_target_valid = 0u;
             g_rl_shadow_debug.stage = 0u;
+            g_rl_shadow_debug.failure = 3u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
             continue;
@@ -249,6 +276,8 @@ void RLShadowTask(void const *argument)
         RLMotion31Preview preview;
         float action[RL_MOTION31_ACTION_SIZE];
         if (RLMotion31BuildObservation(&sample.motion, preview.observation) != 0) {
+            g_rl_shadow_debug.failure = 4u;
+            g_rl_shadow_debug.input_error_mask = input_error_mask(&sample.motion);
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
@@ -257,8 +286,10 @@ void RLShadowTask(void const *argument)
         for (size_t i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
             g_rl_shadow_debug.observation[i] = preview.observation[i];
         }
+        g_rl_shadow_debug.observation_valid = 1u;
         g_rl_shadow_debug.stage = 2u;
         if (network_run(preview.observation, action) != 0) {
+            g_rl_shadow_debug.failure = 5u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
@@ -269,6 +300,7 @@ void RLShadowTask(void const *argument)
         }
         g_rl_shadow_debug.stage = 3u;
         if (RLMotion31DecodeOutput(action, preview.target) != 0) {
+            g_rl_shadow_debug.failure = 6u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
@@ -280,6 +312,7 @@ void RLShadowTask(void const *argument)
         if (RLMotion31MapPolicyTargets(preview.target,
                                        preview.hardware_joint_target_rad,
                                        preview.motor_wheel_target_rad_s) != 0) {
+            g_rl_shadow_debug.failure = 7u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
@@ -296,6 +329,7 @@ void RLShadowTask(void const *argument)
         float rl_torque_limited[RL_MOTION31_ACTION_SIZE];
         if (RLMotion31ComputePdTorque(&sample.motion, preview.target,
                                       rl_torque_request, rl_torque_limited) != 0) {
+            g_rl_shadow_debug.failure = 8u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
@@ -304,6 +338,7 @@ void RLShadowTask(void const *argument)
         float rl_wheel_torque_forward_nm[2];
         if (RLMotion31MapPolicyWheelTorqueToForwardOrder(rl_torque_limited,
                                                         rl_wheel_torque_forward_nm) != 0) {
+            g_rl_shadow_debug.failure = 9u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
             publish_command(&sample, NULL, NULL, NULL, 0);
@@ -313,6 +348,7 @@ void RLShadowTask(void const *argument)
         previous_shadow_target_valid = 1u;
         publish_debug(&sample, rl_torque_limited);
         g_rl_shadow_debug.stage = 5u;
+        g_rl_shadow_debug.failure = 0u;
         publish_command(&sample, action, &preview, rl_wheel_torque_forward_nm, 1);
     }
 }
