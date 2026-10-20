@@ -25,6 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "robot_def.h"
+#include "chassis/rl_shadow.h"
 
 /* USER CODE END Includes */
 
@@ -48,6 +50,7 @@
 
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
+osThreadId rlShadowTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -55,6 +58,7 @@ osThreadId defaultTaskHandle;
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
+void StartRLShadowTask(void const * argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -139,6 +143,10 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
+  /* definition and creation of rlShadowTask */
+  osThreadDef(rlShadowTask, StartRLShadowTask, osPriorityNormal, 0, 1024);
+  rlShadowTaskHandle = osThreadCreate(osThread(rlShadowTask), NULL);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -163,6 +171,27 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END StartDefaultTask */
+}
+
+/* USER CODE BEGIN Header_StartRLShadowTask */
+/**
+* @brief Function implementing the rlShadowTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartRLShadowTask */
+void StartRLShadowTask(void const * argument)
+{
+  /* USER CODE BEGIN StartRLShadowTask */
+#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+  RLShadowTask(argument);
+#endif
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartRLShadowTask */
 }
 
 /* Private application code --------------------------------------------------*/

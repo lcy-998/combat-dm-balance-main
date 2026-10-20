@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    tjb_recover.h
   * @author  AST Embedded Analytics Research Platform
-  * @date    2026-10-18T15:49:04+0800
+  * @date    2026-10-20T21:43:21+0800
   * @brief   AI Tool Automatic Code Generator for Embedded NN computing
   ******************************************************************************
   * @attention
@@ -23,7 +23,7 @@
 
 /******************************************************************************/
 #define AI_TJB_RECOVER_MODEL_NAME          "tjb_recover"
-#define AI_TJB_RECOVER_ORIGIN_MODEL_NAME   "actor1"
+#define AI_TJB_RECOVER_ORIGIN_MODEL_NAME   "rl_10_19"
 
 /******************************************************************************/
 #define AI_TJB_RECOVER_ACTIVATIONS_ALIGNMENT   (4)

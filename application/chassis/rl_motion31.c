@@ -141,8 +141,8 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
     o[22] = s->command_vx_m_s / 4.0f;
     o[23] = s->command_yaw_rad_s / 4.0f;
     o[24] = s->command_height_m / 0.5f;
-    o[25] = 1.0f; /* Motion */
-    o[26] = 0.0f; /* Recovery */
+    o[25] = s->recovery_mode ? 0.0f : 1.0f; /* Motion */
+    o[26] = s->recovery_mode ? 1.0f : 0.0f; /* Recovery */
     o[27] = 0.0f; /* Jump */
     o[28] = 1.0f; /* Jump NONE */
     o[29] = 0.0f; /* Jump SMALL */

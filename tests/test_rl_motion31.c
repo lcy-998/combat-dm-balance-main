@@ -221,6 +221,18 @@ int main(void)
     near(observation[29], 0.0f);
     near(observation[30], 0.0f);
 
+    float motion_observation[RL_MOTION31_OBSERVATION_SIZE];
+    for (unsigned i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i)
+        motion_observation[i] = observation[i];
+    s.recovery_mode = 1u;
+    assert(RLMotion31BuildObservation(&s, observation) == 0);
+    for (unsigned i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
+        if (i != 25u && i != 26u) near(observation[i], motion_observation[i]);
+    }
+    near(observation[25], 0.0f);
+    near(observation[26], 1.0f);
+    s.recovery_mode = 0u;
+
     const float action[RL_MOTION31_ACTION_SIZE] = {-1.0f, -0.5f, 0.25f, 0.5f, 1.0f, -0.25f};
     float target[RL_MOTION31_ACTION_SIZE];
     assert(RLMotion31DecodeOutput(action, target) == 0);

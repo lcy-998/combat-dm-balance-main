@@ -10,10 +10,11 @@
 typedef struct {
     float gyro_model_rad_s[3];
     float gravity_model[3];
-    float joint_position_rad[4]; /* model order: physical RH, RA, LH, LA */
-    float joint_velocity_rad_s[6]; /* physical RH, RA, RW, LH, LA, LW */
-    float previous_target[6]; /* previous virtual targets in model order */
+    float joint_position_rad[4]; /* action channels 0, 1, 3, 4: geometric RH, RA, LH, LA */
+    float joint_velocity_rad_s[6]; /* model order: RH, RA, RW, LH, LA, LW */
+    float previous_target[6]; /* action order: model-left RH/RA/RW, model-right LH/LA/LW */
     uint8_t previous_target_valid;
+    uint8_t recovery_mode; /* 0=motion, 1=recovery */
     float lqr_leg_torque_motor_nm[4]; /* existing DMMotor order: lf, lb, rf, rb */
     float lqr_wheel_torque_forward_nm[2]; /* LQR wheel torque, forward-positive: left, right */
     uint8_t lqr_torque_valid;
@@ -24,7 +25,7 @@ typedef struct {
 
 typedef struct {
     float observation[RL_MOTION31_OBSERVATION_SIZE];
-    float target[RL_MOTION31_ACTION_SIZE]; /* physical RH, RA, RW, LH, LA, LW */
+    float target[RL_MOTION31_ACTION_SIZE]; /* model-left RH/RA/RW, model-right LH/LA/LW */
     float hardware_joint_target_rad[4]; /* lfangle, lbangle, rfangle, rbangle conventions */
     float motor_wheel_target_rad_s[2]; /* left/right wheel-output rad/s in hardware motor-axis sign */
 } RLMotion31Preview;

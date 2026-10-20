@@ -58,8 +58,6 @@
 #include "network_data.h"
 #include "tjb_network.h"
 #include "tjb_network_data.h"
-#include "tjb_recover.h"
-#include "tjb_recover_data.h"
 
 /* USER CODE BEGIN includes */
 /* USER CODE END includes */
@@ -95,7 +93,6 @@ static uint8_t pool0[AI_NETWORK_DATA_ACTIVATION_1_SIZE];
 
 ai_handle data_activations0[] = {pool0};
 ai_handle data_activations1[] = {pool0};
-ai_handle data_activations2[] = {pool0};
 
 /* AI objects ----------------------------------------------------------------*/
 
@@ -269,19 +266,6 @@ static const ai_network_entry_t networks[AI_MNETWORK_NUMBER] = {
         .ai_forward = ai_tjb_network_forward,
         .ai_data_params_get = ai_tjb_network_data_params_get,
         .activations = data_activations1
-    },
-    {
-        .name = (const char *)AI_TJB_RECOVER_MODEL_NAME,
-        .config = AI_TJB_RECOVER_DATA_CONFIG,
-        .ai_get_report = ai_tjb_recover_get_report,
-        .ai_create = ai_tjb_recover_create,
-        .ai_destroy = ai_tjb_recover_destroy,
-        .ai_get_error = ai_tjb_recover_get_error,
-        .ai_init = ai_tjb_recover_init,
-        .ai_run = ai_tjb_recover_run,
-        .ai_forward = ai_tjb_recover_forward,
-        .ai_data_params_get = ai_tjb_recover_data_params_get,
-        .activations = data_activations2
     },
 };
 

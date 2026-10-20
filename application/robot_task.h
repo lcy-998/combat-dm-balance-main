@@ -24,7 +24,6 @@ osThreadId robotTaskHandle;
 osThreadId motorTaskHandle;
 osThreadId daemonTaskHandle;
 osThreadId uiTaskHandle;
-static osThreadId rlMotion31ShadowTaskHandle;
 
 #if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
 static Referee_Interactive_info_t ui_data;
@@ -35,7 +34,7 @@ void StartMOTORTASK(void const *argument);
 void StartDAEMONTASK(void const *argument);
 void StartROBOTTASK(void const *argument);
 void StartUITASK(void const *argument);
-void StartRLMotion31ShadowTask(void const *argument);
+void StartRLShadowTask(void const *argument);
 
 /**
  * @brief 初始化机器人任务,所有持续运行的任务都在这里初始化
@@ -63,12 +62,6 @@ void OSTaskInit()
     osThreadDef(uitask, StartUITASK, osPriorityNormal, 0, 512);
     uiTaskHandle = osThreadCreate(osThread(uitask), NULL);
 
-    osThreadDef(rlMotion31ShadowTask, StartRLMotion31ShadowTask, osPriorityBelowNormal, 0, 1024);
-    rlMotion31ShadowTaskHandle = osThreadCreate(osThread(rlMotion31ShadowTask), NULL);
-    if (rlMotion31ShadowTaskHandle == NULL)
-    {
-        Error_Handler();
-    }
 #endif
 
     HTMotorControlInit(); // 没有注册HT电机则不会执行
@@ -143,12 +136,6 @@ __attribute__((noreturn)) void StartROBOTTASK(void const *argument)
             LOGERROR("[freeRTOS] ROBOT core Task is being DELAY! dt = [%f]", &robot_dt);
         osDelay(5);
     }
-}
-
-__attribute__((noreturn)) void StartRLMotion31ShadowTask(void const *argument)
-{
-    RLShadowTask(argument);
-    for (;;) osDelay(1000);
 }
 
 __attribute__((noreturn)) void StartUITASK(void const *argument)

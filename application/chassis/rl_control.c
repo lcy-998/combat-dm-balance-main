@@ -21,7 +21,8 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
         if (!isfinite(command->action[i]) || !isfinite(command->preview.target[i])) return 0;
     }
     for (unsigned i = 0; i < 4u; ++i) {
-        if (!isfinite(command->preview.hardware_joint_target_rad[i])) return 0;
+        if (!isfinite(command->preview.hardware_joint_target_rad[i]) ||
+            !isfinite(command->leg_torque_motor_nm[i])) return 0;
     }
     for (unsigned i = 0; i < 2u; ++i) {
         if (!isfinite(command->wheel_forward_torque_nm[i])) return 0;
@@ -29,68 +30,56 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
     return 1;
 }
 
-float RLControlLegRampStep(RLControlLegRamp *ramp, uint32_t now_tick,
-                           int normal_lqr, float current_target_m)
-{
-    if (ramp == NULL || !isfinite(current_target_m)) return current_target_m;
-    if (!normal_lqr) {
-        memset(ramp, 0, sizeof(*ramp));
-        return current_target_m;
-    }
-    if (!ramp->started) {
-        ramp->started = 1u;
-        ramp->start_tick = now_tick;
-        ramp->start_length_m = current_target_m;
-        return current_target_m;
-    }
-    if (ramp->completed) return current_target_m;
-
-    const uint32_t elapsed = (uint32_t)(now_tick - ramp->start_tick);
-    if (elapsed >= RL_CONTROL_LEG_RAMP_MS) {
-        ramp->completed = 1u;
-        return RL_CONTROL_LEG_TARGET_M;
-    }
-    const float fraction = (float)elapsed / (float)RL_CONTROL_LEG_RAMP_MS;
-    return ramp->start_length_m +
-           fraction * (RL_CONTROL_LEG_TARGET_M - ramp->start_length_m);
-}
-
-RLControlDecision RLControlStep(RLControlState *state, RLControlLegRamp *ramp,
-                                uint32_t now_tick, int normal_lqr,
+RLControlDecision RLControlStep(RLControlState *state, uint32_t now_tick,
+                                int enabled,
                                 const RLShadowCommand *command)
 {
     RLControlDecision decision = {0};
-    if (state == NULL || ramp == NULL) return decision;
-    if (!normal_lqr) {
-        decision.exited = state->active;
+    if (state == NULL) return decision;
+    const uint8_t was_active = state->active;
+    if (!enabled) {
         memset(state, 0, sizeof(*state));
-        memset(ramp, 0, sizeof(*ramp));
+        decision.exited = was_active;
         return decision;
     }
-    if (!ramp->completed) {
-        state->timing = 0u;
-        state->active = 0u;
-        return decision;
+    if (!state->enabled) {
+        state->enabled = 1u;
+        state->recovering = 1u;
+        state->enable_tick = now_tick;
     }
-    if (!state->timing) {
-        state->timing = 1u;
-        state->wait_start_tick = now_tick;
-        return decision;
-    }
-    if ((uint32_t)(now_tick - state->wait_start_tick) <
-        RL_CONTROL_LQR_HOLD_AFTER_RAMP_MS) {
-        return decision;
-    }
-    if (!command_usable(command, now_tick)) {
-        decision.exited = state->active;
-        state->active = 0u;
-        state->timing = 0u;
-        memset(ramp, 0, sizeof(*ramp));
-        return decision;
-    }
-    state->active = 1u;
-    decision.active = 1u;
+    /* Reject pre-enable outputs, including outputs from the same scheduler tick. */
+    state->active = command_usable(command, now_tick) &&
+        (int32_t)(command->snapshot_tick_ms - state->enable_tick) > 0 &&
+        command->recovery_mode == state->recovering;
+    decision.active = state->active;
+    decision.exited = was_active && !state->active;
+    decision.recovering = state->recovering;
     return decision;
+}
+
+int RLControlCompensateSpring(const float policy_torque_nm[4],
+                              const float leg_length_m[2],
+                              const float leg_spread_rad[2],
+                              float motor_torque_nm[4])
+{
+    if (policy_torque_nm == NULL || leg_length_m == NULL ||
+        leg_spread_rad == NULL || motor_torque_nm == NULL) return -1;
+    for (unsigned i = 0; i < 4u; ++i) {
+        if (!isfinite(policy_torque_nm[i])) return -1;
+    }
+    float spring[2];
+    for (unsigned i = 0; i < 2u; ++i) {
+        if (!isfinite(leg_length_m[i]) || leg_length_m[i] <= 0.0f ||
+            !isfinite(leg_spread_rad[i])) return -1;
+        /* Original measured leg-length fit and compensation direction. */
+        spring[i] = clampf((-83.121f * leg_length_m[i] + 40.242f) * 0.8f,
+                            16.5f, 27.0f) * sinf(leg_spread_rad[i]);
+    }
+    motor_torque_nm[0] = clampf(policy_torque_nm[0] - spring[0], -40.0f, 40.0f);
+    motor_torque_nm[1] = clampf(policy_torque_nm[1] + spring[0], -40.0f, 40.0f);
+    motor_torque_nm[2] = clampf(policy_torque_nm[2] + spring[1], -40.0f, 40.0f);
+    motor_torque_nm[3] = clampf(policy_torque_nm[3] - spring[1], -40.0f, 40.0f);
+    return 0;
 }
 
 int RLControlMapOutput(const RLMotion31Preview *preview,

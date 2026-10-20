@@ -36,6 +36,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <math.h>
+#include <string.h>
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
@@ -122,7 +123,6 @@ static float rotate_wz_soft = ROTATE_WZ_START;
 static float rotate_wz_exit = 0.0f;
 static uint8_t rotate_wz_softstop_active = 0;
 static int done = 0;
-static uint16_t upstair_flag0_cnt = 0;
 static uint8_t upstair_flag0_latch = 0;
 LegState leg_state_l, leg_state_r;
 uint8_t clockcent = 0, jumpingflag = 0, upstair_flag = 0, upstair_step = 0, last_mode = 0, switch_flag = 0, upstair_flag0 = 0;
@@ -132,7 +132,7 @@ float v_set = 0, radior, radiol;
 uint64_t cent = 0;
 static float del_t;
 static uint8_t chassis_lqr_output_valid;
-static RLControlLegRamp rl_leg_ramp;
+static RLControlState rl_control_state;
 static uint32_t balance_dwt_cnt;
 float phi1, phi4, Lphi1, Lphi4, Rphi1, Rphi4;
 float LFtor, LBtor, RFtor, RBtor;
@@ -149,69 +149,6 @@ static float v_cmd_last = 0.0f;
 static referee_info_t *referee_data;       // 用于获取裁判系统的数据
 static Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
 
-static float UpdateLegRetractTorqueScale(bool enable)
-{
-    float dt = del_t;
-    float target = enable ? 1.0f : 0.0f;
-    float rc = enable ? LEG_RETRACT_TORQUE_SOFTSTART_RC : LEG_RETRACT_TORQUE_RELEASE_RC;
-
-    if (dt <= 0.0f)
-    {
-        dt = 0.001f;
-    }
-
-    leg_retract_torque_scale += (dt / (rc + dt)) * (target - leg_retract_torque_scale);
-    if (leg_retract_torque_scale < 0.0f)
-        leg_retract_torque_scale = 0.0f;
-    if (leg_retract_torque_scale > 1.0f)
-        leg_retract_torque_scale = 1.0f;
-
-    return leg_retract_torque_scale;
-}
-
-static void GetLegRetractTorquePair(bool enable, float *left_torque, float *right_torque)
-{
-    float scale = UpdateLegRetractTorqueScale(enable);
-    *left_torque = scale * Lleg->tor;
-    *right_torque = scale * Rleg->tor;
-}
-
-static float GetSpringTorqueByLegLength(float leg_length)
-{
-    float spring_tor = (-83.121f * leg_length + 40.242f) * 0.8f;
-    if (spring_tor < 16.5f)
-        spring_tor = 16.5f;
-    else if (spring_tor > 27.0f)
-        spring_tor = 27.0f;
-    return spring_tor;
-}
-
-static PIDInstance Pitch = {
-    .Kp = 12.0f,
-    .Ki = 0.0f,
-    .Kd = 0.5f,
-    .DeadBand = 0.06f,
-    .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-    .IntegralLimit = 2,
-    .MaxOut = 5.0};
-static PIDInstance Rtheta = {
-    .Kp = 8.0f,
-    .Ki = 0.0f,
-    .Kd = 0.5f,
-    .DeadBand = 0.03f,
-    .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-    .Last_Dout = 0.01,
-    .IntegralLimit = 2,
-    .MaxOut = 6.5};
-static PIDInstance Ltheta = {
-    .Kp = 8.0f,
-    .Ki = 0.0f,
-    .Kd = 0.5f,
-    .Last_Dout = 0.01,
-    .DeadBand = 0.03f,
-    .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-    .IntegralLimit = 2,
-    .MaxOut = 6.5};
 static PIDInstance F_roll_vmc_pid_instance =
     {
         .Kp = 150.0f,
@@ -221,22 +158,6 @@ static PIDInstance F_roll_vmc_pid_instance =
         .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
         .IntegralLimit = 2,
         .MaxOut = 20.0};
-static PIDInstance Langle_pid_instance = {
-    .Kp = -30.0f,
-    .Ki = 0.0f,
-    .Kd = 0.0f,
-    .DeadBand = 0.0f,
-    .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-    .IntegralLimit = 2,
-    .MaxOut = 20.0};
-static PIDInstance Rangle_pid_instance = {
-    .Kp = 30.0f,
-    .Ki = 0.0f,
-    .Kd = 0.0f,
-    .DeadBand = 0.0f,
-    .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-    .IntegralLimit = 2,
-    .MaxOut = 20.0};
 void ChassisInit()
 {
     // 四个轮子的参数一样,改tx_id和反转标志位即可
@@ -478,15 +399,6 @@ void getStateData()
     s_dot = WorldXSpeedKF(del_t, acc_b, eul_deg, s_dot, NULL);
 }
 
-static int ChassisNormalLQRState(void)
-{
-    return chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
-           !chassis_status && !(jumpingflag && clockcent < 200u) &&
-           !upstair_flag && !upstair_flag0 &&
-           fabsf(theta_l) <= (PI / 4.0f) &&
-           fabsf(theta_r) <= (PI / 4.0f);
-}
-
 void legLengthCalc()
 {
     // 复位时腿长压低
@@ -521,11 +433,6 @@ void legLengthCalc()
     // 腿长限位
     l_xx = fmax(0.16f, l_xx);
     l_xx = fmin(0.36f, l_xx);
-
-    const int can_extend = ChassisNormalLQRState() &&
-                           !(reset_time >= 5000 && F_n < 80.0f);
-    l_xx = RLControlLegRampStep(&rl_leg_ramp, xTaskGetTickCount(),
-                                can_extend, l_xx);
 
     // 腿长差补偿拟通过roll补偿解决，当然之前的计算方法也可以保留，后续验证后再决定是否加入
     l_tar = l_xx;
@@ -799,349 +706,46 @@ void Unsetlegkd()
     jiont_motorrb->ctrl.kd_set = 0;
 }
 
-static float WrapToPiLocal(float x)
-{
-    while (x >= PI)
-        x -= PI2;
-    while (x < -PI)
-        x += PI2;
-    return x;
-}
-
-// 把目标角映射到“离当前编码器位置最近”的等效角
-static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_limit)
-{
-    float mapped = encoder_now + WrapToPiLocal(raw_target - encoder_now);
-
-    // 若跨圈后仍越界，尝试挪一圈
-    if (mapped > pos_limit)
-        mapped -= PI2;
-    else if (mapped < -pos_limit)
-        mapped += PI2;
-
-    // 最终保险限幅
-    if (mapped > pos_limit)
-        mapped = pos_limit;
-    else if (mapped < -pos_limit)
-        mapped = -pos_limit;
-
-    return mapped;
-}
-
 void outputTorque()
 {
     chassis_lqr_output_valid = 0u;
-    // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
-    // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
-
-    // 先累加得到关节电机力矩
-    if (upstair_flag0 == 1)
-    {
-        lbt = lbt * 0.4;
-        rbt = rbt * 0.4;
-    }
-    float spring_tor_l = GetSpringTorqueByLegLength(Lleg->result->L0);
-    float spring_tor_r = GetSpringTorqueByLegLength(Rleg->result->L0);
-    lfjt = +Lleg->tor - tau_l.tau1 + lbt / 2 - spring_tor_l * arm_sin_f32(lmangle);
-    lbjt = -Lleg->tor + tau_l.tau2 + lbt / 2 + spring_tor_l * arm_sin_f32(lmangle);
-    rfjt = -Rleg->tor + tau_r.tau1 - rbt / 2 + spring_tor_r * arm_sin_f32(rmangle);
-    rbjt = +Rleg->tor - tau_r.tau2 - rbt / 2 - spring_tor_r * arm_sin_f32(rmangle);
-    float leg_retract_tor_l = 0.0f;
-    float leg_retract_tor_r = 0.0f;
-
-    // 非双下
-    if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE)
-    {
-        // 如果复位中且非上台阶
-        if (chassis_status && !upstair_flag)
-        {
-            lwi = 0;
-            rwi = 0;
-            // 该数字是控制起身前摆角的位置，考虑到不太重要因此不作为宏
-            RFW = PIDCalculate(&Rtheta, theta_r + (theta_r < 0) * PI * 3, 1.25f);
-            LFW = PIDCalculate(&Ltheta, theta_l + (theta_l < 0) * PI * 3, 1.25f);
-
-            if (fabs(pitch) > 0.8f)
-            {
-                UpdateLegRetractTorqueScale(false);
-                RFW = fabs(PIDCalculate(&Pitch, pitch, 0.0f));
-                LFW = fabs(PIDCalculate(&Pitch, pitch, 0.0f));
-                if (pitch < 0)
-                    RFW = -RFW * 1.6, LFW = -LFW * 1.6;
-                SetBodySpeed(pitch > 0);
-                DMMotorSetTorque(jiont_motorlf, LFW);
-                DMMotorSetTorque(jiont_motorlb, LFW);
-                DMMotorSetTorque(jiont_motorrf, -RFW);
-                DMMotorSetTorque(jiont_motorrb, -RFW);
-            }
-            else if (fabs(pitch) > 0.2f && save_time < 800)
-            {
-                UpdateLegRetractTorqueScale(false);
-                ++save_time; // 自救成功后等待平衡
-                UnsetBodySpeed();
-                DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle));
-                DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle));
-                DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle));
-                DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle));
-            }
-            else
-            {
-                save_time = 0; // 重置自救成功后时间
-                if (!step_0)
-                {
-                    UpdateLegRetractTorqueScale(false);
-                    if (!standup_gimbal_reset_flag)
-                    {
-                        Unsetlegkd();
-                        UnsetBodySpeed();
-                        UnsetLegSpeed();
-                    }
-                    else
-                    {
-                        if (Lleg->result->L0 > 0.16f && Rleg->result->L0 > 0.16f)
-                            step_0 = true;
-                        SetBodySpeed(true);
-                        if (Lleg->result->L0 < 0.16f)
-                        {
-                            DMMotorSetTorque(jiont_motorlf, 3.0);
-                            DMMotorSetTorque(jiont_motorlb, 3.0);
-                        }
-                        if (Rleg->result->L0 < 0.16f)
-                        {
-                            DMMotorSetTorque(jiont_motorrf, -3.0);
-                            DMMotorSetTorque(jiont_motorrb, -3.0);
-                        }
-                    }
-                }
-                else if (!step_1)
-                {
-                    UpdateLegRetractTorqueScale(false);
-
-                    SetLegSpeed(false);
-                    UnsetBodySpeed();
-                    setLEGkd(0.5);
-                    DMMotorSetTorque(jiont_motorlf, LFW - spring_tor_l * arm_sin_f32(lmangle));
-                    DMMotorSetTorque(jiont_motorlb, LFW + spring_tor_l * arm_sin_f32(lmangle));
-                    DMMotorSetTorque(jiont_motorrf, -RFW + spring_tor_r * arm_sin_f32(rmangle));
-                    DMMotorSetTorque(jiont_motorrb, -RFW - spring_tor_r * arm_sin_f32(rmangle));
-                    if (fabs(theta_r - 1.29f) < 0.20f && fabs(theta_l - 1.29f) < 0.20f)
-                    {
-                        step_1 = true;
-                        UnsetLegSpeed();
-                    }
-                }
-                else if (!step_2)
-                {
-
-                    // 逆运动学解算
-                    Inverse_solution(0.145, 0.7f, &phi1, &phi4);
-                    Inverse_solution(Lleg->result->L0, Lleg->result->theta0, &Lphi1, &Lphi4);
-                    Inverse_solution(Rleg->result->L0, Rleg->result->theta0, &Rphi1, &Rphi4);
-                    Setlegkd();
-                    LFtor = PIDCalculate(&Langle_pid_instance, Lphi1, phi1);
-                    LBtor = PIDCalculate(&Langle_pid_instance, Lphi4, phi4);
-                    RFtor = PIDCalculate(&Rangle_pid_instance, Rphi1, phi1);
-                    RBtor = PIDCalculate(&Rangle_pid_instance, Rphi4, phi4);
-                    DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle) + LFtor);
-                    DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle) + LBtor);
-                    DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle) + RFtor);
-                    DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) + RBtor);
-                    if (fabs(Lleg->result->L0 - 0.150) < 0.05f && fabs(Rleg->result->L0 - 0.150) < 0.05f)
-                        step_2 = true;
-                }
-                else if (!step_3)
-                {
-                    Inverse_solution(0.160, 1.45f, &phi1, &phi4);
-                    Inverse_solution(Lleg->result->L0, Lleg->result->theta0, &Lphi1, &Lphi4);
-                    Inverse_solution(Rleg->result->L0, Rleg->result->theta0, &Rphi1, &Rphi4);
-                    Setlegkd();
-                    lwi = -3400;
-                    rwi = 3400;
-                    LFtor = PIDCalculate(&Langle_pid_instance, Lphi1, phi1);
-                    LBtor = PIDCalculate(&Langle_pid_instance, Lphi4, phi4);
-                    RFtor = PIDCalculate(&Rangle_pid_instance, Rphi1, phi1);
-                    RBtor = PIDCalculate(&Rangle_pid_instance, Rphi4, phi4);
-                    DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle) + LFtor);
-                    DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle) + LBtor);
-                    DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle) + RFtor);
-                    DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) + RBtor);
-                    if (theta_l < 0.50f && theta_r < 0.50f && fabs(theta_b) < 0.01)
-                    {
-                        step_3 = true, Rwheel = motor_r->measure.total_angle, Lwheel = motor_l->measure.total_angle; // 复位完成，重置轮子编码器的初始值,新增复为完成后将轮子的初始位置重置为当前值，防止复位过程中轮子转动过多导致的编码器值过大影响后续位置估计，这是应该用卡尔曼滤波修复的东西
-                        Unsetlegkd();
-                        s_tar = s;
-                        w_cmd = 0;
-                        v_cmd = 0;
-                        phi_tar = phi;
-                        upstair_flag0 = 0;
-                    }
-                }
-                else
-                {
-                    UpdateLegRetractTorqueScale(false);
-                    chassis_status = 0;
-                    reset_time = 0;
-                }
-            }
-        }
-        // 如果跳跃
-        else if (jumpingflag && clockcent < 80)
-        {
-            UpdateLegRetractTorqueScale(false);
-            clockcent++;
-            DMMotorSetTorque(jiont_motorlf, 10.0f);
-            DMMotorSetTorque(jiont_motorlb, -10.0f);
-            DMMotorSetTorque(jiont_motorrf, -10.0f);
-            DMMotorSetTorque(jiont_motorrb, +10.0f);
-        }
-        else if (jumpingflag && clockcent < 200)
-        {
-            UpdateLegRetractTorqueScale(false);
-            clockcent++;
-            DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle) * 0.5f);
-            DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle) * 0.5f);
-            DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle) * 0.5f);
-            DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) * 0.5f);
-        }
-        // 如果在上台阶
-        else if (upstair_flag && upstair_step == 0)
-        {
-            UpdateLegRetractTorqueScale(false);
-            SetLegSpeed(true);
-            RFW = 1.5 * PIDCalculate(&Rtheta, theta_r, 1.55f);
-            LFW = 1.5 * PIDCalculate(&Ltheta, theta_l, 1.55f);
-            DMMotorSetTorque(jiont_motorlf, LFW - spring_tor_l * arm_sin_f32(lmangle));
-            DMMotorSetTorque(jiont_motorlb, LFW + spring_tor_l * arm_sin_f32(lmangle));
-            DMMotorSetTorque(jiont_motorrf, -RFW + spring_tor_r * arm_sin_f32(rmangle));
-            DMMotorSetTorque(jiont_motorrb, -RFW - spring_tor_r * arm_sin_f32(rmangle));
-            if (fabs(theta_l - 1.5f) < 0.05f && fabs(theta_r - 1.47f) < 0.05f)
-                upstair_step++;
-        }
-        else if (upstair_flag && upstair_step == 1)
-        {
-            UpdateLegRetractTorqueScale(false);
-            UnsetLegSpeed();
-            DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle) + Lleg->tor);
-            DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle) - Lleg->tor);
-            DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle) - Rleg->tor);
-            DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) + Rleg->tor);
-            if (Lleg->result->L0 < 0.17f && Rleg->result->L0 < 0.17f)
-                upstair_step++;
-        }
-        else if (upstair_flag && upstair_step == 2)
-        {
-            UpdateLegRetractTorqueScale(false);
-            RFW = 2 * PIDCalculate(&Rtheta, theta_r + (theta_r < 0) * PI * 2, 0.25f);
-            LFW = 2 * PIDCalculate(&Ltheta, theta_l + (theta_l < 0) * PI * 2, 0.25f);
-            DMMotorSetTorque(jiont_motorlf, LFW - spring_tor_l * arm_sin_f32(lmangle) + Lleg->tor);
-            DMMotorSetTorque(jiont_motorlb, LFW + spring_tor_l * arm_sin_f32(lmangle) - Lleg->tor);
-            DMMotorSetTorque(jiont_motorrf, -RFW + spring_tor_r * arm_sin_f32(rmangle) - Rleg->tor);
-            DMMotorSetTorque(jiont_motorrb, -RFW - spring_tor_r * arm_sin_f32(rmangle) + Rleg->tor);
-            if (theta_l < 0.75f && theta_r < 0.75f)
-                upstair_flag = 0, upstair_step = 0, reset_time = 0, chassis_status = 0, upstair_flag0_cnt = 0;
-            ;
-        }
-        // 如果在正常运行
-        else
-        {
-            // 复位时间计时
-            ++reset_time;
-
-            // LQR摆角过大时停止腿部输出，防止立腿过程中过冲
-            // if (upstair_flag0 && (fabs(theta_l) > LEG_SWING_CUTOFF_RAD || fabs(theta_r) > LEG_SWING_CUTOFF_RAD || a_zb < UPSTAIR_ACCEL_CUTOFF))
-            // {
-            //     upstair_flag0_latch = 1;
-            // }
-
-            if (fabs(theta_l) > LEG_SWING_CUTOFF_RAD || fabs(theta_r) > LEG_SWING_CUTOFF_RAD || (upstair_flag0 && (a_zb < UPSTAIR_ACCEL_CUTOFF) || (fabs(theta_l) > (PI / 4) || fabs(theta_r) > (PI / 4))))
-            {
-                UpdateLegRetractTorqueScale(false);
-                lwi = 0;
-                rwi = 0;
-                DMMotorSetTorque(jiont_motorlf, 0.0f);
-                DMMotorSetTorque(jiont_motorlb, 0.0f);
-                DMMotorSetTorque(jiont_motorrf, 0.0f);
-                DMMotorSetTorque(jiont_motorrb, 0.0f);
-                if (upstair_flag0)
-                {
-                    if (upstair_flag0_cnt < 30)
-                    {
-                        ++upstair_flag0_cnt;
-                        DMMotorSetTorque(jiont_motorlf, 4.0f);
-                        DMMotorSetTorque(jiont_motorlb, 4.0f);
-                        DMMotorSetTorque(jiont_motorrf, -4.0f);
-                        DMMotorSetTorque(jiont_motorrb, -4.0f);
-                    }
-                    else
-                    {
-                        upstair_flag0 = 0;
-                        upstair_flag0_cnt = 0;
-                        upstair_flag0_latch = 0;
-                        upstair_flag = 0;
-                        upstair_step = 0;
-                        clockcent = 0;
-                        reset_time = 0;
-                        save_time = 0;
-                        chassis_status = 1;
-                        cent = 0;
-                        done = 0;
-                        step_0 = 0;
-                        step_1 = 0;
-                        step_2 = 0;
-                        step2_retract_confirm_cnt = 0;
-                        step_3 = 0;
-                        standup_gimbal_reset_flag = 0;
-                        standup_gimbal_reset_cnt = 0;
-                    }
-                }
-            }
-            else
-            {
-
-                // 前面的数字是3508转矩常数复合电流离散值,由于电流环代码有锅，需要直接输入离散值，修改电机时一定会处理这部分，因此亦不作为宏
-                UpdateLegRetractTorqueScale(false);
-                rwi = rwt * RL_MOTION31_WHEEL_CURRENT_PER_NM;
-                lwi = -lwt * RL_MOTION31_WHEEL_CURRENT_PER_NM; // negative
-                taskENTER_CRITICAL();
-                DMMotorSetTorque(jiont_motorlf, lfjt);
-                DMMotorSetTorque(jiont_motorlb, lbjt);
-                DMMotorSetTorque(jiont_motorrf, rfjt);
-                DMMotorSetTorque(jiont_motorrb, rbjt);
-
-                // 作用不明确的反向抵消静止速度的力矩,可以让它在某些情况下更稳地停在目标点,但也可能会引入震荡,因此暂时放在这里,如果需要调整可以修改这个部分的代码
-                if (v_cmd <= 0.03)
-                {
-                    lwi += s_dot * 500;
-                    rwi -= s_dot * 500;
-                }
-
-                // 电流限位
-                if (lwi > 8192)
-                    lwi = 8192;
-                if (lwi < -8192)
-                    lwi = -8192;
-                if (rwi > 8192)
-                    rwi = 8192;
-                if (rwi < -8192)
-                    rwi = -8192;
-
-                taskEXIT_CRITICAL();
-
-                if (!upstair_flag0)
-                {
-                    upstair_flag0_cnt = 0;
-                    upstair_flag0_latch = 0;
-                }
-                chassis_lqr_output_valid = 1u;
-            }
-        }
-        // 直接写入离散值
-        motor_l->motor_controller.current_feedforward_ptr = &lwi;
-        motor_r->motor_controller.current_feedforward_ptr = &rwi;
-    }
+    RLShadowCommand command;
+    const RLShadowCommand *command_ptr =
+        RLShadowReadCommand(&command) == 0 ? &command : NULL;
+    const int enabled = chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE;
+    const RLControlDecision decision = RLControlStep(&rl_control_state,
+        xTaskGetTickCount(), enabled, command_ptr);
+    chassis_status = !enabled || decision.recovering;
+    float encoder_target[4], wheel_current[2];
+    const float encoder_now[4] = {
+        jiont_motorlf->measure.pos, jiont_motorlb->measure.pos,
+        jiont_motorrf->measure.pos, jiont_motorrb->measure.pos};
+    const float encoder_offset[4] = {
+        LF_ENCODE_OFFSET, LB_ENCODE_OFFSET, RF_ENCODE_OFFSET, RB_ENCODE_OFFSET};
+    float compensated_torque[4] = {0};
+    const float leg_length[2] = {Lleg->result->L0, Rleg->result->L0};
+    const float leg_spread[2] = {lmangle, rmangle};
+    const int use_rl = decision.active &&
+        RLControlMapOutput(&command.preview, command.wheel_forward_torque_nm,
+                           encoder_now, encoder_offset,
+                           encoder_target, wheel_current) == 0 &&
+        RLControlCompensateSpring(command.leg_torque_motor_nm,
+                                  leg_length, leg_spread, compensated_torque) == 0;
+    rl_control_state.active = use_rl;
+    lwi = use_rl ? wheel_current[0] : 0.0f;
+    rwi = use_rl ? wheel_current[1] : 0.0f;
+    /* No legacy stand-up or LQR fallback; invalid/expired RL outputs are zeroed. */
+    taskENTER_CRITICAL();
+    DMMotorSetTorque(jiont_motorlf, use_rl ? compensated_torque[0] : 0.0f);
+    DMMotorSetTorque(jiont_motorlb, use_rl ? compensated_torque[1] : 0.0f);
+    DMMotorSetTorque(jiont_motorrf, use_rl ? compensated_torque[2] : 0.0f);
+    DMMotorSetTorque(jiont_motorrb, use_rl ? compensated_torque[3] : 0.0f);
+    taskEXIT_CRITICAL();
+    motor_l->motor_controller.current_feedforward_ptr = &lwi;
+    motor_r->motor_controller.current_feedforward_ptr = &rwi;
 }
 
-/* 机器人底盘控制核心任务 */
+/* Chassis control task. Emergency stop remains above the RL output path. */
 void ChassisTask()
 {
 #ifdef ONE_BOARD
@@ -1272,7 +876,7 @@ void ChassisTask()
     flyDetect();
     outputTorque();
 
-    /* Motion31 observes the current controller state; preview targets are never applied. */
+    /* Publish the selected RL policy and current sensor state. */
     RLShadowSnapshot shadow = {0};
     static uint32_t shadow_sequence;
     shadow.sequence = ++shadow_sequence;
@@ -1289,8 +893,8 @@ void ChassisTask()
     RLMotion31MapWheelMotorSpeeds(&shadow.motion,
                                   motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD,
                                   motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD);
-    shadow.motion.command_vx_m_s = v_cmd;
-    shadow.motion.command_yaw_rad_s = w_cmd;
+    shadow.motion.command_vx_m_s = 0.0f;
+    shadow.motion.command_yaw_rad_s = 0.0f;
     shadow.motion.command_height_m = 0.34f;
     shadow.motion.lqr_leg_torque_motor_nm[0] = lfjt;
     shadow.motion.lqr_leg_torque_motor_nm[1] = lbjt;
@@ -1299,13 +903,13 @@ void ChassisTask()
     shadow.motion.lqr_wheel_torque_forward_nm[0] = lwt;
     shadow.motion.lqr_wheel_torque_forward_nm[1] = rwt;
     shadow.motion.lqr_torque_valid = chassis_lqr_output_valid;
-    shadow.chassis_ready = (uint8_t)(chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
-                                     !chassis_status);
-    shadow.rl_active = 0u;
-    /* The shadow task supplies its own virtual previous policy targets. */
+    shadow.chassis_ready = (uint8_t)(chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE);
+    shadow.motion.recovery_mode = 1u;
+    shadow.rl_active = rl_control_state.active;
+    /* The inference task supplies its own previous policy targets. */
     RLShadowPublish(&shadow);
 
-    chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
+    chassis_feedback_data.standup_flag = (uint8_t)chassis_status; // 1: 起身中, 0: 非起身
 #ifdef ONE_BOARD
     PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
 #endif
