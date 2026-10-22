@@ -1,8 +1,8 @@
 /**
  * @file chassis.c
  * @author NeoZeng neozng1@hnu.edu.cn，ssjjzero01@gmail.com
- * @brief 底盘应用,负责接收robot_cmd的控制命令并根据命令进行运动学解算,得到输出
- *        注意底盘采取右手系,对于平面视图,底盘纵向运动的正前方为x正方向;横向运动的右侧为y正方向
+ * @brief 底盘应用,负责接收robot_cmd的控制命令并根据命令进行运动学解�?得到输出
+ *        注意底盘采取右手�?对于平面视图,底盘纵向运动的正前方为x正方�?横向运动的右侧为y正方�?
  *
  * @version 0.1
  * @date 2022-12-04
@@ -45,12 +45,13 @@ static Chassis_Ctrl_Cmd_s chassis_can_cmd;
 static ChassisCmdWatchdog chassis_cmd_watchdog;
 #endif
 #include "vel_meas.h"
-/* 根据robot_def.h中的macro自动计算的参数 */
-#define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴距
-#define HALF_TRACK_WIDTH (TRACK_WIDTH / 2.0f)   // 半轮距
+/* 根据robot_def.h中的macro自动计算的参�?*/
+#define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴�?
+#define HALF_TRACK_WIDTH (TRACK_WIDTH / 2.0f)   // 半轮�?
 #define PERIMETER_WHEEL (RADIUS_WHEEL * 2 * PI) // 轮子周长
 
-/* 一些安装和机械引入的值 */
+#define RL_TRAINED_SPRING_NM 4.31f
+/* 一些安装和机械引入的�?*/
 #define REDUCE_RATIO (268.0f / 17.0f)
 // #define LF_ENCODE_OFFSET 5.54346179038468985769f - 5.4739542f + PI / 2
 // #define LB_ENCODE_OFFSET 0.17422222338468985769f - 4.38848686f + PI / 2
@@ -85,23 +86,23 @@ static ChassisCmdWatchdog chassis_cmd_watchdog;
 #define V_CMD_MAX_ACCEL 100.0f
 #define CHASSIS_CMD_TIMEOUT_MS 50u
 
-/* 底盘应用包含的模块和信息存储,底盘是单例模式,因此不需要为底盘建立单独的结构体 */
+/* 底盘应用包含的模块和信息存储,底盘是单例模�?因此不需要为底盘建立单独的结构体 */
 #ifdef CHASSIS_BOARD // 如果是底盘板,使用板载IMU获取底盘转动角速度
 #include "bsp_can.h"
 #include "ins_task.h"
-static Subscriber_t *chassis_sub; // 用于订阅底盘的控制命令
+static Subscriber_t *chassis_sub; // 用于订阅底盘的控制命�?
 // Ch040UsartInstance *imu;
 #endif // CHASSIS_BOARD
 #ifdef ONE_BOARD
-;                                     // 保留空语句,兼容现有条件编译结构
-static Subscriber_t *chassis_sub;     // 用于订阅底盘的控制命令
-static Subscriber_t *gimbal_feed_sub; // 云台反馈信息订阅者
+;                                     // 保留空语�?兼容现有条件编译结构
+static Subscriber_t *chassis_sub;     // 用于订阅底盘的控制命�?
+static Subscriber_t *gimbal_feed_sub; // 云台反馈信息订阅�?
 static Publisher_t *chassis_pub;
 #endif                                                                                 // !ONE_BOARD
 static Chassis_Ctrl_Cmd_s chassis_cmd_recv;                                            // 底盘接收到的控制命令
-static Chassis_Upload_Data_s chassis_feedback_data;                                    // 底盘回传的反馈数据
+static Chassis_Upload_Data_s chassis_feedback_data;                                    // 底盘回传的反馈数�?
 SuperCapInstance *cap;                                                                 // 超级电容
-static DJIMotorInstance *motor_l, *motor_r;                                            // 左右轮电机（前后驱动）
+static DJIMotorInstance *motor_l, *motor_r;                                            // 左右轮电机（前后驱动�?
 static DMMotorInstance *jiont_motorlf, *jiont_motorlb, *jiont_motorrf, *jiont_motorrb; // 底盘关节电机
 static LEGInstance *Rleg, *Lleg;
 
@@ -148,7 +149,7 @@ static uint8_t upstair_flag0_latch = 0;
 LegState leg_state_l, leg_state_r;
 uint8_t clockcent = 0, jumpingflag = 0, upstair_flag = 0, upstair_step = 0, last_mode = 0, switch_flag = 0, upstair_flag0 = 0;
 uint8_t step_0 = 0, step_1 = 0, step_2 = 0, step_3 = 0;
-uint8_t chassis_status = 1; // 0正常 1复位中
+uint8_t chassis_status = 1; // 0正常 1复位�?
 float v_set = 0, radior, radiol;
 uint64_t cent = 0;
 static float del_t;
@@ -159,14 +160,14 @@ float absds;
 float thetar = 0.04, thetal = 0.04;
 float RFW, LFW;
 static attitude_t *IMU_data;       // 云台IMU数据
-int reset_time = 0, save_time = 0; // 起身时间计数,离地检测豁免
+int reset_time = 0, save_time = 0; // 起身时间计数,离地检测豁�?
 static uint8_t standup_gimbal_reset_flag = 0;
 static uint16_t standup_gimbal_reset_cnt = 0;
 static uint16_t step2_retract_confirm_cnt = 0;
 static float leg_retract_torque_scale = 0.0f;
 static float v_cmd_last = 0.0f;
 static uint8_t position_hold_latched = 0u;
-static referee_info_t *referee_data;       // 用于获取裁判系统的数据
+static referee_info_t *referee_data;       // 用于获取裁判系统的数�?
 static Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
 
 static float UpdateLegRetractTorqueScale(bool enable)
@@ -259,7 +260,7 @@ static PIDInstance Rangle_pid_instance = {
     .MaxOut = 20.0};
 void ChassisInit()
 {
-    // 四个轮子的参数一样,改tx_id和反转标志位即可
+    // 四个轮子的参数一�?改tx_id和反转标志位即可
     Motor_Init_Config_s chassis_motor_config = {
         .can_init_config.can_handle = &hfdcan1,
         .controller_param_init_config = {
@@ -302,7 +303,7 @@ void ChassisInit()
             .MaxOut = 15.0f},
         .vpid_config = {.Kp = 25.0f, .DeadBand = 0.4f, .Improve = PID_Integral_Limit, .IntegralLimit = 5000, .MaxOut = 6}};
 
-    //  @todo: 当前还没有设置电机的正反转,仍然需要手动添加reference的正负号,需要电机module的支持,待修改.
+    //  @todo: 当前还没有设置电机的正反�?仍然需要手动添加reference的正负号,需要电机module的支�?待修�?
     chassis_motor_config.can_init_config.can_handle = &hfdcan1;
     chassis_motor_config.can_init_config.tx_id = 2;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
@@ -332,9 +333,9 @@ void ChassisInit()
     //      .can_config = {
     //          .can_handle = &hfdcan2,
     //          .tx_id      = 0X255, // 超级电容默认接收id
-    //          .rx_id      = 0x100, // 超级电容默认发送id,注意tx和rx在其他人看来是反的
+    //          .rx_id      = 0x100, // 超级电容默认发送id,注意tx和rx在其他人看来是反�?
     //     }};
-    // cap    = SuperCapInit(&cap_conf); // 超级电容初始化
+    // cap    = SuperCapInit(&cap_conf); // 超级电容初始�?
     Rleg = FK_Result_init(&config);
     Lleg = FK_Result_init(&config);
     Rwheel = motor_r->measure.total_angle;
@@ -348,7 +349,7 @@ void ChassisInit()
     };
     rl_switch_buzzer = BuzzerRegister(&rl_buzzer_config);
     // imu             = Ch040_USART_Init();
-    // 发布订阅初始化,如果为双板,则需要can comm来传递消息
+    // 发布订阅初始�?如果为双�?则需要can comm来传递消�?
 #ifdef CHASSIS_BOARD
     CAN_Init_Config_s can_config = {
         .can_handle = &hfdcan3,
@@ -360,11 +361,11 @@ void ChassisInit()
     chassis_ctrl_rx_ctx.ctrl_dst = &chassis_can_cmd;
     chassis_can = CANRegister(&can_config);
     CANSetDLC(chassis_can, sizeof(Chassis_Upload_Data_CAN_s));
-    referee_data = UITaskInit(&huart1, &ui_data); // 裁判系统初始化,会同时初始化UI
+    referee_data = UITaskInit(&huart1, &ui_data); // 裁判系统初始�?会同时初始化UI
 
 #endif // CHASSIS_BOARD
 
-#ifdef ONE_BOARD // 单板控制整车,则通过pubsub来传递消息
+#ifdef ONE_BOARD // 单板控制整车,则通过pubsub来传递消�?
     chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
     chassis_sub = SubRegister("chassis_cmd", sizeof(Chassis_Ctrl_Cmd_s));
 
@@ -386,7 +387,7 @@ float map_linear(float x, float in_min, float in_max, float out_min, float out_m
 //     const float g[3] = {0, 0, 1.0f};
 //     float g_b[3];
 //     EarthFrameToBodyFrame(g, g_b, imudata.quat);
-//     for (uint8_t i = 0; i < 3; ++i) // 同样过一个低通滤波
+//     for (uint8_t i = 0; i < 3; ++i) // 同样过一个低通滤�?
 //     {
 //         MotionAccel_b[i] = (imudata.acc[i] - g_b[i]);
 //     }
@@ -443,7 +444,7 @@ void getLegData()
     lbw = -jiont_motorlb->measure.vel;
     rfw = jiont_motorrf->measure.vel;
     rbw = jiont_motorrb->measure.vel;
-    // 对3508电机的速度进行死区处理,防止小速度下的抖动,这个值可以根据实际情况调整
+    // �?508电机的速度进行死区处理,防止小速度下的抖动,这个值可以根据实际情况调�?
     if (fabsf(lfw) < 0.022f)
         lfw = 0;
     if (fabsf(lbw) < 0.022f)
@@ -453,14 +454,14 @@ void getLegData()
     if (fabsf(rbw) < 0.022f)
         rbw = 0;
 
-    // 正运动学解算，包含了角度和速度的解算，得到末端执行器的位置、角度、线速度和角速度等信息
+    // 正运动学解算，包含了角度和速度的解算，得到末端执行器的位置、角度、线速度和角速度等信�?
     forward_kinematics(Lleg, lfangle, lfw, lbangle, lbw);
     forward_kinematics(Rleg, rfangle, rfw, rbangle, rbw);
 }
 
 void getStateData()
 {
-    // 获取机体上陀螺仪的数据
+    // 获取机体上陀螺仪的数�?
     /*
     pitch     = -imu->ch040_data.eul[0] * DEGREE_2_RAD;
     pitch_dot = -imu->ch040_data.gyr[1] * DEGREE_2_RAD;
@@ -478,7 +479,7 @@ void getStateData()
     roll = -IMU_data->Roll * DEGREE_2_RAD;
     roll_dot = -IMU_data->Gyro[1];
 
-    // yaw的处理,进行360度连续化,并且计算总的旋转角度,这个值对于后续的控制很重要,需要保证其正确性
+    // yaw的处�?进行360度连续化,并且计算总的旋转角度,这个值对于后续的控制很重�?需要保证其正确�?
     if ((yawlast - yaw) > PI)
         yawround++;
     if ((yawlast - yaw) < -PI)
@@ -487,7 +488,7 @@ void getStateData()
     yawlast = yaw;
 
     // 摆角转动应该会带动轮子编码器的值改变，这里没考虑，后续验证后加入
-    // 机体倾角对摆角影响已经消除
+    // 机体倾角对摆角影响已经消�?
     s = R_W * (-motor_l->measure.total_angle / REDUCE_RATIO + Lwheel / REDUCE_RATIO + motor_r->measure.total_angle / REDUCE_RATIO - Rwheel / REDUCE_RATIO) / 2 * DEGREE_2_RAD,
     s_dot = R_W * ((-motor_l->measure.speed_aps + motor_r->measure.speed_aps) / REDUCE_RATIO * DEGREE_2_RAD + Lleg->result->w + Rleg->result->w) / 2,
     phi = yaw,
@@ -501,11 +502,26 @@ void getStateData()
 
     theta_b_dot = pitch_dot;
     // 加入死区避免过大的thetab权重导致后退
-    // 速度需要滤波以防打滑
+    // 速度需要滤波以防打�?
     float acc_b[3] = {-IMU_data->Accel[1], -IMU_data->Accel[0], IMU_data->Accel[2]};
     float eul_deg[3] = {roll * RAD_2_DEG, pitch * RAD_2_DEG, yaw * RAD_2_DEG};
     rl_heading_vx_raw = s_dot;
     s_dot = WorldXSpeedKF(del_t, acc_b, eul_deg, s_dot, NULL);
+}
+
+static int RLSpringDifferenceTorque(float left_scalar, float right_scalar,
+                                           float left_angle, float right_angle,
+                                           float trained_nm, float out[4])
+{
+    for (unsigned i=0;i<4;++i) out[i]=0.0f;
+    if (!isfinite(left_scalar)||!isfinite(right_scalar)||!isfinite(left_angle)||
+        !isfinite(right_angle)||!isfinite(trained_nm)||left_scalar<0||
+        right_scalar<0||left_scalar>27||right_scalar>27||trained_nm<0||trained_nm>10.775f)
+        return -1;
+    const float sl=left_scalar*sinf(left_angle), sr=right_scalar*sinf(right_angle);
+    out[0]=trained_nm-sl; out[1]=sl;
+    out[2]=sr-trained_nm; out[3]=-sr;
+    return 0;
 }
 
 static void PublishRLShadowSnapshot(void)
@@ -568,11 +584,11 @@ static int ChassisNormalLQRState(void)
 
 void legLengthCalc()
 {
-    // 复位时腿长压低
+    // 复位时腿长压�?
     if (chassis_status)
         l_xx = 0.15;
 
-    // 简单状态机通过拨杆调整腿长，数值是控制周期乘步长
+    // 简单状态机通过拨杆调整腿长，数值是控制周期乘步�?
     switch (chassis_cmd_recv.changeL)
     {
     case 1:
@@ -641,7 +657,7 @@ void legLengthCalc()
 
 void vmcCalc()
 {
-    // 懒得改为中文注释，这里选择英文是怕编码问题，但是其他地方为了统一性妥协了，后人自有后人福把
+    // 懒得改为中文注释，这里选择英文是怕编码问题，但是其他地方为了统一性妥协了，后人自有后人福�?
     // 1. 重力补偿
     F_g_vmc = (M_B / 2 + M_L * 0.2) * G;
 
@@ -652,16 +668,16 @@ void vmcCalc()
     F_l_vmc = 0;
     // PIDCalculate(&F_l_vmc_pid_instance, (Lleg->result->L0 + Rleg->result->L0) / 2, l_xx);
 
-    // 4. 惯性补偿
+    // 4. 惯性补�?
     F_in_vmc = (M_L * 0.2 + M_B / 2) * l_xx / 2 / R_L * phi_dot * s_dot; //* absds;
 
-    // 5. 雅可比转置映射
+    // 5. 雅可比转置映�?
     float F_L_vmc = -F_roll_vmc + F_l_vmc + F_g_vmc - F_in_vmc;
     float F_R_vmc = +F_roll_vmc + F_l_vmc + F_g_vmc + F_in_vmc;
     tau_l = vmc_get_tau(F_L_vmc, 0.0f, 0.210f, lfangle, PI - lbangle, Lleg->result->L0, PI / 2 - Lleg->result->theta0);
     tau_r = vmc_get_tau(F_R_vmc, 0.0f, 0.210f, rfangle, PI - rbangle, Rleg->result->L0, PI / 2 - Rleg->result->theta0);
 
-    // 支持力解算，详见whx文章（增加奇异位保护，避免 tau1 过小导致数值爆炸）
+    // 支持力解算，详见whx文章（增加奇异位保护，避�?tau1 过小导致数值爆炸）
     const float tau1_eps = 1e-3f;
     float tau1_l = tau_l.tau1;
     float tau1_r = tau_r.tau1;
@@ -691,7 +707,7 @@ void vmcCalc()
 
 void setTargetData()
 {
-    // 由摇杆控制的的速度指令值
+    // 由摇杆控制的的速度指令�?
     float v_cmd_raw = chassis_cmd_recv.vx / 660.0f * 2.2f;
     float v_cmd_dt = del_t;
     if (v_cmd_dt <= 0.0f)
@@ -706,7 +722,7 @@ void setTargetData()
     v_cmd_last = v_cmd;
     w_cmd = chassis_wz_cmd / 660.0f * 8;
 
-    // 每次复位仅执行一次的代码，机器人死亡时的数据需要更新防止抽风
+    // 每次复位仅执行一次的代码，机器人死亡时的数据需要更新防止抽�?
     if (!done)
     {
         ++done, phi_tar = phi, s_tar = s;
@@ -718,7 +734,7 @@ void setTargetData()
     {
         phi_tar = phi;
     }
-    // absds = SpeedEstimation(del_t, imu->ch040_data, s_zdot);//要更改
+    // absds = SpeedEstimation(del_t, imu->ch040_data, s_zdot);//要更�?
     if (v_cmd == 0.0f)
     {
         if (!position_hold_latched)
@@ -769,10 +785,10 @@ void setTargetData()
 void flyDetect()
 {
     if (reset_time < 5000)
-        return; // 如果处于起身状态，则不进行离地检测，防止起身时误判离地
+        return; // 如果处于起身状态，则不进行离地检测，防止起身时误判离�?
 
-    // 离地检测实现比较暴力，直接把支持力写进set函数并通过分支语句来控制
-    // 如果离地，就会将新的值赋给力矩输出，同时此函数也获得所有力矩
+    // 离地检测实现比较暴力，直接把支持力写进set函数并通过分支语句来控�?
+    // 如果离地，就会将新的值赋给力矩输出，同时此函数也获得所有力�?
     set_lqr_data(s,
                  s_dot,
                  phi,
@@ -901,18 +917,18 @@ static float WrapToPiLocal(float x)
     return x;
 }
 
-// 把目标角映射到“离当前编码器位置最近”的等效角
+// 把目标角映射到“离当前编码器位置最近”的等效�?
 static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_limit)
 {
     float mapped = encoder_now + WrapToPiLocal(raw_target - encoder_now);
 
-    // 若跨圈后仍越界，尝试挪一圈
+    // 若跨圈后仍越界，尝试挪一�?
     if (mapped > pos_limit)
         mapped -= PI2;
     else if (mapped < -pos_limit)
         mapped += PI2;
 
-    // 最终保险限幅
+    // 最终保险限�?
     if (mapped > pos_limit)
         mapped = pos_limit;
     else if (mapped < -pos_limit)
@@ -945,13 +961,19 @@ static void ApplyRLJointOutput(const float target[4], float blend)
         ++rl_activation_sequence;
     DMMotorInstance *joint[4] = {jiont_motorlf, jiont_motorlb,
                                  jiont_motorrf, jiont_motorrb};
+    float spring_difference[4] = {0};
+
+    (void)RLSpringDifferenceTorque(GetSpringTorqueByLegLength(Lleg->result->L0),
+        GetSpringTorqueByLegLength(Rleg->result->L0), lmangle, rmangle,
+        RL_TRAINED_SPRING_NM, spring_difference);
+
     for (unsigned i = 0; i < 4u; ++i)
     {
         float position, torque, kp, kd;
         RLControlBlendJoint(joint[i]->measure.pos, joint[i]->ctrl.tor_set,
                             target[i], blend, &position, &torque, &kp, &kd);
         DMMotorSetPos(joint[i], position, 0.0f);
-        DMMotorSetTorque(joint[i], torque);
+        DMMotorSetTorque(joint[i], torque + blend * spring_difference[i]);
         joint[i]->ctrl.kp_set = kp;
         joint[i]->ctrl.kd_set = kd;
         joint[i]->ctrl.host_position_pd = 1u;
@@ -998,10 +1020,10 @@ static void ServiceRLBeep(uint32_t now_tick)
 
 void outputTorque()
 {
-    // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
+    // 内部是一个状态机，处理复位中，起跳，和正常运行三个状�?
     // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
 
-    // 先累加得到关节电机力矩
+    // 先累加得到关节电机力�?
     if (upstair_flag0 == 1)
     {
         lbt = lbt * 0.4;
@@ -1036,7 +1058,7 @@ void outputTorque()
     if (!rl_decision.active)
         ResetRLJointMode();
 
-    // 非双下
+    // 非双�?
     if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE)
     {
         // 如果复位中且非上台阶
@@ -1044,7 +1066,7 @@ void outputTorque()
         {
             lwi = 0;
             rwi = 0;
-            // 该数字是控制起身前摆角的位置，考虑到不太重要因此不作为宏
+            // 该数字是控制起身前摆角的位置，考虑到不太重要因此不作为�?
             RFW = PIDCalculate(&Rtheta, theta_r + (theta_r < 0) * PI * 3, 1.25f);
             LFW = PIDCalculate(&Ltheta, theta_l + (theta_l < 0) * PI * 3, 1.25f);
 
@@ -1064,7 +1086,7 @@ void outputTorque()
             else if (fabs(pitch) > 0.2f && save_time < 800)
             {
                 UpdateLegRetractTorqueScale(false);
-                ++save_time; // 自救成功后等待平衡
+                ++save_time; // 自救成功后等待平�?
                 UnsetBodySpeed();
                 DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle));
                 DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle));
@@ -1073,7 +1095,7 @@ void outputTorque()
             }
             else
             {
-                save_time = 0; // 重置自救成功后时间
+                save_time = 0; // 重置自救成功后时�?
                 if (!step_0)
                 {
                     UpdateLegRetractTorqueScale(false);
@@ -1154,7 +1176,7 @@ void outputTorque()
                     DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) + RBtor);
                     if (theta_l < 0.50f && theta_r < 0.50f && fabs(theta_b) < 0.01)
                     {
-                        step_3 = true, Rwheel = motor_r->measure.total_angle, Lwheel = motor_l->measure.total_angle; // 复位完成，重置轮子编码器的初始值,新增复为完成后将轮子的初始位置重置为当前值，防止复位过程中轮子转动过多导致的编码器值过大影响后续位置估计，这是应该用卡尔曼滤波修复的东西
+                        step_3 = true, Rwheel = motor_r->measure.total_angle, Lwheel = motor_l->measure.total_angle; // 复位完成，重置轮子编码器的初始�?新增复为完成后将轮子的初始位置重置为当前值，防止复位过程中轮子转动过多导致的编码器值过大影响后续位置估计，这是应该用卡尔曼滤波修复的东�?
                         Unsetlegkd();
                         s_tar = s;
                         w_cmd = 0;
@@ -1228,13 +1250,13 @@ void outputTorque()
                 upstair_flag = 0, upstair_step = 0, reset_time = 0, chassis_status = 0, upstair_flag0_cnt = 0;
             ;
         }
-        // 如果在正常运行
+        // 如果在正常运�?
         else
         {
             // 复位时间计时
             ++reset_time;
 
-            // LQR摆角过大时停止腿部输出，防止立腿过程中过冲
+            // LQR摆角过大时停止腿部输出，防止立腿过程中过�?
             // if (upstair_flag0 && (fabs(theta_l) > LEG_SWING_CUTOFF_RAD || fabs(theta_r) > LEG_SWING_CUTOFF_RAD || a_zb < UPSTAIR_ACCEL_CUTOFF))
             // {
             //     upstair_flag0_latch = 1;
@@ -1285,7 +1307,7 @@ void outputTorque()
             else
             {
 
-                // 前面的数字是3508转矩常数复合电流离散值,由于电流环代码有锅，需要直接输入离散值，修改电机时一定会处理这部分，因此亦不作为宏
+                // 前面的数字是3508转矩常数复合电流离散�?由于电流环代码有锅，需要直接输入离散值，修改电机时一定会处理这部分，因此亦不作为�?
                 UpdateLegRetractTorqueScale(false);
                 rwi = rwt / 0.00036 * 19.0f / REDUCE_RATIO;
                 lwi = -lwt / 0.00036 * 19.0f / REDUCE_RATIO; // negative
@@ -1366,13 +1388,13 @@ void outputTorque()
                 }
             }
         }
-        // 直接写入离散值
+        // 直接写入离散�?
         motor_l->motor_controller.current_feedforward_ptr = &wheel_send_current[0];
         motor_r->motor_controller.current_feedforward_ptr = &wheel_send_current[1];
     }
 }
 
-/* 机器人底盘控制核心任务 */
+/* 机器人底盘控制核心任�?*/
 void ChassisTask()
 {
 #ifdef ONE_BOARD
@@ -1409,7 +1431,7 @@ void ChassisTask()
     }
     standup_gimbal_reset_flag = (standup_gimbal_reset_cnt >= STANDUP_GIMBAL_RESET_CONFIRM_CNT);
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
-    { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
+    { // 如果出现重要模块离线或遥控器设置为急停,让电机停�?
         lwi = 0.0f;
         rwi = 0.0f;
         DJIMotorStop(motor_l);
@@ -1448,7 +1470,7 @@ void ChassisTask()
         rotate_wz_exit = rotate_wz_soft;
     }
 
-    // 退出自旋时做软刹车/状态复位
+    // 退出自旋时做软刹车/状态复�?
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     {
         rotate_wz_soft = ROTATE_WZ_START;
@@ -1464,7 +1486,7 @@ void ChassisTask()
         cent = 0;
         done = 0;
     case CHASSIS_NO_FOLLOW:
-        // 底盘不旋转,但维持全向机动,一般用于调整云台姿态
+        // 底盘不旋�?但维持全向机�?一般用于调整云台姿�?
 
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台
@@ -1481,7 +1503,7 @@ void ChassisTask()
         chassis_wz_cmd = follow_wz;
         break;
     }
-    case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
+    case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定�?后续增加不规则的变速策�?
         rotate_wz_softstop_active = 0;
         if (rotate_wz_soft < ROTATE_WZ_TARGET)
         {
@@ -1496,7 +1518,7 @@ void ChassisTask()
         break;
     }
 
-    // 退出自旋时,将wz渐变至0
+    // 退出自旋时,将wz渐变�?
     if (chassis_cmd_recv.chassis_mode != CHASSIS_ROTATE && rotate_wz_softstop_active)
     {
         rotate_wz_exit -= ROTATE_WZ_DOWN_STEP;
@@ -1525,7 +1547,7 @@ void ChassisTask()
     taskEXIT_CRITICAL();
     PublishRLShadowSnapshot();
 
-    chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
+    chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身�? 0: 非起�?
 #ifdef ONE_BOARD
     PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
 #endif
