@@ -93,6 +93,30 @@ RLControlDecision RLControlStep(RLControlState *state, RLControlLegRamp *ramp,
     return decision;
 }
 
+int RLControlCompensateSpring(const float policy_torque_nm[4],
+                              const float leg_length_m[2],
+                              const float leg_spread_rad[2],
+                              float motor_torque_nm[4])
+{
+    if (policy_torque_nm == NULL || leg_length_m == NULL ||
+        leg_spread_rad == NULL || motor_torque_nm == NULL) return -1;
+    for (unsigned i = 0; i < 4u; ++i) {
+        if (!isfinite(policy_torque_nm[i])) return -1;
+    }
+    float spring[2];
+    for (unsigned i = 0; i < 2u; ++i) {
+        if (!isfinite(leg_length_m[i]) || leg_length_m[i] <= 0.0f ||
+            !isfinite(leg_spread_rad[i])) return -1;
+        spring[i] = clampf((-83.121f * leg_length_m[i] + 40.242f) * 0.8f,
+                            16.5f, 27.0f) * sinf(leg_spread_rad[i]);
+    }
+    motor_torque_nm[0] = clampf(policy_torque_nm[0] - spring[0], -40.0f, 40.0f);
+    motor_torque_nm[1] = clampf(policy_torque_nm[1] + spring[0], -40.0f, 40.0f);
+    motor_torque_nm[2] = clampf(policy_torque_nm[2] + spring[1], -40.0f, 40.0f);
+    motor_torque_nm[3] = clampf(policy_torque_nm[3] - spring[1], -40.0f, 40.0f);
+    return 0;
+}
+
 int RLControlMapOutput(const RLMotion31Preview *preview,
                        const float wheel_forward_torque_nm[2],
                        const float encoder_now[4], const float encoder_offset[4],

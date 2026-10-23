@@ -139,6 +139,34 @@ int main(void)
             near(s.joint_velocity_rad_s[joint_velocity_index[i]], expected_dq[moved][i]);
         }
     }
+    /* Encoder turn offsets must not change the same calibrated standing pose.
+       In particular obs[9] = (0.23448 - 2*pi)/1.5 used to be about -4.03. */
+    for (int turns = -2; turns <= 2; ++turns) {
+        const float turn = (float)turns * 2.0f * pi;
+        RLMotion31MapJointAngles(&s, hip_zero - 0.18550f + turn,
+                                 active_zero + 0.25182f + turn,
+                                 hip_zero - 0.22042f + turn,
+                                 active_zero + 0.23448f + turn,
+                                 1.0f, 2.0f, 3.0f, 4.0f);
+        assert(RLMotion31BuildObservation(&s, axis_observation) == 0);
+        near(axis_observation[6], 0.18550f / 1.5f);
+        near(axis_observation[7], 0.25182f / 1.5f);
+        near(axis_observation[8], -0.22042f / 1.5f);
+        near(axis_observation[9], 0.23448f / 1.5f);
+        near(s.joint_velocity_rad_s[0], -1.0f);
+        near(s.joint_velocity_rad_s[4], 4.0f);
+        const float pose_target[6] = {0.18550f, 0.25182f, 0.0f, -0.22042f, 0.23448f, 0.0f};
+        float request[6], limited_pose[6];
+        for (unsigned i = 0; i < 6; ++i) s.joint_velocity_rad_s[i] = 0.0f;
+        assert(RLMotion31ComputePdTorque(&s, pose_target, request, limited_pose) == 0);
+        for (unsigned i = 0; i < 6; ++i) assert(fabsf(request[i]) < 0.0002f);
+    }
+    /* An active angle just outside the branch remains out of range until
+       observation saturation; it must not become a different valid pose. */
+    RLMotion31MapJointAngles(&s, hip_zero, active_zero + 2.61f,
+                             hip_zero, active_zero - 2.61f, 0, 0, 0, 0);
+    near(s.joint_position_rad[1], 2.61f);
+    near(s.joint_position_rad[3], -2.61f);
     /* Both motor axes have opposite signs for forward travel. The model
        wheel axes are backward-positive and are ordered physical right/left. */
     RLMotion31MapWheelMotorSpeeds(&s, -2.0f, 3.0f);
@@ -273,14 +301,20 @@ int main(void)
     near(limited[2], -5.5f);
     near(limited[5], 5.5f);
 
-    s.joint_position_rad[0] = 3.11f;
-    assert(RLMotion31BuildObservation(&s, observation) == 0);
-    near(observation[6], 3.11f / 1.5f);
-    s.joint_position_rad[0] = 0.1f;
-    s.joint_position_rad[1] = 2.61f;
-    assert(RLMotion31BuildObservation(&s, observation) == 0);
-    near(observation[7], 2.61f / 1.5f);
-    s.joint_position_rad[1] = -0.2f;
+    const float limits[4] = {3.1f, 2.6f, 3.1f, 2.6f};
+    for (size_t joint = 0; joint < 4u; ++joint) {
+        for (int sign = -1; sign <= 1; sign += 2) {
+            for (int step = -1; step <= 1; ++step) {
+                const float angle = (float)sign * (limits[joint] + (float)step * 0.01f);
+                s.joint_position_rad[joint] = angle;
+                assert(RLMotion31BuildObservation(&s, observation) == 0);
+                near(observation[6u + joint], (float)sign *
+                     (step > 0 ? limits[joint] : fabsf(angle)) / 1.5f);
+                near(s.joint_position_rad[joint], angle);
+            }
+        }
+        s.joint_position_rad[joint] = 0.0f;
+    }
 
     s.joint_velocity_rad_s[2] = NAN;
     assert(RLMotion31BuildObservation(&s, observation) != 0);

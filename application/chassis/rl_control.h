@@ -32,6 +32,11 @@ float RLControlLegRampStep(RLControlLegRamp *ramp, uint32_t now_tick,
 RLControlDecision RLControlStep(RLControlState *state, RLControlLegRamp *ramp,
                                 uint32_t now_tick, int normal_lqr,
                                 const RLShadowCommand *command);
+/* Apply the measured spring fit in lf/lb/rf/rb order and limit final torque. */
+int RLControlCompensateSpring(const float policy_torque_nm[4],
+                              const float leg_length_m[2],
+                              const float leg_spread_rad[2],
+                              float motor_torque_nm[4]);
 int RLControlMapOutput(const RLMotion31Preview *preview,
                        const float wheel_forward_torque_nm[2],
                        const float encoder_now[4], const float encoder_offset[4],

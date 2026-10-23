@@ -5,6 +5,8 @@
 
 #define RL_MOTION31_PI 3.14159265358979323846f
 #define RL_MOTION31_TWO_PI (2.0f * RL_MOTION31_PI)
+#define RL_MOTION31_HIP_INPUT_LIMIT_RAD 3.1f
+#define RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD 2.6f
 /* Hardware angles start at backward horizontal. The model q=0 links are
    47.1033888 deg backward / 47.1080837 deg forward from downward vertical. */
 #define RL_MOTION31_HIP_ZERO_RAD ((90.0f - 47.1033888f) * (RL_MOTION31_PI / 180.0f))
@@ -22,7 +24,19 @@ static int finite_array(const float *values, size_t count)
 
 static float wrap_joint_angle(float angle_rad)
 {
-    return remainderf(angle_rad, RL_MOTION31_TWO_PI);
+    float wrapped = remainderf(angle_rad, RL_MOTION31_TWO_PI);
+    return wrapped >= RL_MOTION31_PI ? wrapped - RL_MOTION31_TWO_PI : wrapped;
+}
+
+
+/* Active links use the calibrated model branch [-2.6, 2.6]. Remove only
+   equivalent encoder turns that return to that branch; do not fold a true
+   out-of-range angle onto another mechanism branch. */
+static float active_branch_angle(float angle_rad)
+{
+    if (fabsf(angle_rad) <= RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD) return angle_rad;
+    const float candidate = wrap_joint_angle(angle_rad);
+    return fabsf(candidate) <= RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD ? candidate : angle_rad;
 }
 
 void RLMotion31MapBodyImu(RLMotion31Snapshot *s,
@@ -64,15 +78,15 @@ void RLMotion31MapJointAngles(RLMotion31Snapshot *s,
        are on the physical right; its right channels 3/4 are on the left.
        All measured angles start at backward horizontal and increase CCW
        when viewed from the physical right toward the left. */
-    /* Hip axes are periodic. Active links keep their calibrated mechanism branch. */
+    /* Remove encoder turns after zero/direction conversion, before observation and PD. */
     s->joint_position_rad[0] = wrap_joint_angle(
         RL_MOTION31_HIP_ZERO_RAD - right_hip_from_back_rad);
-    s->joint_position_rad[1] =
-        right_active_from_back_rad - RL_MOTION31_ACTIVE_ZERO_RAD;
+    s->joint_position_rad[1] = active_branch_angle(
+        right_active_from_back_rad - RL_MOTION31_ACTIVE_ZERO_RAD);
     s->joint_position_rad[2] = wrap_joint_angle(
         left_hip_from_back_rad - RL_MOTION31_HIP_ZERO_RAD);
-    s->joint_position_rad[3] =
-        left_active_from_back_rad - RL_MOTION31_ACTIVE_ZERO_RAD;
+    s->joint_position_rad[3] = active_branch_angle(
+        left_active_from_back_rad - RL_MOTION31_ACTIVE_ZERO_RAD);
     s->joint_velocity_rad_s[0] = -right_hip_rate_rad_s;
     s->joint_velocity_rad_s[1] = right_active_rate_rad_s;
     s->joint_velocity_rad_s[3] = left_hip_rate_rad_s;
@@ -107,10 +121,14 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
     o[3] = s->gravity_model[0];
     o[4] = s->gravity_model[1];
     o[5] = s->gravity_model[2];
-    o[6] = s->joint_position_rad[0] / 1.5f;
-    o[7] = s->joint_position_rad[1] / 1.5f;
-    o[8] = s->joint_position_rad[2] / 1.5f;
-    o[9] = s->joint_position_rad[3] / 1.5f;
+    o[6] = fminf(fmaxf(s->joint_position_rad[0], -RL_MOTION31_HIP_INPUT_LIMIT_RAD),
+                 RL_MOTION31_HIP_INPUT_LIMIT_RAD) / 1.5f;
+    o[7] = fminf(fmaxf(s->joint_position_rad[1], -RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD),
+                 RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD) / 1.5f;
+    o[8] = fminf(fmaxf(s->joint_position_rad[2], -RL_MOTION31_HIP_INPUT_LIMIT_RAD),
+                 RL_MOTION31_HIP_INPUT_LIMIT_RAD) / 1.5f;
+    o[9] = fminf(fmaxf(s->joint_position_rad[3], -RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD),
+                 RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD) / 1.5f;
     for (size_t i = 0; i < 6u; ++i) {
         o[10u + i] = 0.05f * s->joint_velocity_rad_s[i];
     }
