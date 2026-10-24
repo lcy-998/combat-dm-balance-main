@@ -65,6 +65,8 @@ typedef struct
     uint32_t feed_cnt;
     float dt;
     uint8_t online;
+    uint32_t feedback_receive_tick_ms;
+    uint32_t feedback_sequence;
 } DMMotorInstance;
 
 // 电机回传信息结构体

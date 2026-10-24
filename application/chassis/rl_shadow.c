@@ -21,6 +21,20 @@ _Static_assert(AI_TJB_NETWORK_OUT_1_SIZE == RL_MOTION31_ACTION_SIZE,
                "Motion31 output size mismatch");
 
 volatile RLShadowDebug g_rl_shadow_debug;
+static RLShadowDebug working_debug;
+static uint32_t debug_generation;
+
+static void commit_debug(void)
+{
+    const uint32_t generation=(debug_generation+=2u);
+    g_rl_shadow_debug.frame_begin=generation|1u;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    working_debug.frame_begin=generation|1u;
+    working_debug.frame_end=generation;
+    g_rl_shadow_debug=working_debug;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    g_rl_shadow_debug.frame_begin=generation;
+}
 static StaticQueue_t snapshot_queue_struct;
 static uint8_t snapshot_queue_storage[sizeof(RLShadowSnapshot)];
 static QueueHandle_t snapshot_queue;
@@ -76,8 +90,6 @@ void RLShadowPublish(const RLShadowSnapshot *sample)
 static void publish_command(const RLShadowSnapshot *sample,
                             const float *action,
                             const RLMotion31Preview *preview,
-                            const float *leg_torque_motor_nm,
-                            const float *wheel_torque_forward_nm,
                             int valid)
 {
     if (command_queue == NULL) return;
@@ -88,16 +100,13 @@ static void publish_command(const RLShadowSnapshot *sample,
         command.snapshot_tick_ms = sample->tick_ms;
     }
     if (valid && sample != NULL && sample->chassis_ready &&
-        sample->motion.lqr_torque_valid && action != NULL &&
-        preview != NULL && leg_torque_motor_nm != NULL &&
-        wheel_torque_forward_nm != NULL) {
+        action != NULL && preview != NULL) {
         command.valid = 1u;
         memcpy(command.action, action, sizeof(command.action));
         command.preview = *preview;
-        memcpy(command.leg_torque_motor_nm, leg_torque_motor_nm,
-               sizeof(command.leg_torque_motor_nm));
-        memcpy(command.wheel_forward_torque_nm, wheel_torque_forward_nm,
-               sizeof(command.wheel_forward_torque_nm));
+        command.control_epoch=sample->control_epoch;
+        command.previous_source=sample->previous_source;
+        command.previous_sequence=sample->adopted_sequence;
     }
     (void)xQueueOverwrite(command_queue, &command);
 }
@@ -137,8 +146,8 @@ static void check_target_network_golden(void)
         -0.003934855f, -0.009344813f, -0.012714249f};
     float actual[RL_MOTION31_ACTION_SIZE];
     if (network_run(observation, actual) != 0) {
-        g_rl_shadow_debug.golden_checked = 0u;
-        g_rl_shadow_debug.golden_max_abs_error = INFINITY;
+        working_debug.golden_checked = 0u;
+        working_debug.golden_max_abs_error = INFINITY;
         return;
     }
     float max_error = 0.0f;
@@ -150,14 +159,13 @@ static void check_target_network_golden(void)
         const float error = fabsf(actual[i] - expected[i]);
         if (error > max_error) max_error = error;
     }
-    g_rl_shadow_debug.golden_checked = 1u;
-    g_rl_shadow_debug.golden_max_abs_error = max_error;
+    working_debug.golden_checked = 1u;
+    working_debug.golden_max_abs_error = max_error;
 }
 
-static void publish_debug(const RLShadowSnapshot *sample,
-                          const float *rl_torque_limited)
+static void publish_debug(const RLShadowSnapshot *sample)
 {
-    volatile RLShadowDebug *d = &g_rl_shadow_debug;
+    volatile RLShadowDebug *d = &working_debug;
     const int lqr_valid = sample != NULL && sample->motion.lqr_torque_valid;
     float rl_leg_torque[4] = {0};
     float rl_wheel_torque[2] = {0};
@@ -174,18 +182,16 @@ static void publish_debug(const RLShadowSnapshot *sample,
         d->rl_wheel_current_rad_s[1] = 0.0f;
         memset((void *)d->observation, 0, sizeof(d->observation));
     }
-    if (rl_torque_limited != NULL) {
-        float policy_leg_torque[4];
-        if (sample != NULL &&
-            RLMotion31MapPolicyLegTorqueToMotorOrder(rl_torque_limited,
-                                                     policy_leg_torque) == 0) {
-            (void)RLControlCompensateSpring(policy_leg_torque,
-                                            sample->leg_length_m,
-                                            sample->leg_spread_rad,
-                                            rl_leg_torque);
+    if (sample != NULL) {
+        d->controller_owner=sample->controller_owner;
+        d->control_epoch=sample->control_epoch;
+        d->adopted_sequence=sample->adopted_sequence;
+        d->previous_source=sample->previous_source;
+        if (sample->controller_owner==RL_OWNER_RL) {
+            memcpy(rl_leg_torque,sample->applied_leg_torque_motor_nm,sizeof(rl_leg_torque));
+            rl_wheel_torque[0]=-sample->applied_wheel_current_raw[0]/RL_MOTION31_WHEEL_CURRENT_PER_NM;
+            rl_wheel_torque[1]= sample->applied_wheel_current_raw[1]/RL_MOTION31_WHEEL_CURRENT_PER_NM;
         }
-        (void)RLMotion31MapPolicyWheelTorqueToForwardOrder(rl_torque_limited,
-                                                            rl_wheel_torque);
     }
     for (size_t i = 0; i < 4u; ++i) {
         d->lqr_leg_torque_nm[i] = lqr_valid ? sample->motion.lqr_leg_torque_motor_nm[i] : 0.0f;
@@ -222,168 +228,135 @@ static void publish_target_swing(const RLShadowSnapshot *sample,
     const float theta_l_target = (PI / 2.0f - theta0_l) + sample->lqr_pitch_rad;
     const float theta_r_target = (PI / 2.0f - theta0_r) + sample->lqr_pitch_rad;
     if (!isfinite(theta_l_target) || !isfinite(theta_r_target)) return;
-    g_rl_shadow_debug.rl_target_theta_l_rad = theta_l_target;
-    g_rl_shadow_debug.rl_target_theta_r_rad = theta_r_target;
-    g_rl_shadow_debug.rl_target_theta_valid = 1u;
+    working_debug.rl_target_theta_l_rad = theta_l_target;
+    working_debug.rl_target_theta_r_rad = theta_r_target;
+    working_debug.rl_target_theta_valid = 1u;
 }
 
 void RLShadowTask(void const *argument)
 {
     (void)argument;
-    /* Shadow-only recurrence: these are the preceding policy's decoded
-       physical targets, in model LH/LA/LW/RH/RA/RW order. They are virtual and
-       have no hardware mechanical limit, since LQR drives the robot. */
-    float previous_shadow_target[RL_MOTION31_ACTION_SIZE] = {0};
-    uint8_t previous_shadow_target_valid = 0u;
+    /* Only the control owner supplies previous. Shadow predictions never feed it. */
     if (snapshot_queue == NULL || network_init() != 0) {
-        g_rl_shadow_debug.failure = 1u;
-        publish_debug(NULL, NULL);
-        publish_command(NULL, NULL, NULL, NULL, NULL, 0);
+        working_debug.failure = 1u;
+        publish_debug(NULL);
+        publish_command(NULL, NULL, NULL, 0);
+        commit_debug();
         vTaskSuspend(NULL);
     }
     check_target_network_golden();
-    if (!g_rl_shadow_debug.golden_checked ||
-        !isfinite(g_rl_shadow_debug.golden_max_abs_error) ||
-        g_rl_shadow_debug.golden_max_abs_error > 0.001f) {
-        g_rl_shadow_debug.failure = 10u;
-        publish_command(NULL, NULL, NULL, NULL, NULL, 0);
+    if (!working_debug.golden_checked ||
+        !isfinite(working_debug.golden_max_abs_error) ||
+        working_debug.golden_max_abs_error > 0.001f) {
+        working_debug.failure = 10u;
+        publish_command(NULL, NULL, NULL, 0);
+        commit_debug();
         vTaskSuspend(NULL);
     }
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&wake, RL_SHADOW_PERIOD);
-        g_rl_shadow_debug.observation_valid = 0u;
-        g_rl_shadow_debug.input_error_mask = 0u;
-        g_rl_shadow_debug.rl_wheel_target_valid = 0u;
-        g_rl_shadow_debug.rl_target_valid = 0u;
-        g_rl_shadow_debug.rl_target_theta_valid = 0u;
+        working_debug.observation_valid = 0u;
+        working_debug.input_error_mask = 0u;
+        working_debug.rl_wheel_target_valid = 0u;
+        working_debug.rl_target_valid = 0u;
+        working_debug.rl_target_theta_valid = 0u;
         RLShadowSnapshot sample;
         if (xQueuePeek(snapshot_queue, &sample, 0u) != pdPASS) {
-            memset(previous_shadow_target, 0, sizeof(previous_shadow_target));
-            previous_shadow_target_valid = 0u;
-            g_rl_shadow_debug.stage = 0u;
-            g_rl_shadow_debug.failure = 2u;
-            publish_debug(NULL, NULL);
-            publish_command(NULL, NULL, NULL, NULL, NULL, 0);
+            working_debug.stage = 0u;
+            working_debug.failure = 2u;
+            publish_debug(NULL);
+            publish_command(NULL, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
-        g_rl_shadow_debug.sequence = sample.sequence;
+        working_debug.sequence = sample.sequence;
         TickType_t now = xTaskGetTickCount();
-        g_rl_shadow_debug.snapshot_age_ms = (uint32_t)(now - sample.tick_ms);
+        working_debug.snapshot_age_ms = (uint32_t)(now - sample.tick_ms);
         for (size_t i = 0; i < 4u; ++i) {
-            g_rl_shadow_debug.input_joint_position_rad[i] = sample.motion.joint_position_rad[i];
+            working_debug.input_joint_position_rad[i] = sample.motion.joint_position_rad[i];
         }
-        if ((TickType_t)(now - sample.tick_ms) > RL_SHADOW_MAX_AGE) {
-            memset(previous_shadow_target, 0, sizeof(previous_shadow_target));
-            previous_shadow_target_valid = 0u;
-            g_rl_shadow_debug.stage = 0u;
-            g_rl_shadow_debug.failure = 3u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+        if ((TickType_t)(now - sample.tick_ms) > RL_SHADOW_MAX_AGE ||
+            !RLControlFeedbackFresh(&sample,now)) {
+            working_debug.stage = 0u;
+            working_debug.failure = 3u;
+            publish_debug(&sample);
+            publish_command(&sample, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
-        g_rl_shadow_debug.stage = 1u;
-        if (previous_shadow_target_valid) {
-            memcpy(sample.motion.previous_target, previous_shadow_target,
-                   sizeof(previous_shadow_target));
-        } else {
-            memset(sample.motion.previous_target, 0,
-                   sizeof(sample.motion.previous_target));
-        }
-        sample.motion.previous_target_valid = previous_shadow_target_valid;
-        g_rl_shadow_debug.previous_target_valid = previous_shadow_target_valid;
-        g_rl_shadow_debug.previous_target_is_virtual = 1u;
+        working_debug.stage = 1u;
+        working_debug.previous_target_valid = sample.motion.previous_target_valid;
+        working_debug.previous_target_is_virtual = (sample.previous_source != RL_PREVIOUS_ADOPTED);
         RLMotion31Preview preview;
         float action[RL_MOTION31_ACTION_SIZE];
         if (RLMotion31BuildObservation(&sample.motion, preview.observation) != 0) {
-            g_rl_shadow_debug.failure = 4u;
-            g_rl_shadow_debug.input_error_mask = input_error_mask(&sample.motion);
-            previous_shadow_target_valid = 0u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+            working_debug.failure = 4u;
+            working_debug.input_error_mask = input_error_mask(&sample.motion);
+            publish_debug(&sample);
+            publish_command(&sample, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
-            g_rl_shadow_debug.observation[i] = preview.observation[i];
+            working_debug.observation[i] = preview.observation[i];
         }
-        g_rl_shadow_debug.observation_valid = 1u;
-        g_rl_shadow_debug.stage = 2u;
+        working_debug.observation_valid = 1u;
+        working_debug.stage = 2u;
         if (!sample.rl_active) {
-            previous_shadow_target_valid = 0u;
-            g_rl_shadow_debug.stage = 2u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+            working_debug.stage = 2u;
+            publish_debug(&sample);
+            publish_command(&sample, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
-        if (network_run(preview.observation, action) != 0) {
-            g_rl_shadow_debug.failure = 5u;
-            previous_shadow_target_valid = 0u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+        working_debug.inference_start_tick_ms=xTaskGetTickCount();
+        const int inference_status=network_run(preview.observation, action);
+        working_debug.inference_end_tick_ms=xTaskGetTickCount();
+        if ((uint32_t)(working_debug.inference_end_tick_ms-working_debug.inference_start_tick_ms)>10u)
+            working_debug.inference_deadline_miss_count++;
+        if (inference_status != 0 ||
+            (uint32_t)(working_debug.inference_end_tick_ms-sample.tick_ms)>RL_CONTROL_COMMAND_MAX_AGE_MS) {
+            working_debug.failure = 5u;
+            publish_debug(&sample);
+            publish_command(&sample, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
-            g_rl_shadow_debug.mean_action[i] = action[i];
+            working_debug.mean_action[i] = action[i];
         }
-        g_rl_shadow_debug.stage = 3u;
+        working_debug.stage = 3u;
         if (RLMotion31DecodeOutput(action, preview.target) != 0) {
-            g_rl_shadow_debug.failure = 6u;
-            previous_shadow_target_valid = 0u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+            working_debug.failure = 6u;
+            publish_debug(&sample);
+            publish_command(&sample, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
-            g_rl_shadow_debug.decoded_target[i] = preview.target[i];
+            working_debug.decoded_target[i] = preview.target[i];
         }
         if (RLMotion31MapPolicyTargets(preview.target,
                                        preview.hardware_joint_target_rad,
                                        preview.motor_wheel_target_rad_s) != 0) {
-            g_rl_shadow_debug.failure = 7u;
-            previous_shadow_target_valid = 0u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+            working_debug.failure = 7u;
+            publish_debug(&sample);
+            publish_command(&sample, NULL, NULL, 0);
+            commit_debug();
             continue;
         }
-        g_rl_shadow_debug.rl_wheel_target_rad_s[0] = preview.motor_wheel_target_rad_s[0];
-        g_rl_shadow_debug.rl_wheel_target_rad_s[1] = preview.motor_wheel_target_rad_s[1];
-        g_rl_shadow_debug.rl_wheel_target_valid = 1u;
-        g_rl_shadow_debug.rl_target_valid = 1u;
+        working_debug.rl_wheel_target_rad_s[0] = preview.motor_wheel_target_rad_s[0];
+        working_debug.rl_wheel_target_rad_s[1] = preview.motor_wheel_target_rad_s[1];
+        working_debug.rl_wheel_target_valid = 1u;
+        working_debug.rl_target_valid = 1u;
         publish_target_swing(&sample, preview.target);
-        g_rl_shadow_debug.stage = 4u;
-        /* README gives no hardware lower/upper limits; preview only. */
-        float rl_torque_request[RL_MOTION31_ACTION_SIZE];
-        float rl_torque_limited[RL_MOTION31_ACTION_SIZE];
-        if (RLMotion31ComputePdTorque(&sample.motion, preview.target,
-                                      rl_torque_request, rl_torque_limited) != 0) {
-            g_rl_shadow_debug.failure = 8u;
-            previous_shadow_target_valid = 0u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
-            continue;
-        }
-        float rl_wheel_torque_forward_nm[2];
-        float rl_leg_torque_motor_nm[4];
-        if (RLMotion31MapPolicyLegTorqueToMotorOrder(rl_torque_limited,
-                                                     rl_leg_torque_motor_nm) != 0) {
-            g_rl_shadow_debug.failure = 9u;
-            previous_shadow_target_valid = 0u;
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
-            continue;
-        }
-        if (RLMotion31MapPolicyWheelTorqueToForwardOrder(rl_torque_limited,
-                                                        rl_wheel_torque_forward_nm) != 0) {
-            g_rl_shadow_debug.failure = 9u;
-            previous_shadow_target_valid = 0u;
-            publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
-            continue;
-        }
-        memcpy(previous_shadow_target, preview.target, sizeof(previous_shadow_target));
-        previous_shadow_target_valid = 1u;
-        publish_debug(&sample, rl_torque_limited);
-        g_rl_shadow_debug.stage = 5u;
-        g_rl_shadow_debug.failure = 0u;
-        publish_command(&sample, action, &preview, rl_leg_torque_motor_nm, rl_wheel_torque_forward_nm, 1);
+        working_debug.stage = 4u;
+        /* Publish position/velocity goals only. The 200Hz owner computes PD. */
+        publish_debug(&sample);
+        working_debug.stage = 4u;
+        working_debug.failure = 0u;
+        publish_command(&sample, action, &preview, 1);
+        commit_debug();
     }
 }

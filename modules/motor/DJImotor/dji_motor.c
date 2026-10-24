@@ -2,6 +2,8 @@
 #include "general_def.h"
 #include "bsp_dwt.h"
 #include "bsp_log.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 static uint8_t idx = 0; // register idx,是该文件的全局电机索引,在注册时使用
 /* DJI电机的实例,此处仅保存指针,内存的分配将通过电机实例初始化时通过malloc()进行 */
@@ -180,6 +182,8 @@ static void DecodeDJIMotor(CANInstance *_instance)
     else if (measure->ecd - measure->last_ecd < -4096)
         measure->total_round++;
     measure->total_angle = measure->total_round * 360 + measure->angle_single_round;
+    motor->feedback_receive_tick_ms=xTaskGetTickCountFromISR();
+    motor->feedback_sequence++;
 }
 
 static void DJIMotorLostCallback(void *motor_ptr)

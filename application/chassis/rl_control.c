@@ -20,12 +20,14 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
     for (unsigned i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
         if (!isfinite(command->action[i]) || !isfinite(command->preview.target[i])) return 0;
     }
-    for (unsigned i = 0; i < 4u; ++i) {
-        if (!isfinite(command->preview.hardware_joint_target_rad[i]) ||
-            !isfinite(command->leg_torque_motor_nm[i])) return 0;
+    for (unsigned i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
+        if (!isfinite(command->preview.observation[i])) return 0;
     }
-    for (unsigned i = 0; i < 2u; ++i) {
-        if (!isfinite(command->wheel_forward_torque_nm[i])) return 0;
+    float decoded[6];
+    if (RLMotion31DecodeOutput(command->action, decoded) != 0) return 0;
+    for (unsigned i = 0; i < 6u; ++i) {
+        if (fabsf(command->action[i]) > 1.00001f ||
+            fabsf(decoded[i] - command->preview.target[i]) > 0.0001f) return 0;
     }
     return 1;
 }
@@ -62,36 +64,117 @@ RLControlDecision RLControlStep(RLControlState *state, RLControlLegRamp *ramp,
 {
     RLControlDecision decision = {0};
     if (state == NULL || ramp == NULL) return decision;
-    if (!normal_lqr) {
+    if (!normal_lqr || !ramp->completed) {
         decision.exited = state->active;
-        memset(state, 0, sizeof(*state));
-        memset(ramp, 0, sizeof(*ramp));
+        const uint32_t next = state->epoch + (state->timing || state->active || state->fault ? 1u : 0u);
+        const uint8_t fault=state->fault;
+        memset(state, 0, sizeof(*state)); state->epoch = next;state->fault=fault;
+        if (!normal_lqr) memset(ramp, 0, sizeof(*ramp));
         return decision;
     }
-    if (!ramp->completed) {
-        state->timing = 0u;
-        state->active = 0u;
-        return decision;
-    }
+    if (state->fault) return decision;
     if (!state->timing) {
-        state->timing = 1u;
+        state->timing = 1u; state->epoch++;
         state->wait_start_tick = now_tick;
         return decision;
     }
-    if ((uint32_t)(now_tick - state->wait_start_tick) <
-        RL_CONTROL_LQR_HOLD_AFTER_RAMP_MS) {
-        return decision;
-    }
-    if (!command_usable(command, now_tick)) {
-        decision.exited = state->active;
-        state->active = 0u;
-        state->timing = 0u;
-        memset(ramp, 0, sizeof(*ramp));
-        return decision;
-    }
-    state->active = 1u;
-    decision.active = 1u;
+    state->ready = ((uint32_t)(now_tick-state->wait_start_tick) >= RL_CONTROL_LQR_HOLD_AFTER_RAMP_MS);
+    /* This is eligibility only; RLControlExecute commits actual ownership. */
+    decision.active = state->ready && command_usable(command, now_tick) && command->control_epoch == state->epoch;
     return decision;
+}
+
+void RLControlReset(RLControlState *state,RLControlLegRamp *ramp)
+{
+    if(state==NULL || ramp==NULL)return;
+    const uint32_t epoch=state->epoch+1u;
+    memset(state,0,sizeof(*state));state->epoch=epoch;
+    memset(ramp,0,sizeof(*ramp));
+}
+
+void RLControlFillPrevious(const RLControlState *state, RLShadowSnapshot *s)
+{
+    if (state == NULL || s == NULL) return;
+    s->control_epoch = state->epoch;
+    s->controller_owner = state->active ? RL_OWNER_RL : RL_OWNER_LQR;
+    s->adopted_sequence = state->active ? state->adopted_sequence : 0u;
+    s->adopted_tick_ms = state->active ? state->adopted_tick_ms : 0u;
+    s->previous_source = state->active ? RL_PREVIOUS_ADOPTED : RL_PREVIOUS_INIT_PROXY;
+    if (state->active) {
+        memcpy(s->motion.previous_target, state->adopted_target, sizeof(state->adopted_target));
+    } else {
+        /* Declared takeover proxy v1. Does not claim LQR executed these targets. */
+        const unsigned legs[4] = {0u,1u,3u,4u};
+        for (unsigned i=0;i<4u;++i) s->motion.previous_target[legs[i]] = s->motion.joint_position_rad[i];
+        s->motion.previous_target[2] = s->motion.joint_velocity_rad_s[2];
+        s->motion.previous_target[5] = s->motion.joint_velocity_rad_s[5];
+    }
+    s->motion.previous_target_valid = 1u;
+}
+
+static int execution_fault(RLControlState *state, RLControlFrame *out, unsigned reason)
+{
+    state->fault = (uint8_t)reason;
+    state->active = 0u; state->ready = 0u; state->epoch++;
+    out->owner = RL_OWNER_LQR; out->fault = reason; out->control_epoch = state->epoch;
+    return -1;
+}
+
+int RLControlFeedbackFresh(const RLShadowSnapshot *s,uint32_t now)
+{
+    if (s==NULL || (uint32_t)(now-s->tick_ms)>RL_CONTROL_COMMAND_MAX_AGE_MS ||
+        s->feedback_valid_mask!=0x3fu || s->imu_update_sequence==0u ||
+        (uint32_t)(now-s->imu_update_tick_ms)>RL_CONTROL_COMMAND_MAX_AGE_MS) return 0;
+    for (unsigned i=0;i<6u;++i)
+        if ((uint32_t)(now-s->feedback_receive_tick_ms[i])>RL_CONTROL_COMMAND_MAX_AGE_MS) return 0;
+    return 1;
+}
+
+int RLControlExecute(RLControlState *state, RLControlLegRamp *ramp,
+                     uint32_t now_ms, int normal_lqr,
+                     const RLShadowSnapshot *current, const RLShadowCommand *command,
+                     RLControlFrame *frame)
+{
+    if (state == NULL || ramp == NULL || frame == NULL) return -1;
+    memset(frame,0,sizeof(*frame)); frame->tick_ms=now_ms;
+    const RLControlDecision eligible=RLControlStep(state,ramp,now_ms,normal_lqr,command);
+    frame->control_epoch=state->epoch;frame->fault=state->fault;
+    if (!normal_lqr || !state->ready || state->fault) return 1;
+    if (!RLControlFeedbackFresh(current,now_ms) ||
+        RLMotion31ValidateSnapshot(&current->motion)!=0)
+        return execution_fault(state,frame,RL_FAULT_INPUT);
+    RLControlState pending=*state;
+    int new_target=0;
+    if (eligible.active && (int32_t)(command->snapshot_sequence-state->adopted_sequence)>0) {
+        const int causal = state->active ?
+            (command->previous_source==RL_PREVIOUS_ADOPTED && command->previous_sequence==state->adopted_sequence) :
+            (command->previous_source==RL_PREVIOUS_INIT_PROXY && command->previous_sequence==0u);
+        if (causal) {
+            memcpy(pending.adopted_target,command->preview.target,sizeof(pending.adopted_target));
+            pending.adopted_sequence=command->snapshot_sequence;
+            pending.adopted_tick_ms=now_ms;new_target=1;
+        }
+    }
+    if (!state->active && !new_target) return 1; /* keep LQR until a fresh proxy-conditioned first command */
+    if (!new_target && (uint32_t)(now_ms-state->adopted_tick_ms)>RL_CONTROL_COMMAND_MAX_AGE_MS)
+        return execution_fault(state,frame,RL_FAULT_COMMAND);
+    float motor[4],wheel[2];
+    if (RLMotion31ComputePdTorque(&current->motion,pending.adopted_target,
+                                  frame->tau_pd_nm,frame->tau_limited_nm)!=0 ||
+        RLMotion31MapPolicyLegTorqueToMotorOrder(frame->tau_limited_nm,motor)!=0 ||
+        RLMotion31MapPolicyWheelTorqueToForwardOrder(frame->tau_limited_nm,wheel)!=0)
+        return execution_fault(state,frame,RL_FAULT_PD);
+    const float zero[4]={0};
+    if (RLControlCompensateSpring(zero,current->leg_length_m,current->leg_spread_rad,frame->spring_motor_nm)!=0 ||
+        RLControlCompensateSpring(motor,current->leg_length_m,current->leg_spread_rad,frame->final_motor_nm)!=0)
+        return execution_fault(state,frame,RL_FAULT_COMPENSATION);
+    frame->wheel_current_raw[0]=clampf(-wheel[0]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
+    frame->wheel_current_raw[1]=clampf( wheel[1]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
+    pending.active=1u; *state=pending;
+    frame->owner=RL_OWNER_RL; frame->adopted_sequence=state->adopted_sequence;
+    frame->adopted_tick_ms=state->adopted_tick_ms;frame->snapshot_sequence=current->sequence;
+    memcpy(frame->adopted_target,state->adopted_target,sizeof(state->adopted_target));
+    return 0;
 }
 
 int RLControlCompensateSpring(const float policy_torque_nm[4],

@@ -127,6 +127,7 @@ __attribute__((noreturn)) void StartROBOTTASK(void const *argument)
     static float robot_start;
     LOGINFO("[freeRTOS] ROBOT core Task Start");
     // 200Hz-500Hz,若有额外的控制任务如平衡步兵可能需要提升至1kHz
+    TickType_t wake=xTaskGetTickCount();
     for (;;)
     {
         robot_start = DWT_GetTimeline_ms();
@@ -134,7 +135,7 @@ __attribute__((noreturn)) void StartROBOTTASK(void const *argument)
         robot_dt = DWT_GetTimeline_ms() - robot_start;
         if (robot_dt > 5)
             LOGERROR("[freeRTOS] ROBOT core Task is being DELAY! dt = [%f]", &robot_dt);
-        osDelay(5);
+        vTaskDelayUntil(&wake,pdMS_TO_TICKS(5u));
     }
 }
 

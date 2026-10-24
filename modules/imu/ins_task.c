@@ -20,6 +20,12 @@
 #include "general_def.h"
 #include "master_process.h"
 #include "arm_math.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include <stddef.h>
+
+_Static_assert(offsetof(INS_t,update_tick_ms)-offsetof(INS_t,Gyro)==offsetof(attitude_t,update_tick_ms),
+               "INS attitude view layout differs");
 
 static INS_t INS;
 static IMU_Param_t IMU_Param;
@@ -185,6 +191,8 @@ void INS_Task(void)
         INS.Pitch = QEKF_INS.Pitch;
         INS.Roll = QEKF_INS.Roll;
         INS.YawTotalAngle = QEKF_INS.YawTotalAngle;
+        INS.update_tick_ms=xTaskGetTickCount();
+        INS.update_sequence++;
 
         VisionSetAltitude(INS.Yaw, INS.Pitch, INS.Roll);
     }

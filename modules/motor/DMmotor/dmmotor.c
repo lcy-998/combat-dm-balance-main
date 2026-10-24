@@ -84,6 +84,8 @@ void DMMotorDecode(CANInstance *_instance)
     if (motor->measure.state == 1)
         motor->online = 1;
     DMMotorErrorDetection(motor);
+    motor->feedback_receive_tick_ms=xTaskGetTickCountFromISR();
+    motor->feedback_sequence++;
 }
 
 static void DMMotorLostCallback(void *motor_ptr)

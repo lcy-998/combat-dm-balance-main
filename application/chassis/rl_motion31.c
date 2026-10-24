@@ -74,6 +74,17 @@ void RLMotion31MapJointAngles(RLMotion31Snapshot *s,
                               float left_hip_rate_rad_s, float left_active_rate_rad_s)
 {
     if (s == NULL) return;
+    /* This driver supplies bounded single-turn encoder angles plus fixed offsets.
+       Allow the existing calibrated turn-offset tests, reject gross corrupted
+       numbers before remainderf can turn them into a plausible small angle. */
+    const float source[4]={right_hip_from_back_rad,right_active_from_back_rad,
+                           left_hip_from_back_rad,left_active_from_back_rad};
+    for (unsigned i=0;i<4u;++i) {
+        if (!isfinite(source[i]) || fabsf(source[i])>32.0f*RL_MOTION31_PI) {
+            for (unsigned j=0;j<4u;++j)s->joint_position_rad[j]=NAN;
+            return;
+        }
+    }
     /* Physical L/R are viewed from behind. The model's left channels 0/1
        are on the physical right; its right channels 3/4 are on the left.
        All measured angles start at backward horizontal and increase CCW
@@ -105,33 +116,15 @@ void RLMotion31MapWheelMotorSpeeds(RLMotion31Snapshot *s,
 int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
                                float o[RL_MOTION31_OBSERVATION_SIZE])
 {
-    if (s == NULL || o == NULL ||
-        !finite_array(s->gyro_model_rad_s, 3u) ||
-        !finite_array(s->gravity_model, 3u) ||
-        !finite_array(s->joint_position_rad, 4u) ||
-        !finite_array(s->joint_velocity_rad_s, 6u) ||
-        !finite_array(s->previous_target, 6u) ||
-        !isfinite(s->command_vx_m_s) || !isfinite(s->command_yaw_rad_s) ||
-        !isfinite(s->command_height_m)) {
-        return -1;
-    }
+    if (o == NULL || RLMotion31ValidateSnapshot(s) != 0) return -1;
     o[0] = 0.25f * s->gyro_model_rad_s[0];
     o[1] = 0.25f * s->gyro_model_rad_s[1];
     o[2] = 0.25f * s->gyro_model_rad_s[2];
     o[3] = s->gravity_model[0];
     o[4] = s->gravity_model[1];
     o[5] = s->gravity_model[2];
-    o[6] = fminf(fmaxf(s->joint_position_rad[0], -RL_MOTION31_HIP_INPUT_LIMIT_RAD),
-                 RL_MOTION31_HIP_INPUT_LIMIT_RAD) / 1.5f;
-    o[7] = fminf(fmaxf(s->joint_position_rad[1], -RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD),
-                 RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD) / 1.5f;
-    o[8] = fminf(fmaxf(s->joint_position_rad[2], -RL_MOTION31_HIP_INPUT_LIMIT_RAD),
-                 RL_MOTION31_HIP_INPUT_LIMIT_RAD) / 1.5f;
-    o[9] = fminf(fmaxf(s->joint_position_rad[3], -RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD),
-                 RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD) / 1.5f;
-    for (size_t i = 0; i < 6u; ++i) {
-        o[10u + i] = 0.05f * s->joint_velocity_rad_s[i];
-    }
+    for (size_t i = 0; i < 4u; ++i) o[6u+i] = s->joint_position_rad[i] / 1.5f;
+    for (size_t i = 0; i < 6u; ++i) o[10u+i] = 0.05f * s->joint_velocity_rad_s[i];
     o[16] = s->previous_target[0] / 1.5f;
     o[17] = s->previous_target[1] / 1.5f;
     o[18] = s->previous_target[3] / 1.5f;
@@ -141,13 +134,40 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
     o[22] = s->command_vx_m_s / 4.0f;
     o[23] = s->command_yaw_rad_s / 4.0f;
     o[24] = s->command_height_m / 0.5f;
-    o[25] = 1.0f; /* Motion */
-    o[26] = 0.0f; /* Recovery */
-    o[27] = 0.0f; /* Jump */
-    o[28] = 1.0f; /* Jump NONE */
-    o[29] = 0.0f; /* Jump SMALL */
-    o[30] = 0.0f; /* Jump BIG */
+    o[25] = 1.0f; o[26] = 0.0f; o[27] = 0.0f;
+    o[28] = 1.0f; o[29] = 0.0f; o[30] = 0.0f;
     return finite_array(o, RL_MOTION31_OBSERVATION_SIZE) ? 0 : -1;
+}
+
+int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *s)
+{
+    if (s == NULL ||
+        !finite_array(s->gyro_model_rad_s, 3u) ||
+        !finite_array(s->gravity_model, 3u) ||
+        !finite_array(s->joint_position_rad, 4u) ||
+        !finite_array(s->joint_velocity_rad_s, 6u) ||
+        !finite_array(s->previous_target, 6u) ||
+        !isfinite(s->command_vx_m_s) || !isfinite(s->command_yaw_rad_s) ||
+        !isfinite(s->command_height_m)) {
+        return -1;
+    }
+    for (size_t i = 0; i < 4u; ++i) {
+        const float limit = (i == 0u || i == 2u) ?
+            RL_MOTION31_HIP_INPUT_LIMIT_RAD : RL_MOTION31_ACTIVE_INPUT_LIMIT_RAD;
+        if (fabsf(s->joint_position_rad[i]) > limit) return -1;
+    }
+    /* Serialization/corruption guards, not motor capability or action clipping.
+       These deliberately wide values reject huge finite garbage without claiming
+       an identified gyro/motor operating envelope. */
+    for (unsigned i=0;i<3u;++i) if(fabsf(s->gyro_model_rad_s[i])>10000.0f)return -1;
+    for (unsigned i=0;i<6u;++i)
+        if(fabsf(s->joint_velocity_rad_s[i])>1000000.0f ||
+           fabsf(s->previous_target[i])>1000000.0f)return -1;
+    const float norm2 = s->gravity_model[0]*s->gravity_model[0] +
+                        s->gravity_model[1]*s->gravity_model[1] +
+                        s->gravity_model[2]*s->gravity_model[2];
+    /* Numerical unit-vector tolerance, not an accelerometer magnitude filter. */
+    return fabsf(norm2-1.0f) <= 0.02f ? 0 : -1;
 }
 
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],

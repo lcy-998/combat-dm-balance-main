@@ -12,7 +12,7 @@ typedef struct {
     float gravity_model[3];
     float joint_position_rad[4]; /* model order: physical RH, RA, LH, LA */
     float joint_velocity_rad_s[6]; /* physical RH, RA, RW, LH, LA, LW */
-    float previous_target[6]; /* previous virtual targets in model order */
+    float previous_target[6]; /* locally adopted target or explicitly marked initialization proxy */
     uint8_t previous_target_valid;
     float lqr_leg_torque_motor_nm[4]; /* existing DMMotor order: lf, lb, rf, rb */
     float lqr_wheel_torque_forward_nm[2]; /* LQR wheel torque, forward-positive: left, right */
@@ -48,6 +48,8 @@ void RLMotion31MapWheelMotorSpeeds(RLMotion31Snapshot *sample,
                                    float right_motor_wheel_rad_s);
 int RLMotion31BuildObservation(const RLMotion31Snapshot *sample,
                                float observation[RL_MOTION31_OBSERVATION_SIZE]);
+/* Unit gravity, finite fields and calibrated mechanical input branch. No input clipping. */
+int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *sample);
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
                            float target[RL_MOTION31_ACTION_SIZE]);
 int RLMotion31MapPolicyTargets(const float target[RL_MOTION31_ACTION_SIZE],

@@ -11,6 +11,20 @@ typedef struct {
     float lqr_pitch_rad; /* body pitch used by theta_l/theta_r; not an Actor input */
     uint8_t chassis_ready;
     uint8_t rl_active;
+    uint8_t controller_owner; /* 0=LQR, 1=RL; rl_active only permits inference */
+    uint8_t previous_source; /* 1=declared q/dq initialization proxy, 2=locally adopted target */
+    uint32_t control_epoch;
+    uint32_t adopted_sequence;
+    uint32_t adopted_tick_ms;
+    uint32_t feedback_receive_tick_ms[6]; /* zero with validity mask clear means UNKNOWN */
+    uint32_t feedback_valid_mask;
+    uint32_t imu_update_tick_ms;
+    uint32_t imu_update_sequence;
+    float driver_reported_leg_torque_motor_nm[4]; /* decoded driver estimate, not independent calibration */
+    float driver_reported_wheel_current_raw[2]; /* filtered CAN raw feedback, not A */
+    uint32_t pd_tick_ms;
+    float applied_leg_torque_motor_nm[4]; /* last local commit; not measured motor torque */
+    float applied_wheel_current_raw[2];
     float leg_length_m[2]; /* left, right; spring compensation input */
     float leg_spread_rad[2]; /* left, right; spring compensation input */
     RLMotion31Snapshot motion;
@@ -21,13 +35,15 @@ typedef struct {
     uint32_t snapshot_tick_ms;
     uint32_t output_tick_ms;
     uint8_t valid;
+    uint8_t previous_source;
+    uint32_t control_epoch;
+    uint32_t previous_sequence;
     float action[RL_MOTION31_ACTION_SIZE];
     RLMotion31Preview preview;
-    float leg_torque_motor_nm[4];
-    float wheel_forward_torque_nm[2];
 } RLShadowCommand;
 
 typedef struct {
+    uint32_t frame_begin; /* odd/in-progress; compare with frame_end before using a snapshot */
     uint32_t sequence;
     uint32_t stage; /* 0=no sample, 1=fresh, 2=obs, 3=inference, 4=decode, 5=PD */
     uint32_t failure; /* 0=none, 1=init, 2=no sample, 3=stale, 4=input, 5=network,
@@ -57,6 +73,13 @@ typedef struct {
     float lqr_wheel_torque_nm[2]; /* forward-positive: left, right */
     float rl_leg_torque_nm[4]; /* spring-compensated and clamped, motor order: lf, lb, rf, rb */
     float rl_wheel_torque_nm[2]; /* forward-positive: left, right */
+    uint8_t controller_owner;
+    uint8_t previous_source;
+    uint32_t control_epoch;
+    uint32_t adopted_sequence;
+    uint32_t inference_start_tick_ms, inference_end_tick_ms;
+    uint32_t inference_deadline_miss_count;
+    uint32_t frame_end;
 } RLShadowDebug;
 
 extern volatile RLShadowDebug g_rl_shadow_debug;

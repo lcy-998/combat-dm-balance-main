@@ -33,9 +33,11 @@
 #include "chassis_can_link.h"
 #include "rl_shadow.h"
 #include "rl_control.h"
+#include "rl_capture.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include <math.h>
+#include <string.h>
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
@@ -134,6 +136,10 @@ static float del_t;
 static uint8_t chassis_lqr_output_valid;
 static RLControlLegRamp rl_leg_ramp;
 static RLControlState rl_control_state;
+static RLControlFrame rl_control_frame;
+static RLShadowSnapshot rl_pd_snapshot;
+static RLShadowCommand rl_consumed_command;
+static uint8_t rl_command_consumed;
 static uint32_t balance_dwt_cnt;
 float phi1, phi4, Lphi1, Lphi4, Rphi1, Rphi4;
 float LFtor, LBtor, RFtor, RBtor;
@@ -292,6 +298,11 @@ void ChassisInit()
     chassis_motor_config.can_init_config.tx_id = 1;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_l = DJIMotorInit(&chassis_motor_config);
+    motor_l->motor_controller.current_feedforward_ptr = &lwi;
+    motor_r->motor_controller.current_feedforward_ptr = &rwi;
+    /* 128 records, 112 after trigger: ~0.56s post at 200Hz. Final ELF RAM
+       usage must be reviewed before flashing; capacity is a compile-time setting. */
+    RLCaptureArm(RL_CAPTURE_CAPACITY-17u);
     jiontmotor.can_init_config.can_handle = &hfdcan1;
     jiontmotor.can_init_config.tx_id = 0x01;
     jiontmotor.can_init_config.rx_id = 0x11; // l电机的接收id
@@ -829,8 +840,68 @@ static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_
     return mapped;
 }
 
+/* One coherent local feedback copy with CAN receipt/filter-completion times.
+   Sensor acquisition times remain UNKNOWN; task time is not substituted for them. */
+static RLShadowSnapshot CurrentRLSnapshot(void)
+{
+    RLShadowSnapshot out={0};
+    float q[4],dq[4],wheel[2],r,p,dr,dp,dy;
+    taskENTER_CRITICAL();
+    q[0]=jiont_motorlf->measure.pos;q[1]=jiont_motorlb->measure.pos;
+    q[2]=jiont_motorrf->measure.pos;q[3]=jiont_motorrb->measure.pos;
+    dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
+    dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
+    wheel[0]=motor_l->measure.speed_aps;wheel[1]=motor_r->measure.speed_aps;
+    out.driver_reported_leg_torque_motor_nm[0]=jiont_motorlf->measure.tor;
+    out.driver_reported_leg_torque_motor_nm[1]=jiont_motorlb->measure.tor;
+    out.driver_reported_leg_torque_motor_nm[2]=jiont_motorrf->measure.tor;
+    out.driver_reported_leg_torque_motor_nm[3]=jiont_motorrb->measure.tor;
+    out.driver_reported_wheel_current_raw[0]=motor_l->measure.real_current;
+    out.driver_reported_wheel_current_raw[1]=motor_r->measure.real_current;
+    p=IMU_data->Pitch*DEGREE_2_RAD;r=-IMU_data->Roll*DEGREE_2_RAD;
+    dp=IMU_data->Gyro[0];dr=-IMU_data->Gyro[1];dy=IMU_data->Gyro[2];
+    DMMotorInstance *legs[6]={jiont_motorrb,jiont_motorrf,NULL,jiont_motorlb,jiont_motorlf,NULL};
+    for (unsigned i=0;i<6;++i) {
+        if (legs[i]!=NULL) {
+            out.feedback_receive_tick_ms[i]=legs[i]->feedback_receive_tick_ms;
+            if (legs[i]->feedback_sequence) out.feedback_valid_mask|=1u<<i;
+        }
+    }
+    out.feedback_receive_tick_ms[2]=motor_r->feedback_receive_tick_ms;
+    out.feedback_receive_tick_ms[5]=motor_l->feedback_receive_tick_ms;
+    if (motor_r->feedback_sequence) out.feedback_valid_mask|=1u<<2;
+    if (motor_l->feedback_sequence) out.feedback_valid_mask|=1u<<5;
+    out.imu_update_tick_ms=IMU_data->update_tick_ms;out.imu_update_sequence=IMU_data->update_sequence;
+    out.tick_ms=xTaskGetTickCount();
+    static uint32_t sequence;
+    if (++sequence==0u) ++sequence;
+    out.sequence=sequence;
+    taskEXIT_CRITICAL();
+    const float lf=-q[0]+LF_ENCODE_OFFSET,lb=-q[1]+LB_ENCODE_OFFSET;
+    const float rf=q[2]+RF_ENCODE_OFFSET,rb=q[3]+RB_ENCODE_OFFSET;
+    RLMotion31MapJointAngles(&out.motion,rb,rf,lb,lf,dq[3],dq[2],-dq[1],-dq[0]);
+    RLMotion31MapWheelMotorSpeeds(&out.motion,wheel[0]/REDUCE_RATIO*DEGREE_2_RAD,
+                                             wheel[1]/REDUCE_RATIO*DEGREE_2_RAD);
+    RLMotion31MapLqrAttitude(&out.motion,r,p,dr,dp,dy);
+    float phi2,phi3,theta0;
+    getPhi(lf,lb,L_1,L_2,L_3,L_4,L_5,&phi2,&phi3,&out.leg_length_m[0],&theta0);
+    getPhi(rf,rb,L_1,L_2,L_3,L_4,L_5,&phi2,&phi3,&out.leg_length_m[1],&theta0);
+    out.leg_spread_rad[0]=lf-lb;out.leg_spread_rad[1]=rf-rb;
+    out.lqr_pitch_rad=p;
+    out.motion.command_vx_m_s=v_cmd;out.motion.command_yaw_rad_s=w_cmd;
+    out.motion.command_height_m=.34f;
+    out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE && !chassis_status);
+    out.rl_active=(out.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
+                   rl_leg_ramp.completed && !rl_control_state.fault);
+    RLControlFillPrevious(&rl_control_state,&out);
+    return out;
+}
+
 void outputTorque()
 {
+    memset(&rl_control_frame,0,sizeof(rl_control_frame));
+    rl_control_frame.tick_ms=rl_pd_snapshot.tick_ms;
+    rl_command_consumed=0u;
     chassis_lqr_output_valid = 0u;
     if (!ChassisNormalLQRState()) {
         (void)RLControlStep(&rl_control_state, &rl_leg_ramp,
@@ -1103,67 +1174,45 @@ void outputTorque()
             else
             {
 
-                // 前面的数字是3508转矩常数复合电流离散值,由于电流环代码有锅，需要直接输入离散值，修改电机时一定会处理这部分，因此亦不作为宏
                 UpdateLegRetractTorqueScale(false);
-                rwi = rwt * RL_MOTION31_WHEEL_CURRENT_PER_NM;
-                lwi = -lwt * RL_MOTION31_WHEEL_CURRENT_PER_NM; // negative
+                float selected_leg[4]={lfjt,lbjt,rfjt,rbjt};
+                float selected_wheel[2]={-lwt*RL_MOTION31_WHEEL_CURRENT_PER_NM,
+                                         rwt*RL_MOTION31_WHEEL_CURRENT_PER_NM};
+                /* Existing LQR-only term. Never add it to RL output. */
+                if (v_cmd<=.03f) {selected_wheel[0]+=s_dot*500;selected_wheel[1]-=s_dot*500;}
+                for (unsigned i=0;i<2;++i) selected_wheel[i]=fmaxf(-8192.0f,fminf(8192.0f,selected_wheel[i]));
+                if (!upstair_flag0) {upstair_flag0_cnt=0;upstair_flag0_latch=0;}
+                chassis_lqr_output_valid=1u;
+                RLShadowCommand command;
+                const RLShadowCommand *candidate=RLShadowReadCommand(&command)==0?&command:NULL;
+                RLShadowSnapshot current=rl_pd_snapshot;
+                RLControlFillPrevious(&rl_control_state,&current);
+                if (candidate!=NULL) {rl_consumed_command=*candidate;rl_command_consumed=1u;}
+                RLControlState pending=rl_control_state;
+                RLControlFrame frame={0};
+                const int use_rl=RL_CONTROL_OUTPUT_ENABLED &&
+                    RLControlExecute(&pending,&rl_leg_ramp,xTaskGetTickCount(),
+                                     ChassisNormalLQRState(),&current,candidate,&frame)==0;
+                if (use_rl) {
+                    memcpy(selected_leg,frame.final_motor_nm,sizeof(selected_leg));
+                    memcpy(selected_wheel,frame.wheel_current_raw,sizeof(selected_wheel));
+                }
+                /* One software adoption transaction for all six channels. CAN
+                   frames remain asynchronous; this is not remote acceptance. */
                 taskENTER_CRITICAL();
-                DMMotorSetTorque(jiont_motorlf, lfjt);
-                DMMotorSetTorque(jiont_motorlb, lbjt);
-                DMMotorSetTorque(jiont_motorrf, rfjt);
-                DMMotorSetTorque(jiont_motorrb, rbjt);
-
-                // 作用不明确的反向抵消静止速度的力矩,可以让它在某些情况下更稳地停在目标点,但也可能会引入震荡,因此暂时放在这里,如果需要调整可以修改这个部分的代码
-                if (v_cmd <= 0.03)
-                {
-                    lwi += s_dot * 500;
-                    rwi -= s_dot * 500;
+                DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
+                for (unsigned i=0;i<4;++i) {
+                    motors[i]->ctrl.host_position_pd=0u;
+                    motors[i]->ctrl.kp_set=0;motors[i]->ctrl.kd_set=0;
+                    motors[i]->ctrl.pos_set=0;motors[i]->ctrl.vel_set=0;
+                    DMMotorSetTorque(motors[i],selected_leg[i]);
                 }
-
-                // 电流限位
-                if (lwi > 8192)
-                    lwi = 8192;
-                if (lwi < -8192)
-                    lwi = -8192;
-                if (rwi > 8192)
-                    rwi = 8192;
-                if (rwi < -8192)
-                    rwi = -8192;
-
+                lwi=selected_wheel[0];rwi=selected_wheel[1];
+                rl_control_state=pending;
+                if (use_rl) rl_control_frame=frame;
+                else {memset(&rl_control_frame,0,sizeof(rl_control_frame));
+                      rl_control_frame.tick_ms=current.tick_ms;rl_control_frame.fault=pending.fault;}
                 taskEXIT_CRITICAL();
-
-                if (!upstair_flag0)
-                {
-                    upstair_flag0_cnt = 0;
-                    upstair_flag0_latch = 0;
-                }
-                chassis_lqr_output_valid = 1u;
-                RLShadowCommand rl_command;
-                const RLShadowCommand *candidate =
-                    RLShadowReadCommand(&rl_command) == 0 ? &rl_command : NULL;
-                RLControlDecision rl_decision = RLControlStep(
-                    &rl_control_state, &rl_leg_ramp, xTaskGetTickCount(),
-                    ChassisNormalLQRState(), candidate);
-                if (RL_CONTROL_OUTPUT_ENABLED && rl_decision.active) {
-                    const float leg_length_m[2] = {Lleg->result->L0, Rleg->result->L0};
-                    const float leg_spread_rad[2] = {lmangle, rmangle};
-                    float rl_leg_torque_nm[4];
-                    /* Add spring compensation, then clamp each motor torque to +/-40 Nm. */
-                    if (RLControlCompensateSpring(rl_command.leg_torque_motor_nm,
-                                                  leg_length_m, leg_spread_rad,
-                                                  rl_leg_torque_nm) == 0) {
-                        taskENTER_CRITICAL();
-                        DMMotorSetTorque(jiont_motorlf, rl_leg_torque_nm[0]);
-                        DMMotorSetTorque(jiont_motorlb, rl_leg_torque_nm[1]);
-                        DMMotorSetTorque(jiont_motorrf, rl_leg_torque_nm[2]);
-                        DMMotorSetTorque(jiont_motorrb, rl_leg_torque_nm[3]);
-                        lwi = fmaxf(-8192.0f, fminf(8192.0f,
-                              -rl_command.wheel_forward_torque_nm[0] * RL_MOTION31_WHEEL_CURRENT_PER_NM));
-                        rwi = fmaxf(-8192.0f, fminf(8192.0f,
-                               rl_command.wheel_forward_torque_nm[1] * RL_MOTION31_WHEEL_CURRENT_PER_NM));
-                        taskEXIT_CRITICAL();
-                    }
-                }
             }
         }
         // 直接写入离散值
@@ -1244,6 +1293,8 @@ void ChassisTask()
     switch (chassis_cmd_recv.chassis_mode)
     {
     case CHASSIS_ZERO_FORCE:
+        if (rl_control_state.timing || rl_control_state.active || rl_control_state.fault)
+            RLControlReset(&rl_control_state,&rl_leg_ramp);
         chassis_status = 1;
         cent = 0;
         done = 0;
@@ -1298,48 +1349,39 @@ void ChassisTask()
     getLegData();
     getStateData();
     setTargetData();
+    rl_pd_snapshot=CurrentRLSnapshot();
     legLengthCalc();
     vmcCalc();
     flyDetect();
     outputTorque();
 
-    /* Motion31 observes the current controller state; preview targets are never applied. */
-    RLShadowSnapshot shadow = {0};
-    static uint32_t shadow_sequence;
-    shadow.sequence = ++shadow_sequence;
-    shadow.tick_ms = xTaskGetTickCount();
-    shadow.lqr_pitch_rad = pitch;
-    shadow.leg_length_m[0] = Lleg->result->L0;
-    shadow.leg_length_m[1] = Rleg->result->L0;
-    shadow.leg_spread_rad[0] = lmangle;
-    shadow.leg_spread_rad[1] = rmangle;
-    /* Convert the existing LQR attitude convention to the model body frame. */
-    RLMotion31MapLqrAttitude(&shadow.motion, roll, pitch,
-                             roll_dot, pitch_dot, yaw_dot);
-    RLMotion31MapJointAngles(&shadow.motion, rbangle, rfangle, lbangle, lfangle,
-                             jiont_motorrb->measure.vel, jiont_motorrf->measure.vel,
-                             -jiont_motorlb->measure.vel, -jiont_motorlf->measure.vel);
-    /* Model wheel positive is backward on both sides; LQR motor signs are
-       left-negative/right-positive for forward travel. */
-    RLMotion31MapWheelMotorSpeeds(&shadow.motion,
-                                  motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD,
-                                  motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD);
-    shadow.motion.command_vx_m_s = v_cmd;
-    shadow.motion.command_yaw_rad_s = w_cmd;
-    shadow.motion.command_height_m = 0.34f;
-    shadow.motion.lqr_leg_torque_motor_nm[0] = lfjt;
-    shadow.motion.lqr_leg_torque_motor_nm[1] = lbjt;
-    shadow.motion.lqr_leg_torque_motor_nm[2] = rfjt;
-    shadow.motion.lqr_leg_torque_motor_nm[3] = rbjt;
-    shadow.motion.lqr_wheel_torque_forward_nm[0] = lwt;
-    shadow.motion.lqr_wheel_torque_forward_nm[1] = rwt;
-    shadow.motion.lqr_torque_valid = chassis_lqr_output_valid;
-    shadow.chassis_ready = (uint8_t)(chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
-                                     !chassis_status);
-    shadow.rl_active = (uint8_t)(!chassis_status && !upstair_flag &&
-                                 !jumpingflag && !upstair_flag0 &&
-                                 rl_leg_ramp.completed);
-    /* The shadow task supplies its own virtual previous policy targets. */
+    /* Log the exact feedback used by this PD step, not a second later read. */
+    RLShadowSnapshot shadow=rl_pd_snapshot;
+    rl_control_frame.control_epoch=rl_control_state.epoch;
+    rl_control_frame.fault=rl_control_state.fault;
+    if (rl_control_frame.owner!=RL_OWNER_RL) {
+        taskENTER_CRITICAL();
+        rl_control_frame.final_motor_nm[0]=jiont_motorlf->ctrl.tor_set;
+        rl_control_frame.final_motor_nm[1]=jiont_motorlb->ctrl.tor_set;
+        rl_control_frame.final_motor_nm[2]=jiont_motorrf->ctrl.tor_set;
+        rl_control_frame.final_motor_nm[3]=jiont_motorrb->ctrl.tor_set;
+        rl_control_frame.wheel_current_raw[0]=lwi;rl_control_frame.wheel_current_raw[1]=rwi;
+        taskEXIT_CRITICAL();
+    }
+    RLCapturePush(&shadow,rl_command_consumed?&rl_consumed_command:NULL,&rl_control_frame);
+    RLControlFillPrevious(&rl_control_state,&shadow);
+    shadow.rl_active=(shadow.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
+                      rl_leg_ramp.completed && !rl_control_state.fault);
+    shadow.motion.lqr_leg_torque_motor_nm[0]=lfjt;
+    shadow.motion.lqr_leg_torque_motor_nm[1]=lbjt;
+    shadow.motion.lqr_leg_torque_motor_nm[2]=rfjt;
+    shadow.motion.lqr_leg_torque_motor_nm[3]=rbjt;
+    shadow.motion.lqr_wheel_torque_forward_nm[0]=lwt;
+    shadow.motion.lqr_wheel_torque_forward_nm[1]=rwt;
+    shadow.motion.lqr_torque_valid=chassis_lqr_output_valid;
+    shadow.pd_tick_ms=rl_control_frame.tick_ms;
+    memcpy(shadow.applied_leg_torque_motor_nm,rl_control_frame.final_motor_nm,sizeof(shadow.applied_leg_torque_motor_nm));
+    memcpy(shadow.applied_wheel_current_raw,rl_control_frame.wheel_current_raw,sizeof(shadow.applied_wheel_current_raw));
     RLShadowPublish(&shadow);
 
     chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身

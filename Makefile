@@ -151,6 +151,7 @@ modules/alarm/buzzer.c \
 application/chassis/chassis.c \
 application/chassis/rl_motion31.c \
 application/chassis/rl_control.c \
+application/chassis/rl_capture.c \
 application/chassis/rl_shadow.c \
 application/cmd/robot_cmd.c \
 application/robot.c \

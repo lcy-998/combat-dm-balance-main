@@ -34,6 +34,8 @@ typedef struct
     float Pitch;
     float Yaw;
     float YawTotalAngle;
+    uint32_t update_tick_ms; /* local filter update completion, not sensor acquisition */
+    uint32_t update_sequence;
 } attitude_t; // 最终解算得到的角度,以及yaw转动的总角度(方便多圈控制)
 
 typedef struct
@@ -62,6 +64,8 @@ typedef struct
     float Pitch;
     float Yaw;
     float YawTotalAngle;
+    uint32_t update_tick_ms;
+    uint32_t update_sequence;
 
     uint8_t init;
 } INS_t;

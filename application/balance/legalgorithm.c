@@ -1,4 +1,9 @@
-﻿#include "arm_math.h"
+﻿#ifdef RL_KINEMATICS_HOST
+#include <math.h>
+#define arm_cos_f32 cosf
+#define arm_sin_f32 sinf
+#else
+#include "arm_math.h"
 #include <math.h>
 #include <stdio.h>
 #include "user_lib.h"
@@ -34,6 +39,8 @@ void Inverse_solution(float L0_set, float theta0_set, float *phi1_set, float *ph
 }
 
 // getPhi: 计算 phi2, phi3, L0, phi0
+#endif
+
 void getPhi(float phi1, float phi4,
             float l1, float l2, float l3, float l4, float l5,
             float *phi2, float *phi3, float *L0, float *phi0)
@@ -59,6 +66,7 @@ void getPhi(float phi1, float phi4,
     *phi0 = atan2f(y_C, x_C);
 }
 
+#ifndef RL_KINEMATICS_HOST
 // spd: 计算 L0_dot 和 phi0_dot
 void spd(float dphi1, float dphi4,
          float l1, float l2, float l3, float l4, float l5,
@@ -269,3 +277,5 @@ void KFtask(Kalman *kf, float s, float ds, float dds)
     kalman_predict(kf, dds);
     kalman_update(kf, s, ds);
 }
+
+#endif

@@ -161,12 +161,13 @@ int main(void)
         assert(RLMotion31ComputePdTorque(&s, pose_target, request, limited_pose) == 0);
         for (unsigned i = 0; i < 6; ++i) assert(fabsf(request[i]) < 0.0002f);
     }
-    /* An active angle just outside the branch remains out of range until
-       observation saturation; it must not become a different valid pose. */
+    /* An active angle outside the calibrated branch is INVALID, never clipped. */
     RLMotion31MapJointAngles(&s, hip_zero, active_zero + 2.61f,
                              hip_zero, active_zero - 2.61f, 0, 0, 0, 0);
     near(s.joint_position_rad[1], 2.61f);
     near(s.joint_position_rad[3], -2.61f);
+    assert(RLMotion31BuildObservation(&s, axis_observation) != 0);
+    s.joint_position_rad[1]=s.joint_position_rad[3]=0;
     /* Both motor axes have opposite signs for forward travel. The model
        wheel axes are backward-positive and are ordered physical right/left. */
     RLMotion31MapWheelMotorSpeeds(&s, -2.0f, 3.0f);
@@ -175,6 +176,7 @@ int main(void)
     assert(RLMotion31BuildObservation(&s, axis_observation) == 0);
     near(axis_observation[12], -0.15f);
     near(axis_observation[15], -0.10f);
+    s.gravity_model[0] = s.gravity_model[2] = 0.0f;
     s.gravity_model[1] = -1.0f;
     s.gyro_model_rad_s[0] = 4.0f;
     s.gyro_model_rad_s[1] = -8.0f;
@@ -307,9 +309,9 @@ int main(void)
             for (int step = -1; step <= 1; ++step) {
                 const float angle = (float)sign * (limits[joint] + (float)step * 0.01f);
                 s.joint_position_rad[joint] = angle;
-                assert(RLMotion31BuildObservation(&s, observation) == 0);
-                near(observation[6u + joint], (float)sign *
-                     (step > 0 ? limits[joint] : fabsf(angle)) / 1.5f);
+                const int status=RLMotion31BuildObservation(&s, observation);
+                if (step>0) assert(status!=0);
+                else {assert(status==0);near(observation[6u+joint],angle/1.5f);}
                 near(s.joint_position_rad[joint], angle);
             }
         }
