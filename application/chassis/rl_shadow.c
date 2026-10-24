@@ -75,6 +75,7 @@ void RLShadowPublish(const RLShadowSnapshot *sample)
 static void publish_command(const RLShadowSnapshot *sample,
                             const float *action,
                             const RLMotion31Preview *preview,
+                            const float *leg_torque_motor_nm,
                             const float *wheel_torque_forward_nm,
                             int valid)
 {
@@ -87,10 +88,13 @@ static void publish_command(const RLShadowSnapshot *sample,
     }
     if (valid && sample != NULL && sample->chassis_ready &&
         sample->motion.lqr_torque_valid && action != NULL &&
-        preview != NULL && wheel_torque_forward_nm != NULL) {
+        preview != NULL && leg_torque_motor_nm != NULL &&
+        wheel_torque_forward_nm != NULL) {
         command.valid = 1u;
         memcpy(command.action, action, sizeof(command.action));
         command.preview = *preview;
+        memcpy(command.leg_torque_motor_nm, leg_torque_motor_nm,
+               sizeof(command.leg_torque_motor_nm));
         memcpy(command.wheel_forward_torque_nm, wheel_torque_forward_nm,
                sizeof(command.wheel_forward_torque_nm));
     }
@@ -124,12 +128,12 @@ static int network_run(const float observation[RL_MOTION31_OBSERVATION_SIZE],
 
 static void check_target_network_golden(void)
 {
-    /* model_golden_vectors.json id 144: a numerical fixture, not a motion test. */
+    /* Zero-pose numerical fixture for motion_20_23.onnx, not a motion test. */
     static const float observation[RL_MOTION31_OBSERVATION_SIZE] = {
         [4] = -1.0f, [24] = 0.68f, [25] = 1.0f, [28] = 1.0f};
     static const float expected[RL_MOTION31_ACTION_SIZE] = {
-        0.010617729f, 0.071231335f, -0.019865362f,
-        -0.004225575f, 0.032680389f, -0.023813765f};
+        0.007079028f, 0.019301796f, 0.000087026f,
+        -0.003934855f, -0.009344813f, -0.012714249f};
     float actual[RL_MOTION31_ACTION_SIZE];
     if (network_run(observation, actual) != 0) {
         g_rl_shadow_debug.golden_checked = 0u;
@@ -225,10 +229,17 @@ void RLShadowTask(void const *argument)
     if (snapshot_queue == NULL || network_init() != 0) {
         g_rl_shadow_debug.failure = 1u;
         publish_debug(NULL, NULL);
-        publish_command(NULL, NULL, NULL, NULL, 0);
+        publish_command(NULL, NULL, NULL, NULL, NULL, 0);
         vTaskSuspend(NULL);
     }
     check_target_network_golden();
+    if (!g_rl_shadow_debug.golden_checked ||
+        !isfinite(g_rl_shadow_debug.golden_max_abs_error) ||
+        g_rl_shadow_debug.golden_max_abs_error > 0.001f) {
+        g_rl_shadow_debug.failure = 10u;
+        publish_command(NULL, NULL, NULL, NULL, NULL, 0);
+        vTaskSuspend(NULL);
+    }
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&wake, RL_SHADOW_PERIOD);
@@ -244,7 +255,7 @@ void RLShadowTask(void const *argument)
             g_rl_shadow_debug.stage = 0u;
             g_rl_shadow_debug.failure = 2u;
             publish_debug(NULL, NULL);
-            publish_command(NULL, NULL, NULL, NULL, 0);
+            publish_command(NULL, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         g_rl_shadow_debug.sequence = sample.sequence;
@@ -259,7 +270,7 @@ void RLShadowTask(void const *argument)
             g_rl_shadow_debug.stage = 0u;
             g_rl_shadow_debug.failure = 3u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         g_rl_shadow_debug.stage = 1u;
@@ -280,7 +291,7 @@ void RLShadowTask(void const *argument)
             g_rl_shadow_debug.input_error_mask = input_error_mask(&sample.motion);
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
@@ -288,11 +299,18 @@ void RLShadowTask(void const *argument)
         }
         g_rl_shadow_debug.observation_valid = 1u;
         g_rl_shadow_debug.stage = 2u;
+        if (!sample.rl_active) {
+            previous_shadow_target_valid = 0u;
+            g_rl_shadow_debug.stage = 2u;
+            publish_debug(&sample, NULL);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+            continue;
+        }
         if (network_run(preview.observation, action) != 0) {
             g_rl_shadow_debug.failure = 5u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
@@ -303,7 +321,7 @@ void RLShadowTask(void const *argument)
             g_rl_shadow_debug.failure = 6u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
@@ -315,7 +333,7 @@ void RLShadowTask(void const *argument)
             g_rl_shadow_debug.failure = 7u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         g_rl_shadow_debug.rl_wheel_target_rad_s[0] = preview.motor_wheel_target_rad_s[0];
@@ -332,16 +350,24 @@ void RLShadowTask(void const *argument)
             g_rl_shadow_debug.failure = 8u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         float rl_wheel_torque_forward_nm[2];
+        float rl_leg_torque_motor_nm[4];
+        if (RLMotion31MapPolicyLegTorqueToMotorOrder(rl_torque_limited,
+                                                     rl_leg_torque_motor_nm) != 0) {
+            g_rl_shadow_debug.failure = 9u;
+            previous_shadow_target_valid = 0u;
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
+            continue;
+        }
         if (RLMotion31MapPolicyWheelTorqueToForwardOrder(rl_torque_limited,
                                                         rl_wheel_torque_forward_nm) != 0) {
             g_rl_shadow_debug.failure = 9u;
             previous_shadow_target_valid = 0u;
             publish_debug(&sample, NULL);
-            publish_command(&sample, NULL, NULL, NULL, 0);
+            publish_command(&sample, NULL, NULL, NULL, NULL, 0);
             continue;
         }
         memcpy(previous_shadow_target, preview.target, sizeof(previous_shadow_target));
@@ -349,6 +375,6 @@ void RLShadowTask(void const *argument)
         publish_debug(&sample, rl_torque_limited);
         g_rl_shadow_debug.stage = 5u;
         g_rl_shadow_debug.failure = 0u;
-        publish_command(&sample, action, &preview, rl_wheel_torque_forward_nm, 1);
+        publish_command(&sample, action, &preview, rl_leg_torque_motor_nm, rl_wheel_torque_forward_nm, 1);
     }
 }

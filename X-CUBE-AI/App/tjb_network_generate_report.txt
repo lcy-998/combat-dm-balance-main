@@ -1,33 +1,33 @@
 ST Edge AI Core v2.0.0-20049
-Created date          : 2026-10-18 15:48:21
-Parameters            : generate --target stm32h7 --name tjb_network -m D:/Combat/2026_10_15-20_16__motion31_u1600_detailed/actor.onnx --compression none --verbosity 1 -O time --workspace D:/APP-CA~1/tmp/mxAI_workspace1833634298690015193272131972790012 --output C:/Users/18167/.stm32cubemx/network_output
+Created date          : 2026-10-23 21:02:29
+Parameters            : generate --target stm32h7 --name tjb_network -m D:/Combat/2026_10_15-20_16__motion31_u1600_detailed/motion_20_23.onnx --compression none --verbosity 1 -O time --workspace D:/APP-CA~1/tmp/mxAI_workspace3721644880590016288962930528861164 --output C:/Users/18167/.stm32cubemx/tjb_network_output
 
 Exec/report summary (generate)
-------------------------------------------------------------------------------------------
-model file         :   D:\Combat\2026_10_15-20_16__motion31_u1600_detailed\actor.onnx     
-type               :   onnx                                                               
-c_name             :   tjb_network                                                        
-compression        :   none                                                               
-options            :   allocate-inputs, allocate-outputs                                  
-optimization       :   time                                                               
-target/series      :   stm32h7                                                            
-workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace1833634298690015193272131972790012   
-output dir         :   C:\Users\18167\.stm32cubemx\network_output                         
-model_fmt          :   float                                                              
-model_name         :   actor                                                              
-model_hash         :   0x799951eb0791e675b7a0f667ba31537f                                 
-params #           :   14,630 items (57.15 KiB)                                           
-------------------------------------------------------------------------------------------
-input 1/1          :   'observation', f32(1x31), 124 Bytes, activations                   
-output 1/1         :   'mean_action', f32(1x6), 24 Bytes, activations                     
-macc               :   17,154                                                             
-weights (ro)       :   58,520 B (57.15 KiB) (1 segment)                                   
-activations (rw)   :   768 B (768 B) (1 segment) *                                        
-ram (total)        :   768 B (768 B) = 768 + 0 + 0                                        
-------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------
+model file         :   D:\Combat\2026_10_15-20_16__motion31_u1600_detailed\motion_20_23.onnx   
+type               :   onnx                                                                    
+c_name             :   tjb_network                                                             
+compression        :   none                                                                    
+options            :   allocate-inputs, allocate-outputs                                       
+optimization       :   time                                                                    
+target/series      :   stm32h7                                                                 
+workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace3721644880590016288962930528861164        
+output dir         :   C:\Users\18167\.stm32cubemx\tjb_network_output                          
+model_fmt          :   float                                                                   
+model_name         :   motion_20_23                                                            
+model_hash         :   0xe706ce1664de551cc66c64f1676a4c11                                      
+params #           :   14,630 items (57.15 KiB)                                                
+-----------------------------------------------------------------------------------------------
+input 1/1          :   'observation', f32(1x31), 124 Bytes, activations                        
+output 1/1         :   'mean_action', f32(1x6), 24 Bytes, activations                          
+macc               :   17,154                                                                  
+weights (ro)       :   58,520 B (57.15 KiB) (1 segment)                                        
+activations (rw)   :   768 B (768 B) (1 segment) *                                             
+ram (total)        :   768 B (768 B) = 768 + 0 + 0                                             
+-----------------------------------------------------------------------------------------------
 (*) 'input'/'output' buffers can be used from the activations buffer
 
-Model name - actor
+Model name - motion_20_23
 ------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
 m_id   layer (type,original)                         oshape         param/size        macc               connected to   | c_size          c_macc            c_type                
 ------ --------------------------------------------- -------------- -------------- ------- -------------------------- --- --------------- ----------------- --------------------- 
@@ -75,7 +75,7 @@ model/c-model: macc=17,378/17,154 -224(-1.3%) weights=58,520/58,520  activations
 
 Generated C-graph summary
 ------------------------------------------------------------------------------------------------------------------------
-model name            : actor
+model name            : motion_20_23
 c-name                : tjb_network
 c-node #              : 8
 c-array #             : 17
@@ -215,11 +215,11 @@ macc=17,154 weights=58,520 act=768 ram_io=0
 
 
 Generated files (7)
----------------------------------------------------------------------- 
-C:\Users\18167\.stm32cubemx\network_output\tjb_network_data_params.h   
-C:\Users\18167\.stm32cubemx\network_output\tjb_network_data_params.c   
-C:\Users\18167\.stm32cubemx\network_output\tjb_network_data.h          
-C:\Users\18167\.stm32cubemx\network_output\tjb_network_data.c          
-C:\Users\18167\.stm32cubemx\network_output\tjb_network_config.h        
-C:\Users\18167\.stm32cubemx\network_output\tjb_network.h               
-C:\Users\18167\.stm32cubemx\network_output\tjb_network.c               
+-------------------------------------------------------------------------- 
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data_params.h   
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data_params.c   
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data.h          
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_data.c          
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network_config.h        
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network.h               
+C:\Users\18167\.stm32cubemx\tjb_network_output\tjb_network.c               

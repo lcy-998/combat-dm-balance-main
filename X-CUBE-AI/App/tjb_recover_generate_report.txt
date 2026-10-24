@@ -1,6 +1,6 @@
 ST Edge AI Core v2.0.0-20049
-Created date          : 2026-10-18 15:49:08
-Parameters            : generate --target stm32h7 --name tjb_recover -m D:/Combat/2026_10_15-20_16__motion31_u1600_detailed/actor(1).onnx --compression none --verbosity 1 -O time --workspace D:/APP-CA~1/tmp/mxAI_workspace1842259923340017935119607700647319 --output C:/Users/18167/.stm32cubemx/network_output
+Created date          : 2026-10-23 21:02:54
+Parameters            : generate --target stm32h7 --name tjb_recover -m D:/Combat/2026_10_15-20_16__motion31_u1600_detailed/actor(1).onnx --compression none --verbosity 1 --workspace D:/APP-CA~1/tmp/mxAI_workspace3724215013840013449534901598624157 --output C:/Users/18167/.stm32cubemx/tjb_recover_output
 
 Exec/report summary (generate)
 -------------------------------------------------------------------------------------------
@@ -9,10 +9,10 @@ type               :   onnx
 c_name             :   tjb_recover                                                         
 compression        :   none                                                                
 options            :   allocate-inputs, allocate-outputs                                   
-optimization       :   time                                                                
+optimization       :   balanced                                                            
 target/series      :   stm32h7                                                             
-workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace1842259923340017935119607700647319    
-output dir         :   C:\Users\18167\.stm32cubemx\network_output                          
+workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace3724215013840013449534901598624157    
+output dir         :   C:\Users\18167\.stm32cubemx\tjb_recover_output                      
 model_fmt          :   float                                                               
 model_name         :   actor1                                                              
 model_hash         :   0xbe94d1b722c12ad5ab6107d10d2a2478                                  
@@ -215,11 +215,11 @@ macc=17,154 weights=58,520 act=768 ram_io=0
 
 
 Generated files (7)
----------------------------------------------------------------------- 
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover_data_params.h   
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover_data_params.c   
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover_data.h          
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover_data.c          
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover_config.h        
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover.h               
-C:\Users\18167\.stm32cubemx\network_output\tjb_recover.c               
+-------------------------------------------------------------------------- 
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover_data_params.h   
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover_data_params.c   
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover_data.h          
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover_data.c          
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover_config.h        
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover.h               
+C:\Users\18167\.stm32cubemx\tjb_recover_output\tjb_recover.c               

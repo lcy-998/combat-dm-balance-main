@@ -133,6 +133,7 @@ uint64_t cent = 0;
 static float del_t;
 static uint8_t chassis_lqr_output_valid;
 static RLControlLegRamp rl_leg_ramp;
+static RLControlState rl_control_state;
 static uint32_t balance_dwt_cnt;
 float phi1, phi4, Lphi1, Lphi4, Rphi1, Rphi4;
 float LFtor, LBtor, RFtor, RBtor;
@@ -831,6 +832,10 @@ static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_
 void outputTorque()
 {
     chassis_lqr_output_valid = 0u;
+    if (!ChassisNormalLQRState()) {
+        (void)RLControlStep(&rl_control_state, &rl_leg_ramp,
+                            xTaskGetTickCount(), 0, NULL);
+    }
     // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
     // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
 
@@ -1133,6 +1138,32 @@ void outputTorque()
                     upstair_flag0_latch = 0;
                 }
                 chassis_lqr_output_valid = 1u;
+                RLShadowCommand rl_command;
+                const RLShadowCommand *candidate =
+                    RLShadowReadCommand(&rl_command) == 0 ? &rl_command : NULL;
+                RLControlDecision rl_decision = RLControlStep(
+                    &rl_control_state, &rl_leg_ramp, xTaskGetTickCount(),
+                    ChassisNormalLQRState(), candidate);
+                if (RL_CONTROL_OUTPUT_ENABLED && rl_decision.active) {
+                    const float leg_length_m[2] = {Lleg->result->L0, Rleg->result->L0};
+                    const float leg_spread_rad[2] = {lmangle, rmangle};
+                    float rl_leg_torque_nm[4];
+                    /* Add spring compensation, then clamp each motor torque to +/-40 Nm. */
+                    if (RLControlCompensateSpring(rl_command.leg_torque_motor_nm,
+                                                  leg_length_m, leg_spread_rad,
+                                                  rl_leg_torque_nm) == 0) {
+                        taskENTER_CRITICAL();
+                        DMMotorSetTorque(jiont_motorlf, rl_leg_torque_nm[0]);
+                        DMMotorSetTorque(jiont_motorlb, rl_leg_torque_nm[1]);
+                        DMMotorSetTorque(jiont_motorrf, rl_leg_torque_nm[2]);
+                        DMMotorSetTorque(jiont_motorrb, rl_leg_torque_nm[3]);
+                        lwi = fmaxf(-8192.0f, fminf(8192.0f,
+                              -rl_command.wheel_forward_torque_nm[0] * RL_MOTION31_WHEEL_CURRENT_PER_NM));
+                        rwi = fmaxf(-8192.0f, fminf(8192.0f,
+                               rl_command.wheel_forward_torque_nm[1] * RL_MOTION31_WHEEL_CURRENT_PER_NM));
+                        taskEXIT_CRITICAL();
+                    }
+                }
             }
         }
         // 直接写入离散值
@@ -1301,7 +1332,9 @@ void ChassisTask()
     shadow.motion.lqr_torque_valid = chassis_lqr_output_valid;
     shadow.chassis_ready = (uint8_t)(chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
                                      !chassis_status);
-    shadow.rl_active = 0u;
+    shadow.rl_active = (uint8_t)(!chassis_status && !upstair_flag &&
+                                 !jumpingflag && !upstair_flag0 &&
+                                 rl_leg_ramp.completed);
     /* The shadow task supplies its own virtual previous policy targets. */
     RLShadowPublish(&shadow);
 

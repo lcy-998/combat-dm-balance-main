@@ -21,7 +21,8 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
         if (!isfinite(command->action[i]) || !isfinite(command->preview.target[i])) return 0;
     }
     for (unsigned i = 0; i < 4u; ++i) {
-        if (!isfinite(command->preview.hardware_joint_target_rad[i])) return 0;
+        if (!isfinite(command->preview.hardware_joint_target_rad[i]) ||
+            !isfinite(command->leg_torque_motor_nm[i])) return 0;
     }
     for (unsigned i = 0; i < 2u; ++i) {
         if (!isfinite(command->wheel_forward_torque_nm[i])) return 0;

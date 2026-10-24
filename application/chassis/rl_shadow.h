@@ -21,6 +21,7 @@ typedef struct {
     uint8_t valid;
     float action[RL_MOTION31_ACTION_SIZE];
     RLMotion31Preview preview;
+    float leg_torque_motor_nm[4];
     float wheel_forward_torque_nm[2];
 } RLShadowCommand;
 
@@ -28,7 +29,8 @@ typedef struct {
     uint32_t sequence;
     uint32_t stage; /* 0=no sample, 1=fresh, 2=obs, 3=inference, 4=decode, 5=PD */
     uint32_t failure; /* 0=none, 1=init, 2=no sample, 3=stale, 4=input, 5=network,
-                         6=decode, 7=target mapping, 8=PD, 9=torque mapping */
+                         6=decode, 7=target mapping, 8=PD, 9=torque mapping,
+                         10=model golden vector mismatch */
     uint32_t snapshot_age_ms;
     uint32_t input_error_mask; /* bits 0..3=nonfinite q0,q1,q3,q4; 4=gyro; 5=gravity;
                                   6=joint velocities; 7=previous target; 8=commands */

@@ -7,12 +7,15 @@
 #define RL_CONTROL_LQR_HOLD_AFTER_RAMP_MS 5000u
 #define RL_CONTROL_COMMAND_MAX_AGE_MS 24u
 #define RL_CONTROL_LEG_TARGET_M 0.28f
+/* Switch to policy torque only after the ramp, hold and fresh-command checks. */
+#define RL_CONTROL_OUTPUT_ENABLED 1u
 
 typedef struct {
     uint32_t wait_start_tick;
     uint8_t timing;
     uint8_t active;
 } RLControlState;
+#define RL_CONTROL_WHEEL_SPEED_KP 0.2f
 
 typedef struct {
     uint32_t start_tick;

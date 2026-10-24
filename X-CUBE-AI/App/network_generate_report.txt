@@ -1,6 +1,6 @@
 ST Edge AI Core v2.0.0-20049
-Created date          : 2026-10-18 15:46:56
-Parameters            : generate --target stm32h7 --name network -m D:/DefaultStore/QQ/mlp/RMUC_H723_smallMLP_v8_20261009/policy.onnx --compression none --verbosity 1 -O time --workspace D:/APP-CA~1/tmp/mxAI_workspace1829536348990016787573833397960321 --output C:/Users/18167/.stm32cubemx/network_output
+Created date          : 2026-10-23 21:02:02
+Parameters            : generate --target stm32h7 --name network -m D:/DefaultStore/QQ/mlp/RMUC_H723_smallMLP_v8_20261009/policy.onnx --compression none --verbosity 1 -O time --workspace D:/APP-CA~1/tmp/mxAI_workspace371914862503009172274615955465983 --output C:/Users/18167/.stm32cubemx/network_output
 
 Exec/report summary (generate)
 -------------------------------------------------------------------------------------------
@@ -11,7 +11,7 @@ compression        :   none
 options            :   allocate-inputs, allocate-outputs                                   
 optimization       :   time                                                                
 target/series      :   stm32h7                                                             
-workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace1829536348990016787573833397960321    
+workspace dir      :   D:\APP-CA~1\tmp\mxAI_workspace371914862503009172274615955465983     
 output dir         :   C:\Users\18167\.stm32cubemx\network_output                          
 model_fmt          :   float                                                               
 model_name         :   policy                                                              
