@@ -292,14 +292,14 @@ int main(void)
     float requested[RL_MOTION31_ACTION_SIZE];
     float limited[RL_MOTION31_ACTION_SIZE];
     assert(RLMotion31ComputePdTorque(&s, zero_target, requested, limited) == 0);
-    near(requested[0], -6.02f);
-    near(requested[1], 12.04f);
-    near(requested[2], -10.0f);
-    near(requested[3], -18.06f);
-    near(requested[4], -24.08f);
-    near(requested[5], 20.0f);
-    near(limited[2], -5.5f);
-    near(limited[5], 5.5f);
+    near(requested[0], -4.02f);
+    near(requested[1], 8.04f);
+    near(requested[2], -2.0f);
+    near(requested[3], -12.06f);
+    near(requested[4], -16.08f);
+    near(requested[5], 4.0f);
+    near(limited[2], -2.0f);
+    near(limited[5], 4.0f);
 
     const float limits[4] = {3.1f, 2.6f, 3.1f, 2.6f};
     for (size_t joint = 0; joint < 4u; ++joint) {

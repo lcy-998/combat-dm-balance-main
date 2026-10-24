@@ -15,8 +15,6 @@ typedef struct {
     uint8_t timing;
     uint8_t active;
 } RLControlState;
-#define RL_CONTROL_WHEEL_SPEED_KP 0.2f
-
 typedef struct {
     uint32_t start_tick;
     float start_length_m;

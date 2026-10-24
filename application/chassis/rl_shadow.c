@@ -1,4 +1,5 @@
 #include "rl_shadow.h"
+#include "rl_control.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -174,7 +175,15 @@ static void publish_debug(const RLShadowSnapshot *sample,
         memset((void *)d->observation, 0, sizeof(d->observation));
     }
     if (rl_torque_limited != NULL) {
-        (void)RLMotion31MapPolicyLegTorqueToMotorOrder(rl_torque_limited, rl_leg_torque);
+        float policy_leg_torque[4];
+        if (sample != NULL &&
+            RLMotion31MapPolicyLegTorqueToMotorOrder(rl_torque_limited,
+                                                     policy_leg_torque) == 0) {
+            (void)RLControlCompensateSpring(policy_leg_torque,
+                                            sample->leg_length_m,
+                                            sample->leg_spread_rad,
+                                            rl_leg_torque);
+        }
         (void)RLMotion31MapPolicyWheelTorqueToForwardOrder(rl_torque_limited,
                                                             rl_wheel_torque);
     }

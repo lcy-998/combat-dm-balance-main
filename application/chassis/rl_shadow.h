@@ -11,6 +11,8 @@ typedef struct {
     float lqr_pitch_rad; /* body pitch used by theta_l/theta_r; not an Actor input */
     uint8_t chassis_ready;
     uint8_t rl_active;
+    float leg_length_m[2]; /* left, right; spring compensation input */
+    float leg_spread_rad[2]; /* left, right; spring compensation input */
     RLMotion31Snapshot motion;
 } RLShadowSnapshot;
 
@@ -53,7 +55,7 @@ typedef struct {
     float rl_target_theta_r_rad; /* physical right, same zero/sign as LQR theta_r */
     float lqr_leg_torque_nm[4]; /* existing motor order: lf, lb, rf, rb */
     float lqr_wheel_torque_nm[2]; /* forward-positive: left, right */
-    float rl_leg_torque_nm[4]; /* same motor order and signs: lf, lb, rf, rb */
+    float rl_leg_torque_nm[4]; /* spring-compensated and clamped, motor order: lf, lb, rf, rb */
     float rl_wheel_torque_nm[2]; /* forward-positive: left, right */
 } RLShadowDebug;
 

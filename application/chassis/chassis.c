@@ -1309,6 +1309,10 @@ void ChassisTask()
     shadow.sequence = ++shadow_sequence;
     shadow.tick_ms = xTaskGetTickCount();
     shadow.lqr_pitch_rad = pitch;
+    shadow.leg_length_m[0] = Lleg->result->L0;
+    shadow.leg_length_m[1] = Rleg->result->L0;
+    shadow.leg_spread_rad[0] = lmangle;
+    shadow.leg_spread_rad[1] = rmangle;
     /* Convert the existing LQR attitude convention to the model body frame. */
     RLMotion31MapLqrAttitude(&shadow.motion, roll, pitch,
                              roll_dot, pitch_dot, yaw_dot);

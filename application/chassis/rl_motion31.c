@@ -195,10 +195,10 @@ int RLMotion31ComputePdTorque(const RLMotion31Snapshot *s,
     }
     for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
         if (i == 2u || i == 5u) {
-            requested[i] = target[i] - s->joint_velocity_rad_s[i];
+            requested[i] = 0.2f * (target[i] - s->joint_velocity_rad_s[i]);
         } else {
             const size_t joint_index = (i < 2u) ? i : i - 1u;
-            requested[i] = 60.0f * (target[i] - s->joint_position_rad[joint_index])
+            requested[i] = 40.0f * (target[i] - s->joint_position_rad[joint_index])
                            - 2.0f * s->joint_velocity_rad_s[i];
         }
         if (!isfinite(requested[i])) return -1;
