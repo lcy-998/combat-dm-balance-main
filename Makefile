@@ -10,7 +10,7 @@
 #   2015-07-22 - first version
 # ------------------------------------------------
 
-SHELL = cmd.exe
+SHELL = sh.exe
 
 BALANCE_C_SOURCES := $(wildcard application/balance/*.c)
 BALANCE_CPP_SOURCES := $(filter-out application/balance/chassis_leg.cpp,$(wildcard application/balance/*.cpp))
@@ -177,11 +177,11 @@ $(BALANCE_CPP_SOURCES)
 
 # ASM sources
 ASM_SOURCES =  \
-startup_stm32h723xx.s \
-Middlewares/Third_Party/SEGGER/RTT/SEGGER_RTT_ASM_ARMv7M.s
+startup_stm32h723xx.s
 
 # ASM sources
-ASMM_SOURCES = 
+ASMM_SOURCES = \
+Middlewares/Third_Party/SEGGER/RTT/SEGGER_RTT_ASM_ARMv7M.S
 
 
 #######################################
@@ -347,8 +347,8 @@ OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASMM_SOURCES:.S=.o)))
 vpath %.S $(sort $(dir $(ASMM_SOURCES)))
 
 $(BUILD_DIR_STAMP):
-	if not exist "$(BUILD_DIR)" mkdir "$(BUILD_DIR)"
-	type nul > "$(BUILD_DIR)\\dir.stamp"
+	mkdir -p "$(BUILD_DIR)"
+	touch "$(BUILD_DIR_STAMP)"
 
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR_STAMP)
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
@@ -377,7 +377,7 @@ $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR_STAMP)
 .PHONY: all clean rebuild
 
 clean:
-	powershell -NoProfile -Command "if (Test-Path '$(BUILD_DIR)') { Remove-Item -LiteralPath '$(BUILD_DIR)' -Recurse -Force }"
+	rm -rf "$(BUILD_DIR)"
 
 rebuild: clean all
   

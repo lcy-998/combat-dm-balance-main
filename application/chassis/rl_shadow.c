@@ -138,12 +138,11 @@ static int network_run(const float observation[RL_MOTION31_OBSERVATION_SIZE],
 
 static void check_target_network_golden(void)
 {
-    /* Zero-pose numerical fixture for motion_20_23.onnx, not a motion test. */
+    /* Zero-pose numerical fixture for motion_10_26.onnx, not a motion test. */
     static const float observation[RL_MOTION31_OBSERVATION_SIZE] = {
         [4] = -1.0f, [24] = 0.68f, [25] = 1.0f, [28] = 1.0f};
     static const float expected[RL_MOTION31_ACTION_SIZE] = {
-        0.007079028f, 0.019301796f, 0.000087026f,
-        -0.003934855f, -0.009344813f, -0.012714249f};
+        0.090106122f, 0.169252515f, -0.031314105f, -0.178681627f, 0.094812252f, -0.002255697f};
     float actual[RL_MOTION31_ACTION_SIZE];
     if (network_run(observation, actual) != 0) {
         working_debug.golden_checked = 0u;
@@ -203,6 +202,27 @@ static void publish_debug(const RLShadowSnapshot *sample)
     }
 }
 
+/* Diagnostic equivalent of the motor-output torque calculation. */
+static unsigned publish_preview_torque(const RLShadowSnapshot *sample,
+                                       const float target[RL_MOTION31_ACTION_SIZE])
+{
+    float requested[RL_MOTION31_ACTION_SIZE], limited[RL_MOTION31_ACTION_SIZE];
+    float motor[4], wheel[2], final_motor[4];
+    if (RLMotion31ComputePdTorque(&sample->motion, target, requested, limited) != 0)
+        return 8u;
+    if (RLMotion31MapPolicyLegTorqueToMotorOrder(limited, motor) != 0 ||
+        RLMotion31MapPolicyWheelTorqueToForwardOrder(limited, wheel) != 0 ||
+        RLControlCompensateSpring(motor, sample->leg_length_m,
+                                  sample->leg_spread_rad, final_motor) != 0)
+        return 9u;
+    memcpy(working_debug.rl_leg_torque_nm, final_motor, sizeof(final_motor));
+    const float wheel_limit = RL_CONTROL_WHEEL_RAW_LIMIT / RL_MOTION31_WHEEL_CURRENT_PER_NM;
+    for (unsigned i = 0; i < 2u; ++i)
+        working_debug.rl_wheel_torque_nm[i] = fminf(fmaxf(wheel[i], -wheel_limit), wheel_limit);
+    working_debug.rl_torque_valid = 1u;
+    return 0u;
+}
+
 static void publish_target_swing(const RLShadowSnapshot *sample,
                                  const float target[RL_MOTION31_ACTION_SIZE])
 {
@@ -236,19 +256,13 @@ static void publish_target_swing(const RLShadowSnapshot *sample,
 void RLShadowTask(void const *argument)
 {
     (void)argument;
-    /* Only the control owner supplies previous. Shadow predictions never feed it. */
-    if (snapshot_queue == NULL || network_init() != 0) {
+    float previous_inference_target[RL_MOTION31_ACTION_SIZE] = {0};
+    uint32_t previous_epoch = 0u;
+    uint32_t previous_inference_sequence = 0u;
+    uint8_t network_ready = 0u;
+    if (snapshot_queue == NULL) {
         working_debug.failure = 1u;
         publish_debug(NULL);
-        publish_command(NULL, NULL, NULL, 0);
-        commit_debug();
-        vTaskSuspend(NULL);
-    }
-    check_target_network_golden();
-    if (!working_debug.golden_checked ||
-        !isfinite(working_debug.golden_max_abs_error) ||
-        working_debug.golden_max_abs_error > 0.001f) {
-        working_debug.failure = 10u;
         publish_command(NULL, NULL, NULL, 0);
         commit_debug();
         vTaskSuspend(NULL);
@@ -256,6 +270,7 @@ void RLShadowTask(void const *argument)
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&wake, RL_SHADOW_PERIOD);
+        working_debug.rl_torque_valid = 0u;
         working_debug.observation_valid = 0u;
         working_debug.input_error_mask = 0u;
         working_debug.rl_wheel_target_valid = 0u;
@@ -271,6 +286,15 @@ void RLShadowTask(void const *argument)
             continue;
         }
         working_debug.sequence = sample.sequence;
+        if (!sample.rl_active || sample.control_epoch != previous_epoch) {
+            memset(previous_inference_target, 0, sizeof(previous_inference_target));
+            previous_inference_sequence = 0u;
+        }
+        previous_epoch = sample.control_epoch;
+        memcpy(sample.motion.previous_target, previous_inference_target,
+               sizeof(previous_inference_target));
+        sample.motion.previous_target_valid = 1u;
+        sample.previous_source = RL_PREVIOUS_INFERENCE;
         TickType_t now = xTaskGetTickCount();
         working_debug.snapshot_age_ms = (uint32_t)(now - sample.tick_ms);
         for (size_t i = 0; i < 4u; ++i) {
@@ -310,6 +334,25 @@ void RLShadowTask(void const *argument)
             commit_debug();
             continue;
         }
+        if (!network_ready) {
+            if (network_init() != 0) {
+                working_debug.failure = 1u;
+                publish_debug(&sample);
+                publish_command(&sample, NULL, NULL, 0);
+                commit_debug();
+                vTaskSuspend(NULL);
+            }
+            check_target_network_golden();
+            if (!working_debug.golden_checked ||
+                !isfinite(working_debug.golden_max_abs_error) ||
+                working_debug.golden_max_abs_error > 0.001f) {
+                working_debug.failure = 10u;
+                publish_command(NULL, NULL, NULL, 0);
+                commit_debug();
+                vTaskSuspend(NULL);
+            }
+            network_ready = 1u;
+        }
         working_debug.inference_start_tick_ms=xTaskGetTickCount();
         const int inference_status=network_run(preview.observation, action);
         working_debug.inference_end_tick_ms=xTaskGetTickCount();
@@ -334,6 +377,9 @@ void RLShadowTask(void const *argument)
             commit_debug();
             continue;
         }
+        const uint32_t inference_input_sequence = previous_inference_sequence;
+        memcpy(previous_inference_target, preview.target, sizeof(previous_inference_target));
+        previous_inference_sequence = sample.sequence;
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
             working_debug.decoded_target[i] = preview.target[i];
         }
@@ -352,11 +398,13 @@ void RLShadowTask(void const *argument)
         working_debug.rl_target_valid = 1u;
         publish_target_swing(&sample, preview.target);
         working_debug.stage = 4u;
-        /* Publish position/velocity goals only. The 200Hz owner computes PD. */
+        /* Publish a valid policy target for the next motor-control update. */
         publish_debug(&sample);
-        working_debug.stage = 4u;
-        working_debug.failure = 0u;
-        publish_command(&sample, action, &preview, 1);
+        working_debug.failure = publish_preview_torque(&sample, preview.target);
+        working_debug.stage = working_debug.rl_torque_valid ? 5u : 4u;
+        RLShadowSnapshot command_sample = sample;
+        command_sample.adopted_sequence = inference_input_sequence;
+        publish_command(&command_sample, action, &preview, working_debug.rl_torque_valid);
         commit_debug();
     }
 }

@@ -134,7 +134,6 @@ float v_set = 0, radior, radiol;
 uint64_t cent = 0;
 static float del_t;
 static uint8_t chassis_lqr_output_valid;
-static RLControlLegRamp rl_leg_ramp;
 static RLControlState rl_control_state;
 static RLControlFrame rl_control_frame;
 static RLShadowSnapshot rl_pd_snapshot;
@@ -534,10 +533,9 @@ void legLengthCalc()
     l_xx = fmax(0.16f, l_xx);
     l_xx = fmin(0.36f, l_xx);
 
-    const int can_extend = ChassisNormalLQRState() &&
-                           !(reset_time >= 5000 && F_n < 80.0f);
-    l_xx = RLControlLegRampStep(&rl_leg_ramp, xTaskGetTickCount(),
-                                can_extend, l_xx);
+    l_xx = RLControlLegRampStep(&rl_control_state, xTaskGetTickCount(),
+                                ChassisNormalLQRState(), l_xx);
+
 
     // 腿长差补偿拟通过roll补偿解决，当然之前的计算方法也可以保留，后续验证后再决定是否加入
     l_tar = l_xx;
@@ -849,8 +847,9 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     taskENTER_CRITICAL();
     q[0]=jiont_motorlf->measure.pos;q[1]=jiont_motorlb->measure.pos;
     q[2]=jiont_motorrf->measure.pos;q[3]=jiont_motorrb->measure.pos;
-    dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
-    dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
+    // dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
+    // dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
+    dq[0]=0;dq[1]=0;dq[2]=0;dq[3]=0;
     wheel[0]=motor_l->measure.speed_aps;wheel[1]=motor_r->measure.speed_aps;
     out.driver_reported_leg_torque_motor_nm[0]=jiont_motorlf->measure.tor;
     out.driver_reported_leg_torque_motor_nm[1]=jiont_motorlb->measure.tor;
@@ -892,7 +891,7 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     out.motion.command_height_m=.34f;
     out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE && !chassis_status);
     out.rl_active=(out.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
-                   rl_leg_ramp.completed && !rl_control_state.fault);
+                   rl_control_state.ready && !rl_control_state.fault);
     RLControlFillPrevious(&rl_control_state,&out);
     return out;
 }
@@ -903,10 +902,9 @@ void outputTorque()
     rl_control_frame.tick_ms=rl_pd_snapshot.tick_ms;
     rl_command_consumed=0u;
     chassis_lqr_output_valid = 0u;
-    if (!ChassisNormalLQRState()) {
-        (void)RLControlStep(&rl_control_state, &rl_leg_ramp,
-                            xTaskGetTickCount(), 0, NULL);
-    }
+    /* Start the inference hold only after the leg ramp completes. */
+    (void)RLControlStep(&rl_control_state,
+                        xTaskGetTickCount(), ChassisNormalLQRState(), NULL);
     // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
     // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
 
@@ -1191,7 +1189,7 @@ void outputTorque()
                 RLControlState pending=rl_control_state;
                 RLControlFrame frame={0};
                 const int use_rl=RL_CONTROL_OUTPUT_ENABLED &&
-                    RLControlExecute(&pending,&rl_leg_ramp,xTaskGetTickCount(),
+                    RLControlExecute(&pending,xTaskGetTickCount(),
                                      ChassisNormalLQRState(),&current,candidate,&frame)==0;
                 if (use_rl) {
                     memcpy(selected_leg,frame.final_motor_nm,sizeof(selected_leg));
@@ -1294,7 +1292,7 @@ void ChassisTask()
     {
     case CHASSIS_ZERO_FORCE:
         if (rl_control_state.timing || rl_control_state.active || rl_control_state.fault)
-            RLControlReset(&rl_control_state,&rl_leg_ramp);
+            RLControlReset(&rl_control_state);
         chassis_status = 1;
         cent = 0;
         done = 0;
@@ -1371,7 +1369,7 @@ void ChassisTask()
     RLCapturePush(&shadow,rl_command_consumed?&rl_consumed_command:NULL,&rl_control_frame);
     RLControlFillPrevious(&rl_control_state,&shadow);
     shadow.rl_active=(shadow.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
-                      rl_leg_ramp.completed && !rl_control_state.fault);
+                      rl_control_state.ready && !rl_control_state.fault);
     shadow.motion.lqr_leg_torque_motor_nm[0]=lfjt;
     shadow.motion.lqr_leg_torque_motor_nm[1]=lbjt;
     shadow.motion.lqr_leg_torque_motor_nm[2]=rfjt;

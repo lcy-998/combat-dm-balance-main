@@ -15,6 +15,7 @@ static unsigned inference_calls,iterations,command_writes;
 static TickType_t tick;
 static RLShadowSnapshot snapshot;
 static RLShadowCommand published;
+static RLControlState controller;
 static jmp_buf finished;
 static QueueHandle_t snapshot_queue,command_queue;
 
@@ -24,22 +25,61 @@ QueueHandle_t xQueueCreateStatic(unsigned n,unsigned size,uint8_t *storage,Stati
 int xQueuePeek(QueueHandle_t queue,void *dst,unsigned timeout)
 {(void)timeout;if(queue==snapshot_queue){memcpy(dst,&snapshot,sizeof(snapshot));return pdPASS;}return 0;}
 int xQueueOverwrite(QueueHandle_t queue,const void *value)
-{if(queue==command_queue){memcpy(&published,value,sizeof(published));command_writes++;}return pdPASS;}
+{
+    if(queue==command_queue) {
+        memcpy(&published,value,sizeof(published));command_writes++;
+        assert(published.valid==(iterations==2 || iterations==5 || iterations==6));
+        if (published.valid) {
+            if (iterations==2 || controller.epoch!=snapshot.control_epoch) {
+                memset(&controller,0,sizeof(controller));
+                controller.ramp_completed=1;controller.timing=1;
+                controller.wait_start_tick=tick-5000u;
+                controller.epoch=snapshot.control_epoch;
+            }
+            assert(published.previous_source==RL_PREVIOUS_INFERENCE);
+            assert(published.previous_sequence==0u);
+            RLShadowSnapshot current=snapshot;
+            RLControlFillPrevious(&controller,&current);
+            RLControlFrame frame;
+            assert(RLControlExecute(&controller,tick,1,&current,&published,&frame)==0);
+            assert(frame.owner==RL_OWNER_RL && controller.active);
+            assert(controller.adopted_sequence==snapshot.sequence);
+        }
+    }
+    return pdPASS;
+}
 TickType_t xTaskGetTickCount(void){return tick;}
 void vTaskDelayUntil(TickType_t *last,TickType_t period)
 {
     assert(period==10);
-    if (++iterations>3) longjmp(finished,1);
+    if (++iterations>6) longjmp(finished,1);
+    if (iterations==2) assert(inference_calls==0 && !g_rl_shadow_debug.rl_torque_valid);
+    if (iterations==3) {
+        const float spring=16.5f*sinf(.5f);
+        assert(g_rl_shadow_debug.rl_torque_valid && g_rl_shadow_debug.stage==5);
+        assert(fabsf(g_rl_shadow_debug.rl_leg_torque_nm[0]-(-24.0f-spring))<1e-4f);
+        assert(g_rl_shadow_debug.controller_owner==RL_OWNER_LQR);
+    }
+    if (iterations==4 || iterations==5) {
+        assert(!g_rl_shadow_debug.rl_torque_valid);
+        if (iterations==4) assert(g_rl_shadow_debug.failure==9u);
+        for (unsigned i=0;i<4;++i) assert(g_rl_shadow_debug.rl_leg_torque_nm[i]==0);
+        for (unsigned i=0;i<2;++i) assert(g_rl_shadow_debug.rl_wheel_torque_nm[i]==0);
+    }
+    if (iterations>1) assert(published.valid==(iterations==3 || iterations==6));
     tick=*last+period;*last=tick;
     memset(&snapshot,0,sizeof(snapshot));snapshot.sequence=iterations;snapshot.tick_ms=tick;
-    snapshot.control_epoch=7;snapshot.chassis_ready=1;snapshot.rl_active=1;
+    snapshot.control_epoch=7;snapshot.chassis_ready=1;snapshot.rl_active=(iterations!=1 && iterations!=4);
+    if (iterations==6) snapshot.control_epoch=8;
     snapshot.feedback_valid_mask=0x3f;snapshot.imu_update_sequence=1;snapshot.imu_update_tick_ms=tick;
     for(unsigned j=0;j<6;++j)snapshot.feedback_receive_tick_ms[j]=tick;
     snapshot.motion.gravity_model[1]=-1;snapshot.motion.command_height_m=.34f;
     snapshot.motion.previous_target_valid=1;
+    snapshot.leg_length_m[0]=snapshot.leg_length_m[1]=iterations==3?0.0f:.28f;
+    snapshot.leg_spread_rad[0]=snapshot.leg_spread_rad[1]=.5f;
     snapshot.previous_source=iterations==1?RL_PREVIOUS_INIT_PROXY:RL_PREVIOUS_ADOPTED;
     snapshot.adopted_sequence=iterations==1?0:99;
-    /* Must use owner-supplied cache, never the last fake network output (.8). */
+    /* Deliberately different from policy history; this cache must be ignored. */
     snapshot.motion.previous_target[0]=.03f*(float)iterations;
 }
 void vTaskSuspend(void *task){(void)task;assert(!"unexpected task suspension");}
@@ -51,12 +91,13 @@ int ai_tjb_network_run(ai_handle h,ai_buffer *a,ai_buffer *b)
 {
     (void)h;(void)a;(void)b;
     if (inference_calls++==0) {
-        const float golden[6]={.007079028f,.019301796f,.000087026f,-.003934855f,-.009344813f,-.012714249f};
+        const float golden[6]={0.090106122f, 0.169252515f, -0.031314105f, -0.178681627f, 0.094812252f, -0.002255697f};
         memcpy(output,golden,sizeof(output));return 1;
     }
-    assert(fabsf(input[16]-(.03f*(float)iterations/1.5f))<1e-6f);
+    const float previous = iterations==3 ? .4f : 0.0f;
+    for (unsigned i=16;i<22;++i) assert(fabsf(input[i]-previous)<1e-6f);
     assert(input[22]==0 && input[23]==0 && input[24]==.68f);
-    for(unsigned i=0;i<6;++i)output[i]=.8f;
+    for(unsigned i=0;i<6;++i)output[i]=fminf(1.0f,.2f*(float)iterations);
     return 1;
 }
 void getPhi(float a,float b,float c,float d,float e,float f,float g,float *p2,float *p3,float *length,float *theta)
@@ -65,11 +106,24 @@ int main(void)
 {
     RLShadowQueueInit();
     if (!setjmp(finished))RLShadowTask(NULL);
-    assert(inference_calls==4 && command_writes==3 && published.valid);
-    assert(published.control_epoch==7 && published.previous_sequence==99);
-    assert(published.preview.target[0]==1.2f && published.preview.target[2]==80);
+    assert(RL_CONTROL_OUTPUT_ENABLED==1u);
+    assert(inference_calls==5 && command_writes==6 && published.valid);
+    assert(g_rl_shadow_debug.rl_target_valid);
+    assert(g_rl_shadow_debug.rl_torque_valid && g_rl_shadow_debug.failure==0);
+    const float spring=16.5f*sinf(.5f);
+    const float expected[4]={-40.0f,-40.0f+spring,40.0f,-40.0f};
+    for (unsigned i=0;i<4;++i)
+        assert(fabsf(g_rl_shadow_debug.rl_leg_torque_nm[i]-expected[i])<1e-4f);
+    for (unsigned i=0;i<2;++i)
+        assert(fabsf(g_rl_shadow_debug.rl_wheel_torque_nm[i]+
+                     RL_CONTROL_WHEEL_RAW_LIMIT/RL_MOTION31_WHEEL_CURRENT_PER_NM)<1e-5f);
+    assert(g_rl_shadow_debug.controller_owner==RL_OWNER_LQR);
+    assert(g_rl_shadow_debug.decoded_target[0]==1.5f);
+    assert(g_rl_shadow_debug.decoded_target[2]==100.0f);
     assert(g_rl_shadow_debug.frame_begin==g_rl_shadow_debug.frame_end);
-    assert(!(g_rl_shadow_debug.frame_begin&1u) && g_rl_shadow_debug.previous_target_is_virtual==0);
-    puts("Real RLShadowTask: owner cache, target-only publication, atomic debug boundary passed");
+    assert(!(g_rl_shadow_debug.frame_begin&1u));
+    assert(g_rl_shadow_debug.previous_source==RL_PREVIOUS_INFERENCE);
+    assert(g_rl_shadow_debug.previous_target_is_virtual==1);
+    puts("Real RLShadowTask: delayed inference, previous inference feedback, torque diagnostics and immediate RL adoption passed");
     return 0;
 }
