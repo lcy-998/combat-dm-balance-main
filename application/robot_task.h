@@ -18,6 +18,7 @@
 
 #include "bsp_log.h"
 #include "chassis/rl_shadow.h"
+#include "chassis/hip_ident_config.h"
 
 osThreadId insTaskHandle;
 osThreadId robotTaskHandle;
@@ -42,7 +43,7 @@ void StartRLMotion31ShadowTask(void const *argument);
  */
 void OSTaskInit()
 {
-#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+#if (defined(ONE_BOARD) || defined(CHASSIS_BOARD)) && !HIP_IDENT_ENABLED
     RLShadowQueueInit();
 #endif
     osThreadDef(instask, StartINSTASK, osPriorityAboveNormal, 0, 1024);

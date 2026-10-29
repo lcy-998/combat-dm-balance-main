@@ -8,6 +8,7 @@
 typedef struct
 {
     Chassis_Ctrl_Cmd_s *ctrl_dst;
+    volatile uint32_t receive_tick_ms, receive_sequence;
 } ChassisCanCtrlRxCtx;
 
 typedef struct
@@ -64,8 +65,12 @@ static void ChassisCanCtrlRxCallback(CANInstance *_instance)
     ChassisCanCtrlRxCtx *ctx = (ChassisCanCtrlRxCtx *)_instance->id;
     Chassis_Ctrl_Cmd_CAN_s rx_data;
 
+    if (_instance->rx_len != sizeof(rx_data)) return;
     memcpy(&rx_data, _instance->rx_buff, sizeof(rx_data));
+    if (rx_data.chassis_mode > CHASSIS_FOLLOW_GIMBAL_YAW) return;
     ChassisCanUnpackCtrl(ctx->ctrl_dst, &rx_data);
+    ctx->receive_tick_ms = HAL_GetTick();
+    if (++ctx->receive_sequence == 0u) ++ctx->receive_sequence;
 }
 
 static void ChassisCanUploadRxCallback(CANInstance *_instance)

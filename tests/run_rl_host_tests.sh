@@ -23,4 +23,11 @@ for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture te
     fi
     printf 'PASS %s\n' "$name"
 done
-printf '5/5 host tests passed; no firmware flash, hardware access or real-time certification.\n'
+for side in 0 1; do
+    "$cc_bin" -std=c11 -O2 -Wall -Wextra -Werror -DRL_KINEMATICS_HOST -DHIP_IDENT_SIDE="$side" \
+        "-I$core" "$repo/tests/test_hip_ident.c" "$core/hip_ident.c" \
+        "$core/rl_motion31.c" "$core/rl_control.c" "$repo/application/balance/legalgorithm.c" \
+        -lm -o "$tmp/test_hip_ident_$side"
+    "$tmp/test_hip_ident_$side"
+done
+printf '7/7 host tests passed; no firmware flash, hardware access or real-time certification.\n'

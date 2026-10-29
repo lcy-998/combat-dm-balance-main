@@ -35,6 +35,7 @@
 /* USER CODE BEGIN Includes */
 #include "robot.h"
 #include "bsp_log.h"
+#include "hip_ident_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -133,7 +134,9 @@ int main(void)
   MX_UART8_Init();
   MX_UART9_Init();
   MX_I2C2_Init();
+#if !HIP_IDENT_ENABLED
   MX_X_CUBE_AI_Init();
+#endif
   /* USER CODE BEGIN 2 */
   RobotInit(); // Ψһ�ĳ�ʼ������
   LOGINFO("[main] SystemInit() and RobotInit() done");

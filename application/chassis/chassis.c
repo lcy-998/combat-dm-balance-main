@@ -34,6 +34,7 @@
 #include "rl_shadow.h"
 #include "rl_control.h"
 #include "rl_capture.h"
+#include "hip_ident.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include <math.h>
@@ -301,7 +302,9 @@ void ChassisInit()
     motor_r->motor_controller.current_feedforward_ptr = &rwi;
     /* 128 records, 112 after trigger: ~0.56s post at 200Hz. Final ELF RAM
        usage must be reviewed before flashing; capacity is a compile-time setting. */
+#if !HIP_IDENT_ENABLED
     RLCaptureArm(RL_CAPTURE_CAPACITY-17u);
+#endif
     jiontmotor.can_init_config.can_handle = &hfdcan1;
     jiontmotor.can_init_config.tx_id = 0x01;
     jiontmotor.can_init_config.rx_id = 0x11; // l电机的接收id
@@ -847,9 +850,8 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     taskENTER_CRITICAL();
     q[0]=jiont_motorlf->measure.pos;q[1]=jiont_motorlb->measure.pos;
     q[2]=jiont_motorrf->measure.pos;q[3]=jiont_motorrb->measure.pos;
-    // dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
-    // dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
-    dq[0]=0;dq[1]=0;dq[2]=0;dq[3]=0;
+    dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
+    dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
     wheel[0]=motor_l->measure.speed_aps;wheel[1]=motor_r->measure.speed_aps;
     out.driver_reported_leg_torque_motor_nm[0]=jiont_motorlf->measure.tor;
     out.driver_reported_leg_torque_motor_nm[1]=jiont_motorlb->measure.tor;
@@ -863,7 +865,8 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     for (unsigned i=0;i<6;++i) {
         if (legs[i]!=NULL) {
             out.feedback_receive_tick_ms[i]=legs[i]->feedback_receive_tick_ms;
-            if (legs[i]->feedback_sequence) out.feedback_valid_mask|=1u<<i;
+            if (legs[i]->feedback_sequence && legs[i]->online && legs[i]->measure.state)
+                out.feedback_valid_mask|=1u<<i;
         }
     }
     out.feedback_receive_tick_ms[2]=motor_r->feedback_receive_tick_ms;
@@ -871,7 +874,7 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     if (motor_r->feedback_sequence) out.feedback_valid_mask|=1u<<2;
     if (motor_l->feedback_sequence) out.feedback_valid_mask|=1u<<5;
     out.imu_update_tick_ms=IMU_data->update_tick_ms;out.imu_update_sequence=IMU_data->update_sequence;
-    out.tick_ms=xTaskGetTickCount();
+    out.tick_ms=xTaskGetTickCount()*portTICK_PERIOD_MS;
     static uint32_t sequence;
     if (++sequence==0u) ++sequence;
     out.sequence=sequence;
@@ -882,9 +885,8 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     RLMotion31MapWheelMotorSpeeds(&out.motion,wheel[0]/REDUCE_RATIO*DEGREE_2_RAD,
                                              wheel[1]/REDUCE_RATIO*DEGREE_2_RAD);
     RLMotion31MapLqrAttitude(&out.motion,r,p,dr,dp,dy);
-    float phi2,phi3,theta0;
-    getPhi(lf,lb,L_1,L_2,L_3,L_4,L_5,&phi2,&phi3,&out.leg_length_m[0],&theta0);
-    getPhi(rf,rb,L_1,L_2,L_3,L_4,L_5,&phi2,&phi3,&out.leg_length_m[1],&theta0);
+    out.leg_length_m[0]=Lleg->result->L0;
+    out.leg_length_m[1]=Rleg->result->L0;
     out.leg_spread_rad[0]=lf-lb;out.leg_spread_rad[1]=rf-rb;
     out.lqr_pitch_rad=p;
     out.motion.command_vx_m_s=v_cmd;out.motion.command_yaw_rad_s=w_cmd;
@@ -1220,8 +1222,75 @@ void outputTorque()
 }
 
 /* 机器人底盘控制核心任务 */
+
+#if HIP_IDENT_ENABLED
+static HipIdentState hip_ident_state;
+
+static void HipIdentChassisTask(void)
+{
+    const uint32_t now=xTaskGetTickCount()*portTICK_PERIOD_MS;
+    int link_ok=0,emergency=1;
+    taskENTER_CRITICAL();
+#ifdef ONE_BOARD
+    static uint32_t command_tick,command_seen;
+    if(SubGetMessage(chassis_sub,&chassis_cmd_recv)) {command_tick=now;command_seen=1u;}
+    link_ok=command_seen && (uint32_t)(now-command_tick)<=HIP_IDENT_COMMAND_TIMEOUT_MS;
+#endif
+#ifdef CHASSIS_BOARD
+    link_ok=chassis_ctrl_rx_ctx.receive_sequence!=0u &&
+        (uint32_t)(HAL_GetTick()-chassis_ctrl_rx_ctx.receive_tick_ms)<=HIP_IDENT_COMMAND_TIMEOUT_MS;
+#endif
+    emergency=chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE;
+    taskEXIT_CRITICAL();
+
+    /* Feedback/forward kinematics only. No stand-up, LQR, VMC, or policy inference. */
+    getLegData();
+    RLShadowSnapshot feedback=CurrentRLSnapshot();
+    HipIdentFrame frame;
+    const int enabled=HipIdentStep(&hip_ident_state,now,emergency,link_ok,&feedback,&frame);
+    static uint32_t sequence;
+    if(++sequence==0u)++sequence;
+    DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
+    const unsigned first=HIP_IDENT_SIDE==0u?0u:2u;
+    taskENTER_CRITICAL();
+    DJIMotorStop(motor_l);DJIMotorStop(motor_r);lwi=0.0f;rwi=0.0f;
+    for(unsigned i=0;i<4u;++i) {
+        motor_ctrl_t *ctrl=&motors[i]->ctrl;
+        ctrl->mode=0u;ctrl->host_position_pd=0u;
+        ctrl->pos_set=0.0f;ctrl->vel_set=0.0f;ctrl->kp_set=0.0f;ctrl->kd_set=0.0f;
+        ctrl->control_sequence=sequence;
+        ctrl->tor_set=enabled?frame.motor_request_nm[i]:0.0f;
+        if(enabled && i>=first && i<first+2u)DMMotorEnable1(motors[i]);
+        else DMMotorStop(motors[i]);
+    }
+    taskEXIT_CRITICAL();
+    /* Separate metadata seqlock protects the compact signal-only debug export. */
+    const uint32_t commit=sequence*2u;
+    g_hip_ident_status.sequence=commit|1u;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    g_hip_ident_debug=frame.debug;
+    frame.status.sequence=commit|1u;
+    g_hip_ident_status=frame.status;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    g_hip_ident_status.sequence=commit;
+    chassis_feedback_data.standup_flag=0u;
+#ifdef ONE_BOARD
+    PubPushMessage(chassis_pub,(void *)&chassis_feedback_data);
+#endif
+#ifdef CHASSIS_BOARD
+    Chassis_Upload_Data_CAN_s tx_data;
+    ChassisCanPackUpload(&tx_data,&chassis_feedback_data);
+    memcpy(chassis_can->tx_buff,&tx_data,sizeof(tx_data));
+    CANTransmit(chassis_can,0.01f);
+#endif
+}
+#endif
+
 void ChassisTask()
 {
+#if HIP_IDENT_ENABLED
+    HipIdentChassisTask();
+#else
 #ifdef ONE_BOARD
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
 #endif
@@ -1394,4 +1463,5 @@ void ChassisTask()
 
     CANTransmit(chassis_can, 0.01);
 #endif // CHASSIS_BOARD
+#endif
 }

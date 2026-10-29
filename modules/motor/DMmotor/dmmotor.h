@@ -20,6 +20,7 @@
 
 typedef struct
 {
+    uint32_t control_sequence; /* identification sample which produced this request */
     uint8_t mode;
     uint8_t host_position_pd; /* MCU shortest-angle PD; MIT gains sent as zero */
     float pos_set;
@@ -57,6 +58,10 @@ typedef struct
     MotorSet motor_set;
     motor_ctrl_t ctrl;
     float sent_torque_nm;
+    uint32_t packed_control_sequence;
+    /* Latest CAN enqueue attempt. tx_ok reports HAL enqueue, not remote acceptance. */
+    float tx_torque_nm;
+    uint32_t tx_code, tx_sequence, tx_tick_ms, tx_control_sequence, tx_frame_type, tx_ok;
     float host_position_error_rad;
 
     motor_fbpara_t measure;         // 电机测量值

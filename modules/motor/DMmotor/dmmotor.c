@@ -174,6 +174,7 @@ void DMMotorControl()
     for (size_t i = 0; i < idm; ++i)
     {
         motor = dmmotor_instance[i];
+        taskENTER_CRITICAL();
         if (motor->stop_flag == MOTOR_STOP)
         {
             motor->ctrl.host_position_pd = 0u;
@@ -187,15 +188,19 @@ void DMMotorControl()
         // memset(motor->motor_can_instance->tx_buff, 0, sizeof(motor->motor_can_instance->tx_buff));
         // memcpy(motor->motor_can_instance->tx_buff, &motor_controller->output_current, sizeof(float));
         // motor->motor_can_instance->tx_buff[6] = 0x01;
+        taskEXIT_CRITICAL();
+        uint32_t frame_type=2u;
         if (motor->online && motor->measure.state)
         {
             switch (motor->ctrl.mode) // 控制模式
             {
             case 0:
                 mit_ctrl(motor);
+                frame_type=1u;
                 break;
             case 1:
                 pos_ctrl(motor);
+                frame_type=3u;
             default:
                 break;
             }
@@ -205,7 +210,18 @@ void DMMotorControl()
             DMMotorEnableMode(motor);
         }
 
-        CANTransmit(motor->motor_can_instance, 0.1);
+        const uint8_t tx_ok=CANTransmit(motor->motor_can_instance, 0.1);
+        const uint32_t code=((uint32_t)(motor->motor_can_instance->tx_buff[6]&0x0fu)<<8)
+                            |motor->motor_can_instance->tx_buff[7];
+        const float limit=motor->motor_set.flag?motor->motor_set.TorMXSet:DMT_MAX;
+        taskENTER_CRITICAL();
+        motor->tx_frame_type=frame_type;motor->tx_ok=tx_ok;
+        motor->tx_code=frame_type==1u?code:0u;
+        motor->tx_torque_nm=frame_type==1u?uint_to_float((int)code,-limit,limit,12):0.0f;
+        motor->tx_control_sequence=frame_type==1u?motor->packed_control_sequence:0u;
+        motor->tx_tick_ms=xTaskGetTickCount()*portTICK_PERIOD_MS;
+        motor->tx_sequence++;
+        taskEXIT_CRITICAL();
     }
 }
 
@@ -252,6 +268,7 @@ void mit_ctrl(DMMotorInstance *motor) //
         command.kd_set = 0.0f;
     }
     motor->sent_torque_nm = command.tor_set;
+    motor->packed_control_sequence=command.control_sequence;
 
     if (motor->motor_set.flag)
     {

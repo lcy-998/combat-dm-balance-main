@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "chassis/rl_shadow.h"
+#include "chassis/hip_ident_config.h"
 #include "robot_def.h"
 
 /* USER CODE END Includes */
@@ -143,7 +144,7 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+#if (defined(ONE_BOARD) || defined(CHASSIS_BOARD)) && !HIP_IDENT_ENABLED
   osThreadDef(rlMotion31Task, StartRLMotion31ShadowTask, osPriorityBelowNormal, 0, 1024);
   rlMotion31TaskHandle = osThreadCreate(osThread(rlMotion31Task), NULL);
   if (rlMotion31TaskHandle == NULL) Error_Handler();
