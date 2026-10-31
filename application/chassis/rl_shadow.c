@@ -138,11 +138,11 @@ static int network_run(const float observation[RL_MOTION31_OBSERVATION_SIZE],
 
 static void check_target_network_golden(void)
 {
-    /* Zero-pose numerical fixture for motion_10_26.onnx, not a motion test. */
+    /* Zero-pose numerical fixture for actor10_31.onnx, not a motion test. */
     static const float observation[RL_MOTION31_OBSERVATION_SIZE] = {
         [4] = -1.0f, [24] = 0.68f, [25] = 1.0f, [28] = 1.0f};
     static const float expected[RL_MOTION31_ACTION_SIZE] = {
-        0.090106122f, 0.169252515f, -0.031314105f, -0.178681627f, 0.094812252f, -0.002255697f};
+        -0.029689780f, -0.053312529f, 0.011978186f, 0.044323616f, -0.105392888f, 0.004924682f};
     float actual[RL_MOTION31_ACTION_SIZE];
     if (network_run(observation, actual) != 0) {
         working_debug.golden_checked = 0u;

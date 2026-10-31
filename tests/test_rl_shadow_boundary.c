@@ -91,7 +91,7 @@ int ai_tjb_network_run(ai_handle h,ai_buffer *a,ai_buffer *b)
 {
     (void)h;(void)a;(void)b;
     if (inference_calls++==0) {
-        const float golden[6]={0.090106122f, 0.169252515f, -0.031314105f, -0.178681627f, 0.094812252f, -0.002255697f};
+        const float golden[6]={-0.029689780f, -0.053312529f, 0.011978186f, 0.044323616f, -0.105392888f, 0.004924682f};
         memcpy(output,golden,sizeof(output));return 1;
     }
     const float previous = iterations==3 ? .4f : 0.0f;

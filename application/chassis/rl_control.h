@@ -4,7 +4,7 @@
 #include "rl_shadow.h"
 
 #define RL_CONTROL_LEG_RAMP_MS 5000u
-#define RL_CONTROL_LEG_TARGET_M 0.26f
+#define RL_CONTROL_LEG_TARGET_M 0.28f
 #define RL_CONTROL_INFERENCE_DELAY_MS 5000u
 #define RL_CONTROL_COMMAND_MAX_AGE_MS 24u
 /* Adopt policy output after the five-second ramp and five-second hold. */
