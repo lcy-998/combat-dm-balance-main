@@ -17,6 +17,7 @@
 #include "buzzer.h"
 
 #include "bsp_log.h"
+#include "rl_shadow.h"
 
 osThreadId insTaskHandle;
 osThreadId robotTaskHandle;
@@ -40,6 +41,9 @@ void StartUITASK(void const *argument);
  */
 void OSTaskInit()
 {
+#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+    RLShadowQueueInit();
+#endif
     osThreadDef(instask, StartINSTASK, osPriorityAboveNormal, 0, 1024);
     insTaskHandle = osThreadCreate(osThread(instask), NULL); // 由于是阻塞读取传感器,为姿态解算设置较高优先级,确保以1khz的频率执行
     // // 后续修改为读取传感器数据准备好的中断处理,

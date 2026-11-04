@@ -24,7 +24,7 @@ void BuzzerInit()
 
 BuzzzerInstance *BuzzerRegister(Buzzer_config_s *config)
 {
-    if (config->alarm_level > BUZZER_DEVICE_CNT) // 超过最大实例数,考虑增加或查看是否有内存泄漏
+    if (config->alarm_level >= BUZZER_DEVICE_CNT) // 超过最大实例数,考虑增加或查看是否有内存泄漏
         while (1)
             ;
     BuzzzerInstance *buzzer_temp = (BuzzzerInstance *)malloc(sizeof(BuzzzerInstance));
@@ -50,6 +50,10 @@ void BuzzerTask()
     for (size_t i = 0; i < BUZZER_DEVICE_CNT; ++i)
     {
         buzz = buzzer_list[i];
+        if (buzz == NULL)
+        {
+            continue;
+        }
         if (buzz->alarm_level > ALARM_LEVEL_LOW)
         {
             continue;
