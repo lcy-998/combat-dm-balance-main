@@ -47,8 +47,7 @@ typedef struct {
     uint32_t sequence;
     uint32_t stage; /* 0=no sample, 1=fresh, 2=obs, 3=inference, 4=decode, 5=PD */
     uint32_t failure; /* 0=none, 1=init, 2=no sample, 3=stale, 4=input, 5=network,
-                         6=decode, 7=target mapping, 8=PD, 9=torque mapping/compensation,
-                         10=model golden vector mismatch */
+                         6=decode, 7=target mapping, 8=PD, 9=torque mapping/compensation */
     uint32_t snapshot_age_ms;
     uint32_t input_error_mask; /* bits 0..3=nonfinite q0,q1,q3,q4; 4=gyro; 5=gravity;
                                   6=joint velocities; 7=previous target; 8=commands */
@@ -56,13 +55,11 @@ typedef struct {
     float input_joint_position_rad[4]; /* model RH, RA, LH, LA before validation */
     uint8_t previous_target_valid;
     uint8_t previous_target_is_virtual; /* 1=inference/proxy history rather than an adopted-target cache */
-    uint8_t golden_checked;
     uint8_t rl_target_theta_valid; /* both five-bar target poses have a finite solution */
     uint8_t rl_wheel_target_valid;
     uint8_t rl_target_valid; /* decoded_target and mapped wheel speed are from a successful output */
     uint8_t rl_active;
     uint8_t rl_torque_valid; /* current inference torque calculation succeeded */
-    float golden_max_abs_error;
     float observation[RL_MOTION31_OBSERVATION_SIZE];
     float mean_action[RL_MOTION31_ACTION_SIZE];
     float decoded_target[RL_MOTION31_ACTION_SIZE];

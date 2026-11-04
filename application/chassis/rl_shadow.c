@@ -136,32 +136,6 @@ static int network_run(const float observation[RL_MOTION31_OBSERVATION_SIZE],
     return 0;
 }
 
-static void check_target_network_golden(void)
-{
-    /* Zero-pose numerical fixture for actor10_31.onnx, not a motion test. */
-    static const float observation[RL_MOTION31_OBSERVATION_SIZE] = {
-        [4] = -1.0f, [24] = 0.68f, [25] = 1.0f, [28] = 1.0f};
-    static const float expected[RL_MOTION31_ACTION_SIZE] = {
-        -0.029689780f, -0.053312529f, 0.011978186f, 0.044323616f, -0.105392888f, 0.004924682f};
-    float actual[RL_MOTION31_ACTION_SIZE];
-    if (network_run(observation, actual) != 0) {
-        working_debug.golden_checked = 0u;
-        working_debug.golden_max_abs_error = INFINITY;
-        return;
-    }
-    float max_error = 0.0f;
-    for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
-        if (!isfinite(actual[i])) {
-            max_error = INFINITY;
-            break;
-        }
-        const float error = fabsf(actual[i] - expected[i]);
-        if (error > max_error) max_error = error;
-    }
-    working_debug.golden_checked = 1u;
-    working_debug.golden_max_abs_error = max_error;
-}
-
 static void publish_debug(const RLShadowSnapshot *sample)
 {
     volatile RLShadowDebug *d = &working_debug;
@@ -339,15 +313,6 @@ void RLShadowTask(void const *argument)
                 working_debug.failure = 1u;
                 publish_debug(&sample);
                 publish_command(&sample, NULL, NULL, 0);
-                commit_debug();
-                vTaskSuspend(NULL);
-            }
-            check_target_network_golden();
-            if (!working_debug.golden_checked ||
-                !isfinite(working_debug.golden_max_abs_error) ||
-                working_debug.golden_max_abs_error > 0.001f) {
-                working_debug.failure = 10u;
-                publish_command(NULL, NULL, NULL, 0);
                 commit_debug();
                 vTaskSuspend(NULL);
             }

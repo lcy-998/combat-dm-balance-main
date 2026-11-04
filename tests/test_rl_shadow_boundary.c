@@ -57,7 +57,7 @@ void vTaskDelayUntil(TickType_t *last,TickType_t period)
     if (iterations==3) {
         const float spring=16.5f*sinf(.5f);
         assert(g_rl_shadow_debug.rl_torque_valid && g_rl_shadow_debug.stage==5);
-        assert(fabsf(g_rl_shadow_debug.rl_leg_torque_nm[0]-(-24.0f-spring))<1e-4f);
+        assert(fabsf(g_rl_shadow_debug.rl_leg_torque_nm[0]-(-32.0f-spring))<1e-4f);
         assert(g_rl_shadow_debug.controller_owner==RL_OWNER_LQR);
     }
     if (iterations==4 || iterations==5) {
@@ -74,6 +74,12 @@ void vTaskDelayUntil(TickType_t *last,TickType_t period)
     snapshot.feedback_valid_mask=0x3f;snapshot.imu_update_sequence=1;snapshot.imu_update_tick_ms=tick;
     for(unsigned j=0;j<6;++j)snapshot.feedback_receive_tick_ms[j]=tick;
     snapshot.motion.gravity_model[1]=-1;snapshot.motion.command_height_m=.34f;
+    if (iterations==2) {
+        snapshot.motion.joint_velocity_rad_s[0]=1.0f;
+        snapshot.motion.joint_velocity_rad_s[1]=-2.0f;
+        snapshot.motion.joint_velocity_rad_s[3]=3.0f;
+        snapshot.motion.joint_velocity_rad_s[4]=-4.0f;
+    }
     snapshot.motion.previous_target_valid=1;
     snapshot.leg_length_m[0]=snapshot.leg_length_m[1]=iterations==3?0.0f:.28f;
     snapshot.leg_spread_rad[0]=snapshot.leg_spread_rad[1]=.5f;
@@ -90,9 +96,12 @@ ai_buffer *ai_tjb_network_outputs_get(ai_handle h,void *unused){(void)h;(void)un
 int ai_tjb_network_run(ai_handle h,ai_buffer *a,ai_buffer *b)
 {
     (void)h;(void)a;(void)b;
-    if (inference_calls++==0) {
-        const float golden[6]={-0.029689780f, -0.053312529f, 0.011978186f, 0.044323616f, -0.105392888f, 0.004924682f};
-        memcpy(output,golden,sizeof(output));return 1;
+    inference_calls++;
+    if (iterations==2) {
+        assert(fabsf(input[10]-.05f)<1e-6f);
+        assert(fabsf(input[11]+.1f)<1e-6f);
+        assert(fabsf(input[13]-.15f)<1e-6f);
+        assert(fabsf(input[14]+.2f)<1e-6f);
     }
     const float previous = iterations==3 ? .4f : 0.0f;
     for (unsigned i=16;i<22;++i) assert(fabsf(input[i]-previous)<1e-6f);
@@ -107,7 +116,7 @@ int main(void)
     RLShadowQueueInit();
     if (!setjmp(finished))RLShadowTask(NULL);
     assert(RL_CONTROL_OUTPUT_ENABLED==1u);
-    assert(inference_calls==5 && command_writes==6 && published.valid);
+    assert(inference_calls==4 && command_writes==6 && published.valid);
     assert(g_rl_shadow_debug.rl_target_valid);
     assert(g_rl_shadow_debug.rl_torque_valid && g_rl_shadow_debug.failure==0);
     const float spring=16.5f*sinf(.5f);

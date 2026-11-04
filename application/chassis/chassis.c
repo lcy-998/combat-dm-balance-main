@@ -847,9 +847,8 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     taskENTER_CRITICAL();
     q[0]=jiont_motorlf->measure.pos;q[1]=jiont_motorlb->measure.pos;
     q[2]=jiont_motorrf->measure.pos;q[3]=jiont_motorrb->measure.pos;
-    // dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
-    // dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
-    dq[0]=0;dq[1]=0;dq[2]=0;dq[3]=0;
+    dq[0]=jiont_motorlf->measure.vel;dq[1]=jiont_motorlb->measure.vel;
+    dq[2]=jiont_motorrf->measure.vel;dq[3]=jiont_motorrb->measure.vel;
     wheel[0]=motor_l->measure.speed_aps;wheel[1]=motor_r->measure.speed_aps;
     out.driver_reported_leg_torque_motor_nm[0]=jiont_motorlf->measure.tor;
     out.driver_reported_leg_torque_motor_nm[1]=jiont_motorlb->measure.tor;
