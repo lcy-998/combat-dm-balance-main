@@ -2,8 +2,8 @@
 """Replace a fixed X-CUBE-AI network's FP32 weights from a compatible ONNX.
 
 Usage:
-  python tools/update_tjb_network_weights.py --target tjb_network path/to/actor.onnx
-  python tools/update_tjb_network_weights.py --target network path/to/policy.onnx
+  python tools/update_xcube_ai_weights.py --target tjb_network path/to/actor.onnx
+  python tools/update_xcube_ai_weights.py --target network path/to/policy.onnx
 
 Only the learned FP32 initializers may change for the selected target.
 """
