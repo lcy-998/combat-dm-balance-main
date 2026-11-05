@@ -968,7 +968,7 @@ STMicroelectronics.X-CUBE-AI.10.0.0.ModelRamOccupation-7b91c18f8827a57faaacea54d
 STMicroelectronics.X-CUBE-AI.10.0.0.ModelRamOccupation-9d1a8e818d019ef1d44029b28b8d9047bd9560f70f3c33793dcfc22742052fb8=3248
 STMicroelectronics.X-CUBE-AI.10.0.0.ModelStructureFile-4cc61984e0c12ada2418d965aff94a358a015fac8dfb7825652312cf7083bbfa=D\:\\DefaultStore\\QQ\\mlp\\RMUC_H723_smallMLP_v8_20261009\\policy.onnx
 STMicroelectronics.X-CUBE-AI.10.0.0.ModelStructureFile-7b91c18f8827a57faaacea54d904586ba1b8943fc1927454851ed9d63d4f48af=D\:\\Combat\\2026_10_15-20_16__motion31_u1600_detailed\\actor(1).onnx
-STMicroelectronics.X-CUBE-AI.10.0.0.ModelStructureFile-9d1a8e818d019ef1d44029b28b8d9047bd9560f70f3c33793dcfc22742052fb8=D\:\\Combat\\2026_10_15-20_16__motion31_u1600_detailed\\test.onnx
+STMicroelectronics.X-CUBE-AI.10.0.0.ModelStructureFile-9d1a8e818d019ef1d44029b28b8d9047bd9560f70f3c33793dcfc22742052fb8=D\:\\Combat\\2026_10_15-20_16__motion31_u1600_detailed\\actor1104.onnx
 STMicroelectronics.X-CUBE-AI.10.0.0.ModelType-4cc61984e0c12ada2418d965aff94a358a015fac8dfb7825652312cf7083bbfa=STM32Cube.AI MCU runtime
 STMicroelectronics.X-CUBE-AI.10.0.0.ModelType-7b91c18f8827a57faaacea54d904586ba1b8943fc1927454851ed9d63d4f48af=STM32Cube.AI MCU runtime
 STMicroelectronics.X-CUBE-AI.10.0.0.ModelType-9d1a8e818d019ef1d44029b28b8d9047bd9560f70f3c33793dcfc22742052fb8=STM32Cube.AI MCU runtime

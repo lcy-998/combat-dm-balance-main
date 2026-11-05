@@ -125,6 +125,12 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
     o[5] = s->gravity_model[2];
     for (size_t i = 0; i < 4u; ++i) o[6u+i] = s->joint_position_rad[i] / 1.5f;
     for (size_t i = 0; i < 6u; ++i) o[10u+i] = 0.05f * s->joint_velocity_rad_s[i];
+
+    o[10] = 0.0f;
+    o[11] = 0.0f;
+    o[13] = 0.0f;
+    o[14] = 0.0f;
+
     o[16] = s->previous_target[0] / 1.5f;
     o[17] = s->previous_target[1] / 1.5f;
     o[18] = s->previous_target[3] / 1.5f;

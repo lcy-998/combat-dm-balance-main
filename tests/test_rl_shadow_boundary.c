@@ -98,10 +98,10 @@ int ai_tjb_network_run(ai_handle h,ai_buffer *a,ai_buffer *b)
     (void)h;(void)a;(void)b;
     inference_calls++;
     if (iterations==2) {
-        assert(fabsf(input[10]-.05f)<1e-6f);
-        assert(fabsf(input[11]+.1f)<1e-6f);
-        assert(fabsf(input[13]-.15f)<1e-6f);
-        assert(fabsf(input[14]+.2f)<1e-6f);
+        assert(input[10]==0.0f);
+        assert(input[11]==0.0f);
+        assert(input[13]==0.0f);
+        assert(input[14]==0.0f);
     }
     const float previous = iterations==3 ? .4f : 0.0f;
     for (unsigned i=16;i<22;++i) assert(fabsf(input[i]-previous)<1e-6f);

@@ -110,10 +110,10 @@ int main(void)
     near(axis_observation[7], ccw / 1.5f);
     near(axis_observation[8], ccw / 1.5f);
     near(axis_observation[9], ccw / 1.5f);
-    near(axis_observation[10], -0.05f);
-    near(axis_observation[11], 0.05f);
-    near(axis_observation[13], 0.05f);
-    near(axis_observation[14], 0.05f);
+    near(axis_observation[10], 0.0f);
+    near(axis_observation[11], 0.0f);
+    near(axis_observation[13], 0.0f);
+    near(axis_observation[14], 0.0f);
     const float expected_q[4][4] = {
         {-ccw, 0.0f, 0.0f, 0.0f},
         {0.0f, ccw, 0.0f, 0.0f},
@@ -205,7 +205,10 @@ int main(void)
     near(observation[7], -0.5f);
     near(observation[8], 1.0f);
     near(observation[9], -1.0f);
-    near(observation[10], 0.1f);
+    near(observation[10], 0.0f);
+    near(observation[11], 0.0f);
+    near(observation[13], 0.0f);
+    near(observation[14], 0.0f);
     near(observation[15], -0.2f);
     near(observation[16], 0.2f);
     near(observation[17], 0.0f);
