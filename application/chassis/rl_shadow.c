@@ -230,9 +230,11 @@ static void publish_target_swing(const RLShadowSnapshot *sample,
 void RLShadowTask(void const *argument)
 {
     (void)argument;
+#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
     float previous_inference_target[RL_MOTION31_ACTION_SIZE] = {0};
     uint32_t previous_epoch = 0u;
     uint32_t previous_inference_sequence = 0u;
+#endif
     uint8_t network_ready = 0u;
     if (snapshot_queue == NULL) {
         working_debug.failure = 1u;
@@ -260,6 +262,7 @@ void RLShadowTask(void const *argument)
             continue;
         }
         working_debug.sequence = sample.sequence;
+#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
         if (!sample.rl_active || sample.control_epoch != previous_epoch) {
             memset(previous_inference_target, 0, sizeof(previous_inference_target));
             previous_inference_sequence = 0u;
@@ -269,6 +272,7 @@ void RLShadowTask(void const *argument)
                sizeof(previous_inference_target));
         sample.motion.previous_target_valid = 1u;
         sample.previous_source = RL_PREVIOUS_INFERENCE;
+#endif
         TickType_t now = xTaskGetTickCount();
         working_debug.snapshot_age_ms = (uint32_t)(now - sample.tick_ms);
         for (size_t i = 0; i < 4u; ++i) {
@@ -335,16 +339,19 @@ void RLShadowTask(void const *argument)
             working_debug.mean_action[i] = action[i];
         }
         working_debug.stage = 3u;
-        if (RLMotion31DecodeOutput(action, preview.target) != 0) {
+        if (RLMotion31DecodeOutputAtHeight(action, sample.motion.command_height_m,
+                                         preview.target) != 0) {
             working_debug.failure = 6u;
             publish_debug(&sample);
             publish_command(&sample, NULL, NULL, 0);
             commit_debug();
             continue;
         }
+#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
         const uint32_t inference_input_sequence = previous_inference_sequence;
         memcpy(previous_inference_target, preview.target, sizeof(previous_inference_target));
         previous_inference_sequence = sample.sequence;
+#endif
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
             working_debug.decoded_target[i] = preview.target[i];
         }
@@ -368,7 +375,9 @@ void RLShadowTask(void const *argument)
         working_debug.failure = publish_preview_torque(&sample, preview.target);
         working_debug.stage = working_debug.rl_torque_valid ? 5u : 4u;
         RLShadowSnapshot command_sample = sample;
+#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
         command_sample.adopted_sequence = inference_input_sequence;
+#endif
         publish_command(&command_sample, action, &preview, working_debug.rl_torque_valid);
         commit_debug();
     }

@@ -1,3 +1,46 @@
+# 新支撑中心接口（2026-11-05）
+
+分支 `feature/rl-motion31-supported015` 基于 `feature/rl-motion31-shadow` 的
+`32e8e061af7a9ac9a691b9ad10e4faf0adfc8833`。本节只规定新接口；下文保留历史执行说明。
+
+当前检入的 `tjb_network` 权重仍为旧模型，因此默认
+`RL_MOTION31_OUTPUT_VERSION=1`，维持上游旧行为。安装匹配
+`motion31_kinematic_support_centered_015_40_v1` 的小模型权重时，在整个工程的
+C编译宏中设置 `RL_MOTION31_OUTPUT_VERSION=2` 后完整重编译；不能只给单个文件定义。
+本次没有替换权重、编译/刷写整板或改变PD、限矩、弹簧补偿、标定和任务周期。
+当前2048大Actor不能直接替换现有128/64/32的X-CUBE-AI权重数组，需要同接口小模型。
+
+版本2的具体语义：
+
+- 输入31D，输出6D；通道仍是模型left hip/active/wheel、right hip/active/wheel，
+  对应几何右三通道在前。编码器零位及正方向不变。
+- 所有六通道真实 `dq*.05` 均进入Actor，不再将四腿dq清零。
+- 输入四腿q及上一实际腿目标仍除1.5，上一实际轮目标仍除100。
+- 当前训练只绑定0.34m，四腿中心（ch0/1/3/4）为
+  `[-0.02911608294,-0.09327510744,+0.02911608294,-0.09327510744]rad`。
+  这是几何角加明确支撑偏移，不是编码器零位或额外力矩补偿。
+- 腿绝对目标 `center + .15*clip(action,-1,1)`；轮目标
+  `40*clip(action,-1,1)`rad/s。不累加、不再Tanh、不按实测高度移动中心。
+  其他高度命令明确拒绝；后续高度版本须与训练解码同步更新。
+- `RLMotion31BuildPreview` 和控制采用前校验共用同一解码；PD继续使用模型坐标的
+  `40*(q_target-q)-2*dq`，轮 `0.2*(omega_target-dq)`。
+- previous只读控制owner发布的本地实际采用目标。影子推理不回写，版本2拒绝
+  `RL_PREVIOUS_INFERENCE` 来源。接管前的q/dq代理仍明确标记 `INIT_PROXY`，不冒称LQR实际目标。
+
+主机验证（不访问电机）：
+
+```sh
+sh tests/run_rl_supported015_tests.sh
+CC=clang sh tests/run_rl_supported015_tests.sh
+```
+
+覆盖新尺度/固定中心、输入归一化、真实dq、真实RLShadowTask、采用目标与PD、
+错误高度/非有限输入、未采用影子目标拒绝及inactive/stale/invalid边界。
+
+---
+
+# 历史执行说明
+
 # Motion31 执行链修复与主机验证
 
 2026-10-25。以 `bff439f` 为修复来源；本修复供电控审查合并，未刷写、未做带电测试。

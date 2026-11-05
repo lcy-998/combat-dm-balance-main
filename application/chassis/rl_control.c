@@ -24,7 +24,8 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
         if (!isfinite(command->preview.observation[i])) return 0;
     }
     float decoded[6];
-    if (RLMotion31DecodeOutput(command->action, decoded) != 0) return 0;
+    if (RLMotion31DecodeOutputAtHeight(command->action,
+            command->preview.observation[24] * 0.5f, decoded) != 0) return 0;
     for (unsigned i = 0; i < 6u; ++i) {
         if (fabsf(command->action[i]) > 1.00001f ||
             fabsf(decoded[i] - command->preview.target[i]) > 0.0001f) return 0;
@@ -140,10 +141,15 @@ int RLControlExecute(RLControlState *state,
     RLControlState pending=*state;
     int new_target=0;
     if (eligible.active && (int32_t)(command->snapshot_sequence-state->adopted_sequence)>0) {
-        /* Policy history follows inference, even when adoption skipped a frame. */
-        const int inference_history = command->previous_source==RL_PREVIOUS_INFERENCE &&
+        /* Legacy inference history is separate from supported015 adopted history. */
+        const int inference_history =
+#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
+            command->previous_source==RL_PREVIOUS_INFERENCE &&
             (command->previous_sequence==0u ||
              (int32_t)(command->snapshot_sequence-command->previous_sequence)>0);
+#else
+            0; /* New policy was trained on actually adopted targets only. */
+#endif
         const int causal = inference_history || (state->active ?
             (command->previous_source==RL_PREVIOUS_ADOPTED && command->previous_sequence==state->adopted_sequence) :
             (command->previous_source==RL_PREVIOUS_INIT_PROXY && command->previous_sequence==0u));
