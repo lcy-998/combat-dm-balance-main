@@ -18,13 +18,11 @@ static RLShadowSnapshot feedback(uint32_t now, RLControlState *state)
 
 int main(void)
 {
-    _Static_assert(RL_MOTION31_OUTPUT_VERSION==RL_MOTION31_OUTPUT_SUPPORTED015,
-                   "compile this test with output version 2");
     const unsigned legs[4]={0,1,3,4};
     const float expected[6]={-.029116082936525345f,-.09327510744333267f,0,
                              .029116082936525345f,-.09327510744333267f,0};
     float action[6]={0}, target[6], again[6], requested[6], limited[6], obs[31];
-    assert(!RLMotion31DecodeOutputAtHeight(action,.34f,target));
+    assert(!RLMotion31DecodeOutput(action,.34f,target));
     for(unsigned i=0;i<6;++i) near(target[i],expected[i]);
     RLControlState state={.ramp_completed=1,.timing=1,.ready=1,.epoch=7};
     RLShadowSnapshot s=feedback(6000,&state);
@@ -41,22 +39,25 @@ int main(void)
     }
     for(unsigned i=0;i<6;++i) near(obs[10+i],.05f*s.motion.joint_velocity_rad_s[i]);
     near(obs[20],.2f); near(obs[21],-.2f); near(obs[24],.68f);
+    s.motion.previous_target_valid=0;
+    assert(RLMotion31BuildObservation(&s.motion,obs)<0);
+    s.motion.previous_target_valid=1;
     assert(!RLMotion31ComputePdTorque(&s.motion,target,requested,limited));
     for(unsigned i=0;i<4;++i) near(requested[legs[i]],-2*s.motion.joint_velocity_rad_s[legs[i]]);
 
     for(unsigned i=0;i<6;++i) action[i]=(i&1)?-2:2;
-    assert(!RLMotion31DecodeOutput(action,target));
-    assert(!RLMotion31DecodeOutput(action,again));
+    assert(!RLMotion31DecodeOutput(action,.34f,target));
+    assert(!RLMotion31DecodeOutput(action,.34f,again));
     for(unsigned i=0;i<6;++i) {
         const float width=(i==2 || i==5)?40:.15f;
         near(target[i],expected[i]+((i&1)?-width:width));
         near(again[i],target[i]); /* no accumulation or second Tanh */
     }
-    assert(RLMotion31DecodeOutputAtHeight(action,.30f,target)<0);
-    assert(RLMotion31DecodeOutputAtHeight(action,NAN,target)<0);
-    action[0]=NAN; assert(RLMotion31DecodeOutput(action,target)<0); action[0]=.2f;
-    assert(RLMotion31DecodeOutput(NULL,target)<0);
-    assert(RLMotion31DecodeOutput(action,NULL)<0);
+    assert(RLMotion31DecodeOutput(action,.30f,target)<0);
+    assert(RLMotion31DecodeOutput(action,NAN,target)<0);
+    action[0]=NAN; assert(RLMotion31DecodeOutput(action,.34f,target)<0); action[0]=.2f;
+    assert(RLMotion31DecodeOutput(NULL,.34f,target)<0);
+    assert(RLMotion31DecodeOutput(action,.34f,NULL)<0);
 
     s=feedback(6000,&state);
     RLShadowCommand c={.valid=1,.snapshot_sequence=100,.snapshot_tick_ms=6000,
@@ -64,7 +65,7 @@ int main(void)
     c.action[0]=.2f; c.action[2]=.1f;
     assert(!RLMotion31BuildPreview(&s.motion,c.action,&c.preview));
     RLControlFrame frame;
-    RLShadowCommand invalid=c; invalid.previous_source=RL_PREVIOUS_INFERENCE;
+    RLShadowCommand invalid=c; invalid.previous_source=3u /* retired shadow source */;
     assert(RLControlExecute(&state,6000,1,&s,&invalid,&frame)==1 && !state.active);
     invalid=c; invalid.preview.target[0]=1.5f*c.action[0];
     assert(RLControlExecute(&state,6000,1,&s,&invalid,&frame)==1 && !state.active);
@@ -80,6 +81,54 @@ int main(void)
     s.motion.joint_velocity_rad_s[0]=1;
     assert(!RLControlExecute(&state,6005,1,&s,&c,&frame));
     near(frame.tau_pd_nm[0],-2); /* fresh feedback, unchanged 200Hz PD */
+
+    /* Each leg's own P/D channels, both signs, all torque clamps. */
+    s=feedback(6010,&state);
+    for(unsigned i=0;i<4;++i) {
+        const unsigned ch=legs[i];
+        for(int sign=-1;sign<=1;sign+=2) {
+            float p[6]={0},v[6]={0},t[6]={0};
+            t[ch]=.1f*(float)sign;
+            memset(s.motion.joint_position_rad,0,sizeof(s.motion.joint_position_rad));
+            memset(s.motion.joint_velocity_rad_s,0,sizeof(s.motion.joint_velocity_rad_s));
+            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));
+            for(unsigned j=0;j<6;++j)near(p[j],j==ch?4.0f*(float)sign:0);
+            t[ch]=0;s.motion.joint_velocity_rad_s[ch]=(float)sign;
+            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));
+            for(unsigned j=0;j<6;++j)near(p[j],j==ch?-2.0f*(float)sign:0);
+            t[ch]=100*(float)sign;
+            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));
+            near(v[ch],40*(float)sign);
+        }
+    }
+    memset(s.motion.joint_position_rad,0,sizeof(s.motion.joint_position_rad));
+    memset(s.motion.joint_velocity_rad_s,0,sizeof(s.motion.joint_velocity_rad_s));
+    for(unsigned ch=2;ch<6;ch+=3) {
+        for(int sign=-1;sign<=1;sign+=2) {
+            float p[6]={0},v[6]={0},t[6]={0};t[ch]=10*(float)sign;
+            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));near(p[ch],2*(float)sign);
+            t[ch]=100*(float)sign;
+            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));near(v[ch],5.5f*(float)sign);
+        }
+    }
+    /* A failure in any last channel/compensation leaves the adopted six-axis
+       target and sequence untouched; only the existing fault/owner changes. */
+    const RLControlState committed=state;
+    for(unsigned mode=0;mode<4;++mode) {
+        state=committed;s=feedback(6010,&state);
+        c=(RLShadowCommand){.valid=1,.snapshot_sequence=101,.snapshot_tick_ms=6010,
+            .output_tick_ms=6010,.control_epoch=state.epoch,.previous_source=RL_PREVIOUS_ADOPTED,
+            .previous_sequence=state.adopted_sequence};
+        assert(!RLMotion31BuildPreview(&s.motion,c.action,&c.preview));
+        if(mode==0)s.motion.joint_velocity_rad_s[5]=NAN;
+        if(mode==1)s.motion.command_height_m=.30f;
+        if(mode==2)s.leg_length_m[1]=NAN;
+        if(mode==3)s.imu_update_tick_ms=6010-25;
+        assert(RLControlExecute(&state,6010,1,&s,&c,&frame)<0);
+        assert(!state.active && state.fault && frame.owner==RL_OWNER_LQR);
+        assert(state.adopted_sequence==committed.adopted_sequence);
+        assert(!memcmp(state.adopted_target,committed.adopted_target,sizeof(state.adopted_target)));
+    }
     puts("PASS supported015: center/scale, real dq, physical previous, PD and causal adoption");
     return 0;
 }

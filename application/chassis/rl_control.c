@@ -24,7 +24,7 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
         if (!isfinite(command->preview.observation[i])) return 0;
     }
     float decoded[6];
-    if (RLMotion31DecodeOutputAtHeight(command->action,
+    if (RLMotion31DecodeOutput(command->action,
             command->preview.observation[24] * 0.5f, decoded) != 0) return 0;
     for (unsigned i = 0; i < 6u; ++i) {
         if (fabsf(command->action[i]) > 1.00001f ||
@@ -74,7 +74,9 @@ RLControlDecision RLControlStep(RLControlState *state,
         state->wait_start_tick = now_tick;
         return decision;
     }
-    state->ready = ((uint32_t)(now_tick-state->wait_start_tick) >= RL_CONTROL_INFERENCE_DELAY_MS);
+    /* Readiness remains latched until mode exit/reset, even after clock wrap. */
+    if (!state->ready)
+        state->ready = ((uint32_t)(now_tick-state->wait_start_tick) >= RL_CONTROL_INFERENCE_DELAY_MS);
     /* This is eligibility only; RLControlExecute commits actual ownership. */
     decision.active = state->ready && command_usable(command, now_tick) && command->control_epoch == state->epoch;
     return decision;
@@ -140,19 +142,11 @@ int RLControlExecute(RLControlState *state,
         return execution_fault(state,frame,RL_FAULT_INPUT);
     RLControlState pending=*state;
     int new_target=0;
-    if (eligible.active && (int32_t)(command->snapshot_sequence-state->adopted_sequence)>0) {
-        /* Legacy inference history is separate from supported015 adopted history. */
-        const int inference_history =
-#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
-            command->previous_source==RL_PREVIOUS_INFERENCE &&
-            (command->previous_sequence==0u ||
-             (int32_t)(command->snapshot_sequence-command->previous_sequence)>0);
-#else
-            0; /* New policy was trained on actually adopted targets only. */
-#endif
-        const int causal = inference_history || (state->active ?
+    if (eligible.active && (!state->active ||
+        (int32_t)(command->snapshot_sequence-state->adopted_sequence)>0)) {
+        const int causal = state->active ?
             (command->previous_source==RL_PREVIOUS_ADOPTED && command->previous_sequence==state->adopted_sequence) :
-            (command->previous_source==RL_PREVIOUS_INIT_PROXY && command->previous_sequence==0u));
+            (command->previous_source==RL_PREVIOUS_INIT_PROXY && command->previous_sequence==0u);
         if (causal) {
             memcpy(pending.adopted_target,command->preview.target,sizeof(pending.adopted_target));
             pending.adopted_sequence=command->snapshot_sequence;

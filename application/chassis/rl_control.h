@@ -13,7 +13,6 @@
 #define RL_CONTROL_WHEEL_RAW_LIMIT 8192.0f /* unchanged; physical calibration is still UNKNOWN */
 #define RL_PREVIOUS_INIT_PROXY 1u
 #define RL_PREVIOUS_ADOPTED 2u
-#define RL_PREVIOUS_INFERENCE 3u
 #define RL_OWNER_LQR 0u
 #define RL_OWNER_RL 1u
 

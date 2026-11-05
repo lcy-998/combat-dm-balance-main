@@ -126,13 +126,6 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
     for (size_t i = 0; i < 4u; ++i) o[6u+i] = s->joint_position_rad[i] / 1.5f;
     for (size_t i = 0; i < 6u; ++i) o[10u+i] = 0.05f * s->joint_velocity_rad_s[i];
 
-#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_LEGACY
-    o[10] = 0.0f;
-    o[11] = 0.0f;
-    o[13] = 0.0f;
-    o[14] = 0.0f;
-#endif
-
     o[16] = s->previous_target[0] / 1.5f;
     o[17] = s->previous_target[1] / 1.5f;
     o[18] = s->previous_target[3] / 1.5f;
@@ -149,14 +142,15 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
 
 int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *s)
 {
-    if (s == NULL ||
+    if (s == NULL || !s->previous_target_valid ||
         !finite_array(s->gyro_model_rad_s, 3u) ||
         !finite_array(s->gravity_model, 3u) ||
         !finite_array(s->joint_position_rad, 4u) ||
         !finite_array(s->joint_velocity_rad_s, 6u) ||
         !finite_array(s->previous_target, 6u) ||
         !isfinite(s->command_vx_m_s) || !isfinite(s->command_yaw_rad_s) ||
-        !isfinite(s->command_height_m)) {
+        !isfinite(s->command_height_m) ||
+        fabsf(s->command_height_m-RL_MOTION31_HEIGHT_M) > 1e-6f) {
         return -1;
     }
     for (size_t i = 0; i < 4u; ++i) {
@@ -179,37 +173,23 @@ int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *s)
 }
 
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
+                           float command_height_m,
                            float target[RL_MOTION31_ACTION_SIZE])
-{
-    return RLMotion31DecodeOutputAtHeight(action, 0.34f, target);
-}
-
-int RLMotion31DecodeOutputAtHeight(const float action[RL_MOTION31_ACTION_SIZE],
-                                  float command_height_m,
-                                  float target[RL_MOTION31_ACTION_SIZE])
 {
     if (action == NULL || target == NULL ||
         !finite_array(action, RL_MOTION31_ACTION_SIZE)) {
         return -1;
     }
-#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_SUPPORTED015
-    if (!isfinite(command_height_m) || fabsf(command_height_m - 0.34f) > 1e-6f)
+    if (!isfinite(command_height_m) || fabsf(command_height_m - RL_MOTION31_HEIGHT_M) > 1e-6f)
         return -1;
     /* Geometry(.34m) + explicit support offset, model order ch0..ch5.
        Absolute joint targets; not encoder zero, accumulated deltas or torque. */
     static const float center[6] = {
         -0.029116082936525345f, -0.09327510744333267f, 0.0f,
          0.029116082936525345f, -0.09327510744333267f, 0.0f};
-#else
-    (void)command_height_m;
-#endif
     for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
         float clipped = fminf(fmaxf(action[i], -1.0f), 1.0f);
-#if RL_MOTION31_OUTPUT_VERSION == RL_MOTION31_OUTPUT_SUPPORTED015
         target[i] = center[i] + ((i == 2u || i == 5u) ? 40.0f : 0.15f) * clipped;
-#else
-        target[i] = (i == 2u || i == 5u) ? 100.0f * clipped : 1.5f * clipped;
-#endif
     }
     return finite_array(target, RL_MOTION31_ACTION_SIZE) ? 0 : -1;
 }
@@ -245,7 +225,7 @@ int RLMotion31ComputePdTorque(const RLMotion31Snapshot *s,
     }
     for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
         if (i == 2u || i == 5u) {
-            requested[i] = 0.2 * (target[i] - s->joint_velocity_rad_s[i]);
+            requested[i] = 0.2f * (target[i] - s->joint_velocity_rad_s[i]);
         } else {
             const size_t joint_index = (i < 2u) ? i : i - 1u;
             requested[i] = 40.0f * (target[i] - s->joint_position_rad[joint_index])
@@ -291,7 +271,7 @@ int RLMotion31BuildPreview(const RLMotion31Snapshot *sample,
 {
     if (preview == NULL ||
         RLMotion31BuildObservation(sample, preview->observation) != 0 ||
-        RLMotion31DecodeOutputAtHeight(action, sample->command_height_m, preview->target) != 0 ||
+        RLMotion31DecodeOutput(action, sample->command_height_m, preview->target) != 0 ||
         RLMotion31MapPolicyTargets(preview->target, preview->hardware_joint_target_rad,
                                    preview->motor_wheel_target_rad_s) != 0) {
         return -1;

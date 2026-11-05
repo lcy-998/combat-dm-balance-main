@@ -15,6 +15,7 @@ static void near(float actual, float expected)
 int main(void)
 {
     RLMotion31Snapshot s = {0};
+    s.previous_target_valid = 1u;
     const float pi = 3.14159265358979323846f;
     const float degrees_to_radians = pi / 180.0f;
     float axis_observation[RL_MOTION31_OBSERVATION_SIZE];
@@ -110,10 +111,10 @@ int main(void)
     near(axis_observation[7], ccw / 1.5f);
     near(axis_observation[8], ccw / 1.5f);
     near(axis_observation[9], ccw / 1.5f);
-    near(axis_observation[10], 0.0f);
-    near(axis_observation[11], 0.0f);
-    near(axis_observation[13], 0.0f);
-    near(axis_observation[14], 0.0f);
+    near(axis_observation[10], -0.05f);
+    near(axis_observation[11], 0.05f);
+    near(axis_observation[13], 0.05f);
+    near(axis_observation[14], 0.05f);
     const float expected_q[4][4] = {
         {-ccw, 0.0f, 0.0f, 0.0f},
         {0.0f, ccw, 0.0f, 0.0f},
@@ -205,10 +206,10 @@ int main(void)
     near(observation[7], -0.5f);
     near(observation[8], 1.0f);
     near(observation[9], -1.0f);
-    near(observation[10], 0.0f);
-    near(observation[11], 0.0f);
-    near(observation[13], 0.0f);
-    near(observation[14], 0.0f);
+    near(observation[10], 0.10f);
+    near(observation[11], s.joint_velocity_rad_s[1]*.05f);
+    near(observation[13], s.joint_velocity_rad_s[3]*.05f);
+    near(observation[14], s.joint_velocity_rad_s[4]*.05f);
     near(observation[15], -0.2f);
     near(observation[16], 0.2f);
     near(observation[17], 0.0f);
@@ -228,19 +229,19 @@ int main(void)
 
     const float action[RL_MOTION31_ACTION_SIZE] = {-1.0f, -0.5f, 0.25f, 0.5f, 1.0f, -0.25f};
     float target[RL_MOTION31_ACTION_SIZE];
-    assert(RLMotion31DecodeOutput(action, target) == 0);
-    near(target[0], -1.5f);
-    near(target[1], -0.75f);
-    near(target[2], 25.0f);
-    near(target[3], 0.75f);
-    near(target[4], 1.5f);
-    near(target[5], -25.0f);
+    assert(RLMotion31DecodeOutput(action, .34f, target) == 0);
+    near(target[0], -.02911608294f-.15f);
+    near(target[1], -.09327510744f-.075f);
+    near(target[2], 10.0f);
+    near(target[3], .02911608294f+.075f);
+    near(target[4], -.09327510744f+.15f);
+    near(target[5], -10.0f);
 
     const float out_of_range[RL_MOTION31_ACTION_SIZE] = {2.0f, -2.0f, 2.0f, 0.0f, 0.0f, 0.0f};
-    assert(RLMotion31DecodeOutput(out_of_range, target) == 0);
-    near(target[0], 1.5f);
-    near(target[1], -1.5f);
-    near(target[2], 100.0f);
+    assert(RLMotion31DecodeOutput(out_of_range, .34f, target) == 0);
+    near(target[0], -.02911608294f+.15f);
+    near(target[1], -.09327510744f-.15f);
+    near(target[2], 40.0f);
 
     float hardware_joint_target[4];
     float motor_wheel_target[2];
@@ -323,9 +324,9 @@ int main(void)
 
     s.joint_velocity_rad_s[2] = NAN;
     assert(RLMotion31BuildObservation(&s, observation) != 0);
-    assert(RLMotion31DecodeOutput(NULL, target) != 0);
+    assert(RLMotion31DecodeOutput(NULL, .34f, target) != 0);
     const float bad_action[RL_MOTION31_ACTION_SIZE] = {0, 0, 0, 0, INFINITY, 0};
-    assert(RLMotion31DecodeOutput(bad_action, target) != 0);
+    assert(RLMotion31DecodeOutput(bad_action, .34f, target) != 0);
     puts("Motion31 observation and decode tests passed");
     return 0;
 }

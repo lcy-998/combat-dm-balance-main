@@ -1,6 +1,7 @@
 #!/bin/sh
 # 无电机、无STM32下载。仅用主机C编译器验证真实控制代码；RTOS/AI边界使用桩。
 set -eu
+ulimit -c 0
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 core="$repo/application/chassis"
 cc_bin=${CC:-cc}
@@ -9,7 +10,7 @@ trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary; do
+for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015; do
     set -- "$repo/tests/$name.c" "$core/rl_motion31.c" "$core/rl_control.c"
     case "$name" in
         test_rl_capture) set -- "$@" "$core/rl_capture.c" ;;
@@ -21,6 +22,9 @@ for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture te
     else
         "$tmp/$name"
     fi
+    if [ "$name" = test_rl_shadow_boundary ]; then
+        for scenario in 1 2 3; do "$tmp/$name" "$scenario"; done
+    fi
     printf 'PASS %s\n' "$name"
 done
-printf '5/5 host tests passed; no firmware flash, hardware access or real-time certification.\n'
+printf '6/6 host tests passed; no firmware flash, hardware access or real-time certification.\n'

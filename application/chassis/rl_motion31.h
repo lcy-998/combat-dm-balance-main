@@ -7,16 +7,8 @@
 #define RL_MOTION31_ACTION_SIZE 6u
 #define RL_MOTION31_WHEEL_CURRENT_PER_NM (19.0f / 0.00036f / (268.0f / 17.0f))
 
-#define RL_MOTION31_OUTPUT_LEGACY 1u
-#define RL_MOTION31_OUTPUT_SUPPORTED015 2u
-/* Select together with matching weights. The checked-in network is legacy. */
-#ifndef RL_MOTION31_OUTPUT_VERSION
-#define RL_MOTION31_OUTPUT_VERSION RL_MOTION31_OUTPUT_LEGACY
-#endif
-#if RL_MOTION31_OUTPUT_VERSION != RL_MOTION31_OUTPUT_LEGACY && \
-    RL_MOTION31_OUTPUT_VERSION != RL_MOTION31_OUTPUT_SUPPORTED015
-#error "Unknown Motion31 output contract"
-#endif
+#define RL_MOTION31_ACTION_CONTRACT "motion31_kinematic_support_centered_015_40_v1"
+#define RL_MOTION31_HEIGHT_M 0.34f
 
 typedef struct {
     float gyro_model_rad_s[3];
@@ -61,13 +53,11 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *sample,
                                float observation[RL_MOTION31_OBSERVATION_SIZE]);
 /* Unit gravity, finite fields and calibrated mechanical input branch. No input clipping. */
 int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *sample);
-int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
-                           float target[RL_MOTION31_ACTION_SIZE]);
 /* Current supported015 training binds its center to fixed .34m, not measured
    height. Other height commands are rejected until a matching recipe exists. */
-int RLMotion31DecodeOutputAtHeight(const float action[RL_MOTION31_ACTION_SIZE],
-                                  float command_height_m,
-                                  float target[RL_MOTION31_ACTION_SIZE]);
+int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
+                           float command_height_m,
+                           float target[RL_MOTION31_ACTION_SIZE]);
 int RLMotion31MapPolicyTargets(const float target[RL_MOTION31_ACTION_SIZE],
                                float hardware_joint_target_rad[4],
                                float motor_wheel_target_rad_s[2]);
