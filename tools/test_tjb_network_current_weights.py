@@ -18,7 +18,7 @@ import onnx
 import update_xcube_ai_weights as converter
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / '.Doc/models/motion2320_small31_delayed'
+MODEL = ROOT / '.Doc/models/motion2320_actor20'
 PARAMS = ROOT / 'X-CUBE-AI/App/tjb_network_data_params.c'
 
 
@@ -29,6 +29,19 @@ def firmware_blob():
 
 
 class CurrentWeightsTests(unittest.TestCase):
+    def test_model_declares_full_actor20_v4legs_and_replacement_wheel_delays(self):
+        timing = json.loads((MODEL/'execution_timing.json').read_text())
+        self.assertEqual(timing['actor_packet_age_ms'],20)
+        self.assertEqual(timing['actor_physical_columns'],list(range(16)))
+        self.assertTrue(timing['includes_four_leg_q_dq'])
+        self.assertTrue(timing['complete_v4_leg_tuple'])
+        self.assertEqual(timing['wheel_channel2_geometric_right_ms'],7)
+        self.assertEqual(timing['wheel_channel5_geometric_left_ms'],11)
+        self.assertEqual(timing['wheel_tau_ms'],0)
+        self.assertFalse(timing['old_wheel20_tau2_retained'])
+        metadata = {p.key:p.value for p in onnx.load(str(MODEL/'actor.onnx')).metadata_props}
+        self.assertEqual(json.loads(metadata['execution_timing']),timing)
+
     def test_onnx_bytes_and_provenance(self):
         blob, count = converter.extract_weights(onnx.load(str(MODEL/'actor.onnx')))
         self.assertEqual(count, 14630)

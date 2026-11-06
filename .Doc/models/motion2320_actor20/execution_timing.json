@@ -1,0 +1,33 @@
+{
+  "version": "motion_actor_physical20_v4legs_wheel7_11_tau0_v1",
+  "actor_physical_columns": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "actor_packet_age_ms": 20,
+  "includes_four_leg_q_dq": true,
+  "previous_and_command_delayed": false,
+  "pd_feedback_extra_age_ms": 0,
+  "target_transport_ms": 5,
+  "complete_v4_leg_tuple": true,
+  "wheel_channel2_geometric_right_ms": 7,
+  "wheel_channel5_geometric_left_ms": 11,
+  "wheel_tau_ms": 0,
+  "old_wheel20_tau2_retained": false,
+  "reset_history": "initial measured report repeated until history exists; no future samples",
+  "combined": "explicit V4 stress profile adds declared shared/Actor dq processing on top of nominal20"
+}

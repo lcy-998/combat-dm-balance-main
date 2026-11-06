@@ -1,0 +1,91 @@
+{
+  "kind": "EXPLICIT_PPO_OUTPUT_CONTRACT",
+  "action_version": "motion31_kinematic_support_centered_015_80_v1",
+  "input_version": "multiskill_mcu_v2",
+  "actor_dimensions": [
+    31,
+    128,
+    64,
+    32,
+    6
+  ],
+  "hidden_activation": "ELU(alpha=1)",
+  "mean_activation": "Tanh",
+  "leg_halfwidth_rad": 0.15,
+  "wheel_halfwidth_rad_s": 80.0,
+  "output_order_geometric": [
+    "right_hip",
+    "right_active",
+    "right_wheel",
+    "left_hip",
+    "left_active",
+    "left_wheel"
+  ],
+  "center_rule": "commanded height -> geometric joint angle + fixed explicit support-target offset; bind once per episode",
+  "center_formula": {
+    "version": "flat_two_link_geometry_v1",
+    "hip_above_root_m": 2.4e-05,
+    "wheel_radius_m": 0.06,
+    "equivalent_upper_m": 0.21,
+    "equivalent_lower_m": 0.25,
+    "hip_zero_deg": 47.1033888,
+    "active_zero_deg": 47.1080837,
+    "clearance_m": 0.0
+  },
+  "support_target_offset_rad": [
+    -0.24229908821701296,
+    -0.3063761712607683,
+    0.24229908821701296,
+    -0.3063761712607683
+  ],
+  "center_source": "artifacts/2026_11_05__motion_height_kinematic_center_v2/analysis.json",
+  "center_scope": "\u5e73\u5730\u51e0\u4f55\u516c\u5f0f\u52a0\u6309\u65e79995\u539fMCU\u652f\u6491\u76ee\u6807\u4f30\u8ba1\u7684\u56fa\u5b9a\u504f\u79fb\uff1b\u672a\u9a8c\u8bc1\u65b0\u8303\u56f4\u81ea\u4e3b\u63a7\u5236\u6216\u540e\u6765\u5b8c\u6574V4\u652f\u6491",
+  "height_definition": "\u6c34\u5e73\u5730\u9762\u81f3\u539f\u6a21\u578broot\u539f\u70b9\u7684\u7ad6\u76f4\u9ad8\u5ea6\uff1b\u9acb\u8f74\u6bd4root\u9ad80.000024m\uff0c\u8f6e\u534a\u5f840.060m",
+  "input_leg_q_and_previous_scale_rad": 1.5,
+  "input_wheel_previous_scale_rad_s": 100.0,
+  "previous_source": "actual adopted physical targets after mechanical protection; never raw action or unadopted prediction",
+  "height_command_range_m": [
+    0.3,
+    0.4
+  ],
+  "height_change_within_episode": false,
+  "encoder_zero_change": false,
+  "hard_symmetry_projection": false,
+  "extra_history_or_estimator": false,
+  "control_reference_only": {
+    "physics_pd_policy_ms": [
+      1,
+      5,
+      10
+    ],
+    "leg_Kp": 40,
+    "leg_Kd": 2,
+    "wheel_Kv": 0.2,
+    "leg_motor_cap_nm": 40,
+    "wheel_driver_cap_nm": 2.44694786377709
+  },
+  "distillation_teacher_recommendation": {
+    "name": "Motion9995_height_pd",
+    "checkpoint": "runs/2026_10_26-18_22__motion4500_parallel_height_pd10000/formal/model_update_9995.pt",
+    "sha256": "d1da9580d064014a74dae79cb7b8fc98c4806c7b6038d019b65aee57645596b9",
+    "parent_spec": "configs/experiments/2026_10_26-18_22__motion4500_parallel_height_pd10000/spec.json",
+    "parent_spec_sha256": "cb106728c4d1535763d3df1421bc14580056a86eba2c2a1a798912d4f51e04f3",
+    "reason": "\u76f8\u540c31D\u3001\u4e0d\u540c\u56fa\u5b9a\u9ad8\u5ea6\u6765\u6e90\uff1b\u663e\u5f0f\u652f\u6491\u504f\u79fb\u540e\u5148\u6838\u5bf9\u7269\u7406\u76ee\u6807\u8986\u76d6\uff0c\u4ecd\u4e0d\u4fdd\u8bc1\u542f\u52a8\u548c\u65b0\u95ed\u73af\u80fd\u529b"
+  },
+  "source_scope": "\u8be5\u6279\u6052\u901f\u7269\u7406\u76ee\u6807\u8868\u793a\u8303\u56f4\u53ef\u68c0\u67e5\uff0c\u53d7\u6270\u3001\u542f\u52a8\u548c\u5b9e\u673a\u6297\u632f\u4e0d\u7531\u8986\u76d6\u7387\u4fdd\u8bc1",
+  "training_plant": "NOT_SELECTED_BY_INTERFACE_DESIGN",
+  "Critic_PPO_Adam_resume": "NOT_SELECTED; \u65e7\u6559\u5e08Critic/Adam\u4e0d\u7531\u672c\u52a8\u4f5c\u58f0\u660e\u81ea\u52a8\u5bfc\u5165",
+  "BC_updates": 0,
+  "PPO_updates": 0,
+  "new_decoder_physics": "NOT_RUN",
+  "runtime_recipe_ready": true,
+  "deployment_ready": false,
+  "support_offset_definition": {
+    "version": "constant_symmetric_target_shift_v1",
+    "reference_height_m": 0.34,
+    "source": "artifacts/2026_11_05__motion9995_height_motion_range_r2/range_analysis.json",
+    "derivation": "symmetric zero-command PD-target center at .34m minus contact geometric q at .34m",
+    "meaning": "\u8f93\u51fa\u4e2d\u5fc3\u504f\u79fb\uff0c\u4e0d\u662f\u7f16\u7801\u5668\u6807\u96f6\u3001\u5b9e\u6d4b\u5f39\u7c27\u77e9\u6216\u65b0\u589e\u529b\u77e9\u524d\u9988\uff1b\u6240\u6709\u9ad8\u5ea6\u5171\u7528\u8fd9\u56db\u4e2a\u5e38\u6570",
+    "not_perfect_equilibrium": "\u65e7\u6a21\u578b\u6709\u6f02\u79fb\u3001\u8ddf\u9ad8\u548c\u59ff\u6001\u8bef\u5dee\uff1b\u53ea\u4f5c\u9996\u4e2a\u53ef\u9a8c\u8bc1\u76ee\u6807\u53c2\u8003"
+  }
+}

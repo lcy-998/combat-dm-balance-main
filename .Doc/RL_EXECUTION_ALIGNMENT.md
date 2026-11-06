@@ -14,7 +14,7 @@ right hip/active/wheel，对应几何右三通道在前、几何左三通道在�
 当前`tjb_network`已通过`tools/update_xcube_ai_weights.py`更新为Motion2320蒸馏小模型
 （31→128→64→32→6，14,630参数，FP32权重58,520字节），已用完整V4延迟执行器补教。
 来源ONNX、冻结输出契约、256组golden与SHA记录保存在
-[当前模型目录](models/motion2320_small31_delayed/manifest.json)。旧无延迟蒸馏模型目录保留。
+[当前模型目录](models/motion2320_actor20/manifest.json)。旧模型目录保留。
 部署模型必须明确声明上述015/80契约；015/40或旧1.5/100模型均不能直接配用本解码器。
 2048大Actor不能直接写入现有31→128→64→32→6的权重数组；需先蒸馏或重新生成匹配网络。
 
@@ -82,8 +82,8 @@ sh tests/run_rl_supported015_tests.sh
 ## 当前网络更新与核对
 
 ```bash
-python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31_delayed/actor.onnx --target tjb_network --dry-run
-python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31_delayed/actor.onnx --target tjb_network
+python tools/update_xcube_ai_weights.py .Doc/models/motion2320_actor20/actor.onnx --target tjb_network --dry-run
+python tools/update_xcube_ai_weights.py .Doc/models/motion2320_actor20/actor.onnx --target tjb_network
 python tools/test_tjb_network_current_weights.py
 ```
 
@@ -92,10 +92,17 @@ python tools/test_tjb_network_current_weights.py
 低于`1e-5`；真实`RLMotion31DecodeOutput`的256组输出与冻结015/80契约一致。
 旧ST自动生成报告及图元数据仍记录最初生成的模型，当前权重身份以模型目录的manifest为准。
 
-当前模型累计增加12,000次延迟监督更新，最终固定插值两个已训练checkpoint的权重，
-部署为单个MLP。34个明确的V4延迟工况中，教师完成30项，学生完成32项，学生无新增跌倒；
-教师完成的30项中28项满足全部相对保真门限，核心18项全部通过。
-剩余两项为+4rad/s转向时侧倾峰值比教师约多1.8–1.9°；不能声称完全复刻。
+本次新增6,000次监督更新，修正了上一版四腿q/dq未进20ms Actor报文队列的问题。
+现在Actor前16维全部物理观测统一标称20ms，包括四腿q/dq；previous和命令不随物理报文延迟。
+腿执行保留完整V4响应。几何右轮ch2为7ms、左轮ch5为11ms的post-PD等效运输，tau0；
+明确替换旧轮20ms+tau2，不重复叠加。每个最终回合均核对真实报文来源和轮力矩到达时序。
+时序记录在[execution_timing.json](models/motion2320_actor20/execution_timing.json)，ONNX元数据也包含同一声明。
+旧提交dff9a0b的统计不证明全物理20ms条件，旧结果只作为历史证据保留。
+
+当前仍部署单个14,630参数MLP。34个新时序工况中，教师和学生各完成30项，学生无新增跌倒；
+教师完成的30项中26项满足全部相对保真门限，核心18项全部通过。
+剩余4项涉及+2m/s直行速度/轮目标抖动、combined-2m/s腿速度与俯仰峰、combined-4rad/s侧倾峰；
+具体教师/学生数值在当前模型manifest.remaining_fidelity_gaps中，不宣称完全复刻。
 3项无延迟基础对照也通过。完整两组延迟参数和原始结果见当前模型manifest指向的部署包。
 本次只更新权重，不在固件中新增时延、滤波、补偿或提高限矩。
 该结果不是目标板ST runtime、实时性或实机验证。
