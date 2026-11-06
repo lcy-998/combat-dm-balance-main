@@ -1,0 +1,310 @@
+{
+  "version": "motion2320_small31_delayed_015_80_v1",
+  "architecture": [
+    31,
+    128,
+    64,
+    32,
+    6
+  ],
+  "parameters": 14630,
+  "fp32_weight_bytes": 58520,
+  "onnx_bytes": 59620,
+  "actor_onnx_sha256": "f276b0d354648efa60918896b3c1efcdd398e08f04dfea563a965a57ee32c249",
+  "student_checkpoint_sha256": "95f57428e664b82a8390f16694b7658345ac1b7ecf43283d14c115ba569318e0",
+  "teacher_checkpoint": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_distillation/teacher/model_update_2320.pt",
+  "teacher_sha256": "086739f263bfca2d5a2bb2da92d69d1ecd7946f50d0a4c5514846bae5f3c4f57",
+  "weight_selection": {
+    "kind": "static checkpoint parameter interpolation; one runtime MLP",
+    "second_weight": 0.75,
+    "parents": [
+      {
+        "path": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/student_selected.pt",
+        "sha256": "82e6204ce3253156fed3d7ecaaa59dd769141d2818130569cfb3105e35feac67"
+      },
+      {
+        "path": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/student_selected.pt",
+        "sha256": "23d648884ef2327a9a203afc614e9e64b9fae99d4c940d90dcca255a3fee2e8f"
+      }
+    ],
+    "additional_optimizer_updates": 0
+  },
+  "action_version": "motion31_kinematic_support_centered_015_80_v1",
+  "verification": {
+    "onnx_max_abs_error": 1.3094395399093628e-06,
+    "c_verification": {
+      "golden_count": 256,
+      "c_max_abs_error": 9.08970832824707e-07,
+      "tolerance": 1e-05,
+      "passed": true,
+      "decoder_015_80_parity": true,
+      "hardware_measured": false
+    },
+    "onnx_sha256": "f276b0d354648efa60918896b3c1efcdd398e08f04dfea563a965a57ee32c249",
+    "checkpoint_sha256": "95f57428e664b82a8390f16694b7658345ac1b7ecf43283d14c115ba569318e0",
+    "parameters": 14630,
+    "fp32_weight_bytes": 58520,
+    "onnx_bytes": 59620,
+    "golden_count": 256
+  },
+  "delayed_cases": 34,
+  "teacher_completed": 30,
+  "student_completed": 32,
+  "teacher_relative_passed": 28,
+  "student_new_falls": 0,
+  "core_cases": 18,
+  "core_passed": 18,
+  "mean_absolute_velocity_gap_mps": 0.02388928777055886,
+  "mean_absolute_yaw_gap_rad_s": 0.010400562819155242,
+  "remaining_fidelity_gaps": [
+    {
+      "case": [
+        0,
+        4,
+        0
+      ],
+      "checks": {
+        "vx_mean": true,
+        "yaw_mean": true,
+        "height_mean": true,
+        "pitch_peak": true,
+        "roll_peak": false,
+        "complete": true,
+        "leg_dq_std": true,
+        "leg_target_step_rms": true,
+        "wheel_target_step_rms": true
+      },
+      "teacher": {
+        "command": [
+          0,
+          4,
+          0
+        ],
+        "delay_profile": "V4_nominal",
+        "initial": "log_geometry_logged_cache",
+        "seed": 303,
+        "profile": "ramp",
+        "termination": "COMPLETE",
+        "seconds": 20.0,
+        "physics_steps": 20000,
+        "height_mean": 0.3354098156731578,
+        "upright_min": 0.997642061815433,
+        "vx_mean": -0.22320807577270815,
+        "yaw_mean": 3.0095773662542604,
+        "vx_mae": 0.22320807577270815,
+        "yaw_mae": 0.9904226337457399,
+        "raw_termination": null,
+        "raw_trace": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/range_evaluation_v2/engine/V4_nominal__case012__log_geometry_logged_cache__policy_to_policy.npz",
+        "execution_create_calls": 1,
+        "leg_dq_std": 0.1195747147170188,
+        "leg_target_step_rms": 0.004055431265376822,
+        "wheel_target_step_rms": 0.5421600514850213,
+        "pitch_peak": 0.054264449262054364,
+        "roll_peak": 0.04282176571392257
+      },
+      "student": {
+        "command": [
+          0,
+          4,
+          0
+        ],
+        "delay_profile": "V4_nominal",
+        "initial": "log_geometry_logged_cache",
+        "seed": 303,
+        "profile": "ramp",
+        "termination": "COMPLETE",
+        "seconds": 20.0,
+        "physics_steps": 20000,
+        "height_mean": 0.33455214304701814,
+        "upright_min": 0.9958870008560475,
+        "vx_mean": -0.15848527333842935,
+        "yaw_mean": 3.053679025261372,
+        "vx_mae": 0.15848527333842935,
+        "yaw_mae": 0.9463209747386288,
+        "raw_termination": null,
+        "raw_trace": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075/validation/engine/V4_nominal__case002__log_geometry_logged_cache__policy_to_policy.npz",
+        "execution_create_calls": 1,
+        "leg_dq_std": 0.10452377049162082,
+        "leg_target_step_rms": 0.00309121796225837,
+        "wheel_target_step_rms": 0.3199200279960804,
+        "pitch_peak": 0.05038770674015647,
+        "roll_peak": 0.07610000740156858
+      }
+    },
+    {
+      "case": [
+        0,
+        4,
+        1
+      ],
+      "checks": {
+        "vx_mean": true,
+        "yaw_mean": true,
+        "height_mean": true,
+        "pitch_peak": true,
+        "roll_peak": false,
+        "complete": true,
+        "leg_dq_std": true,
+        "leg_target_step_rms": true,
+        "wheel_target_step_rms": true
+      },
+      "teacher": {
+        "command": [
+          0,
+          4,
+          1
+        ],
+        "delay_profile": "V4_combined",
+        "initial": "log_geometry_logged_cache",
+        "seed": 303,
+        "profile": "ramp",
+        "termination": "COMPLETE",
+        "seconds": 20.0,
+        "physics_steps": 20000,
+        "height_mean": 0.3354553662496531,
+        "upright_min": 0.997752923213808,
+        "vx_mean": -0.22155831370131984,
+        "yaw_mean": 3.010149978789085,
+        "vx_mae": 0.22155831370131984,
+        "yaw_mae": 0.9898500212109148,
+        "raw_termination": null,
+        "raw_trace": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/range_evaluation_v2/engine/V4_combined__case028__log_geometry_logged_cache__policy_to_policy.npz",
+        "execution_create_calls": 1,
+        "leg_dq_std": 0.13008092848479297,
+        "leg_target_step_rms": 0.0044460456335518265,
+        "wheel_target_step_rms": 0.5179629763964277,
+        "pitch_peak": 0.05189035604071836,
+        "roll_peak": 0.042913063329153366
+      },
+      "student": {
+        "command": [
+          0,
+          4,
+          1
+        ],
+        "delay_profile": "V4_combined",
+        "initial": "log_geometry_logged_cache",
+        "seed": 303,
+        "profile": "ramp",
+        "termination": "COMPLETE",
+        "seconds": 20.0,
+        "physics_steps": 20000,
+        "height_mean": 0.3345542343376874,
+        "upright_min": 0.9960462253323502,
+        "vx_mean": -0.15808426631825687,
+        "yaw_mean": 3.052800489404186,
+        "vx_mae": 0.15808426631825687,
+        "yaw_mae": 0.9471995105958133,
+        "raw_termination": null,
+        "raw_trace": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075/validation/engine/V4_combined__case003__log_geometry_logged_cache__policy_to_policy.npz",
+        "execution_create_calls": 1,
+        "leg_dq_std": 0.11013231767702275,
+        "leg_target_step_rms": 0.0037774447041430824,
+        "wheel_target_step_rms": 0.39090203180602107,
+        "pitch_peak": 0.04992809615475519,
+        "roll_peak": 0.07477784328760048
+      }
+    }
+  ],
+  "no_delay_retention_passed": true,
+  "tested_height_m": 0.34,
+  "hardware_validated": false,
+  "source_artifact": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075",
+  "cumulative_consumption": {
+    "task_limit": null,
+    "delayed_physics_steps": 4819470,
+    "delayed_supervised_updates": 12000,
+    "prior_no_delay_supervised_updates": 18000,
+    "all_supervised_updates": 30000,
+    "prior_no_delay_physics_steps": 1947070,
+    "phases": [
+      {
+        "phase": "delay_preflight",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_preflight/smoke.json",
+        "physics_steps": 2000
+      },
+      {
+        "phase": "delay_baseline",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_baseline/terminal.json",
+        "physics_steps": 160000
+      },
+      {
+        "phase": "delay_fit_first",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/ledger.json",
+        "physics_steps": 1620000
+      },
+      {
+        "phase": "range_alignment_failure",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/range_evaluation/terminal.json",
+        "physics_steps": 93160
+      },
+      {
+        "phase": "first_range",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/range_evaluation_v2/terminal.json",
+        "physics_steps": 587740
+      },
+      {
+        "phase": "first_no_delay_check",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_delayed_distillation/no_delay_retention.json",
+        "physics_steps": 120000
+      },
+      {
+        "phase": "delay_fit_high_yaw",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/ledger.json",
+        "physics_steps": 729190
+      },
+      {
+        "phase": "second_matrix_nominal",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/final_matrix_profile0/terminal.json",
+        "physics_steps": 331780
+      },
+      {
+        "phase": "second_matrix_combined",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/final_matrix_profile1/terminal.json",
+        "physics_steps": 331290
+      },
+      {
+        "phase": "second_no_delay_check",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/no_delay_retention.json",
+        "physics_steps": 120000
+      },
+      {
+        "phase": "blend_validation",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075/validation/terminal.json",
+        "physics_steps": 100000
+      },
+      {
+        "phase": "blend_matrix_nominal",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075/final_matrix_profile0/terminal.json",
+        "physics_steps": 292540
+      },
+      {
+        "phase": "blend_matrix_combined",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075/final_matrix_profile1/terminal.json",
+        "physics_steps": 271770
+      },
+      {
+        "phase": "blend_no_delay_check",
+        "record": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_delayed_range_repair/weight_blend_075/no_delay_retention.json",
+        "physics_steps": 60000
+      }
+    ],
+    "optimizer_steps_added_by_weight_interpolation": 0,
+    "PPO_updates": 0
+  },
+  "firmware_weight_blob_sha256": "3c05e104c1bbccadeffd3279ac1cf6781fae09c2f36993022334da8698c4f6cb",
+  "golden_vectors_sha256": "36db49914559f154607dd733363ab21dc277185b8c802e450a5c09ed7b70ae97",
+  "output_contract_sha256": "98a7d711fe7ecce1d32dc7ac21764160a2e9b62207bf7319e4b66b423fd06d06",
+  "update_command": "python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31_delayed/actor.onnx --target tjb_network",
+  "source_package": "/home/kellen/wheel_leg_native_train/deployment_protocol/2026_11_06__motion2320_small31_delayed_015_80",
+  "original_st_report_stale": true,
+  "firmware_host_verification": {
+    "weight_bytes_exactly_match_onnx": true,
+    "weight_array_forward_max_abs_error": 1.09151006e-06,
+    "golden_count": 256,
+    "real_decoder_015_80_passed": true,
+    "control_host_tests_passed": 6,
+    "weights_update_outside_array_unchanged": true,
+    "board_build_and_flash": false
+  }
+}

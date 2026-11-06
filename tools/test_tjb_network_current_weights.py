@@ -18,7 +18,7 @@ import onnx
 import update_xcube_ai_weights as converter
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / '.Doc/models/motion2320_small31'
+MODEL = ROOT / '.Doc/models/motion2320_small31_delayed'
 PARAMS = ROOT / 'X-CUBE-AI/App/tjb_network_data_params.c'
 
 

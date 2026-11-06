@@ -12,8 +12,9 @@ right hip/active/wheel，对应几何右三通道在前、几何左三通道在�
 关节标定零位与正方向没有改变，不能按几何左优先重排数组。
 
 当前`tjb_network`已通过`tools/update_xcube_ai_weights.py`更新为Motion2320蒸馏小模型
-（31→128→64→32→6，14,630参数，FP32权重58,520字节）。来源ONNX、冻结输出契约、
-256组golden与SHA记录保存在[模型目录](models/motion2320_small31/manifest.json)。
+（31→128→64→32→6，14,630参数，FP32权重58,520字节），已用完整V4延迟执行器补教。
+来源ONNX、冻结输出契约、256组golden与SHA记录保存在
+[当前模型目录](models/motion2320_small31_delayed/manifest.json)。旧无延迟蒸馏模型目录保留。
 部署模型必须明确声明上述015/80契约；015/40或旧1.5/100模型均不能直接配用本解码器。
 2048大Actor不能直接写入现有31→128→64→32→6的权重数组；需先蒸馏或重新生成匹配网络。
 
@@ -81,15 +82,20 @@ sh tests/run_rl_supported015_tests.sh
 ## 当前网络更新与核对
 
 ```bash
-python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31/actor.onnx --target tjb_network --dry-run
-python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31/actor.onnx --target tjb_network
+python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31_delayed/actor.onnx --target tjb_network --dry-run
+python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31_delayed/actor.onnx --target tjb_network
 python tools/test_tjb_network_current_weights.py
 ```
 
 更新器仅替换`tjb_network_data_params.c`的权重数组，不修改其他网络、拓扑或接口。
 本次已核对固件数组与ONNX逐字节相同；数组独立前向的256组golden最大误差
-`1.02818012e-6`；真实`RLMotion31DecodeOutput`的256组输出与冻结015/80契约一致。
+低于`1e-5`；真实`RLMotion31DecodeOutput`的256组输出与冻结015/80契约一致。
 旧ST自动生成报告及图元数据仍记录最初生成的模型，当前权重身份以模型目录的manifest为准。
 
-该小模型在同条件MuJoCo留出测试中，教师完成16/19条命令，学生完成17/19条命令，
-学生无新增跌倒；保留教师的零命令漂移。该结果不是目标板ST runtime、实时性或实机验证。
+当前模型累计增加12,000次延迟监督更新，最终固定插值两个已训练checkpoint的权重，
+部署为单个MLP。34个明确的V4延迟工况中，教师完成30项，学生完成32项，学生无新增跌倒；
+教师完成的30项中28项满足全部相对保真门限，核心18项全部通过。
+剩余两项为+4rad/s转向时侧倾峰值比教师约多1.8–1.9°；不能声称完全复刻。
+3项无延迟基础对照也通过。完整两组延迟参数和原始结果见当前模型manifest指向的部署包。
+本次只更新权重，不在固件中新增时延、滤波、补偿或提高限矩。
+该结果不是目标板ST runtime、实时性或实机验证。
