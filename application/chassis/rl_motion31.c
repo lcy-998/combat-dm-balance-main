@@ -189,7 +189,9 @@ int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
          0.029116082936525345f, -0.09327510744333267f, 0.0f};
     for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
         float clipped = fminf(fmaxf(action[i], -1.0f), 1.0f);
-        target[i] = center[i] + ((i == 2u || i == 5u) ? 40.0f : 0.15f) * clipped;
+        const float scale = (i == 2u || i == 5u) ?
+            RL_MOTION31_WHEEL_ACTION_SCALE_RAD_S : RL_MOTION31_LEG_ACTION_SCALE_RAD;
+        target[i] = center[i] + scale * clipped;
     }
     return finite_array(target, RL_MOTION31_ACTION_SIZE) ? 0 : -1;
 }

@@ -1,7 +1,8 @@
 # Motion31 支撑中心接口与PD执行
 
 分支：`feature/rl-motion31-supported015`。本分支只保留
-`motion31_kinematic_support_centered_015_40_v1`，没有旧接口开关或兼容解码。
+`motion31_kinematic_support_centered_015_80_v1`，腿中心偏移范围±0.15rad、轮目标范围±80rad/s，
+没有旧接口开关或兼容解码。
 构建时不再传 `RL_MOTION31_OUTPUT_VERSION`。
 
 ## 模型与通道
@@ -10,7 +11,10 @@
 right hip/active/wheel，对应几何右三通道在前、几何左三通道在后。几何左右以站车尾朝车头看为准。
 关节标定零位与正方向没有改变，不能按几何左优先重排数组。
 
-本次未替换X-CUBE-AI权重。当前检入的旧权重不符合本接口，须安装同接口小模型后再使用。
+当前`tjb_network`已通过`tools/update_xcube_ai_weights.py`更新为Motion2320蒸馏小模型
+（31→128→64→32→6，14,630参数，FP32权重58,520字节）。来源ONNX、冻结输出契约、
+256组golden与SHA记录保存在[模型目录](models/motion2320_small31/manifest.json)。
+部署模型必须明确声明上述015/80契约；015/40或旧1.5/100模型均不能直接配用本解码器。
 2048大Actor不能直接写入现有31→128→64→32→6的权重数组；需先蒸馏或重新生成匹配网络。
 
 ## 输入与输出
@@ -31,13 +35,14 @@ right hip/active/wheel，对应几何右三通道在前、几何左三通道在�
 ```text
 [-0.02911608294, -0.09327510744, +0.02911608294, -0.09327510744] rad
 腿绝对目标 = 对应中心 + 0.15 * clip(action, -1, 1)
-轮速目标   = 40 * clip(action, -1, 1) rad/s
+轮速目标   = 80 * clip(action, -1, 1) rad/s
 ```
 
 中心是几何角加固定支撑目标偏移，不是编码器零位或额外力矩补偿。
 不累加、不再Tanh、不按实测高度重新移动中心。其他高度命令拒绝。
 `RLMotion31DecodeOutput(action, command_height_m, target)`是唯一解码入口，
-推理预览和采用前校验共用该函数。输入归一化仍用1.5/100，不能跟着输出改成0.15/40。
+推理预览和采用前校验共用该函数。输入归一化仍用1.5/100，不能跟着输出改成0.15/80。
+例如实际采用轮目标+80/-80rad/s，下一帧obs[20:22]为+0.8/-0.8，而非+1/-1。
 
 ## 实际采用与PD
 
@@ -66,8 +71,25 @@ CC=clang sh tests/run_rl_host_tests.sh
 sh tests/run_rl_supported015_tests.sh
 ```
 
-覆盖新尺度/固定中心、真实dq、输入归一化、关节/轮方向、真实RLShadowTask、
+覆盖015/80尺度/固定中心、旧40尺度预览拒绝、真实dq、输入归一化、关节/轮方向、真实RLShadowTask、
 实际采用previous、5ms新反馈PD、P/D各通道、限矩、六轴失败事务、过期/非有限输入和故障锁存。
+±80rad/s目标采用后，额外核验轮Kv0.2、previous÷100与原电流限幅，扩大目标包络不提高力矩/电流上限。
 另有400组Actor/PD相位、推理耗时、任务先后顺序和时钟回绕测试。
 仅RTOS/AI库等硬件边界使用桩；通过主机测试不等于目标板完整构建、实时性或实机稳定性已验证。
 当前主机未提供ARM GCC，因此未做整板链接/刷写。
+
+## 当前网络更新与核对
+
+```bash
+python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31/actor.onnx --target tjb_network --dry-run
+python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31/actor.onnx --target tjb_network
+python tools/test_tjb_network_current_weights.py
+```
+
+更新器仅替换`tjb_network_data_params.c`的权重数组，不修改其他网络、拓扑或接口。
+本次已核对固件数组与ONNX逐字节相同；数组独立前向的256组golden最大误差
+`1.02818012e-6`；真实`RLMotion31DecodeOutput`的256组输出与冻结015/80契约一致。
+旧ST自动生成报告及图元数据仍记录最初生成的模型，当前权重身份以模型目录的manifest为准。
+
+该小模型在同条件MuJoCo留出测试中，教师完成16/19条命令，学生完成17/19条命令，
+学生无新增跌倒；保留教师的零命令漂移。该结果不是目标板ST runtime、实时性或实机验证。

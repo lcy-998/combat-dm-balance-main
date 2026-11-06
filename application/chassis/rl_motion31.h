@@ -7,7 +7,9 @@
 #define RL_MOTION31_ACTION_SIZE 6u
 #define RL_MOTION31_WHEEL_CURRENT_PER_NM (19.0f / 0.00036f / (268.0f / 17.0f))
 
-#define RL_MOTION31_ACTION_CONTRACT "motion31_kinematic_support_centered_015_40_v1"
+#define RL_MOTION31_ACTION_CONTRACT "motion31_kinematic_support_centered_015_80_v1"
+#define RL_MOTION31_LEG_ACTION_SCALE_RAD 0.15f
+#define RL_MOTION31_WHEEL_ACTION_SCALE_RAD_S 80.0f
 #define RL_MOTION31_HEIGHT_M 0.34f
 
 typedef struct {

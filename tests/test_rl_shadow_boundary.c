@@ -77,7 +77,7 @@ int main(int argc,char **argv)
         assert(inferences==3 && published.valid);
         assert(published.previous_source==RL_PREVIOUS_ADOPTED && published.previous_sequence==99);
         assert(fabsf(published.preview.target[0]-(-.02911608294f+.12f))<1e-6f);
-        assert(published.preview.target[2]==32);
+        assert(published.preview.target[2]==64);
     }else assert(!inferences && !published.valid);
     assert(g_rl_shadow_debug.controller_owner==(!scenario?RL_OWNER_RL:RL_OWNER_LQR));
     assert(g_rl_shadow_debug.frame_begin==g_rl_shadow_debug.frame_end);

@@ -18,6 +18,8 @@ static RLShadowSnapshot feedback(uint32_t now, RLControlState *state)
 
 int main(void)
 {
+    assert(!strcmp(RL_MOTION31_ACTION_CONTRACT,
+                   "motion31_kinematic_support_centered_015_80_v1"));
     const unsigned legs[4]={0,1,3,4};
     const float expected[6]={-.029116082936525345f,-.09327510744333267f,0,
                              .029116082936525345f,-.09327510744333267f,0};
@@ -49,7 +51,7 @@ int main(void)
     assert(!RLMotion31DecodeOutput(action,.34f,target));
     assert(!RLMotion31DecodeOutput(action,.34f,again));
     for(unsigned i=0;i<6;++i) {
-        const float width=(i==2 || i==5)?40:.15f;
+        const float width=(i==2 || i==5)?80:.15f;
         near(target[i],expected[i]+((i&1)?-width:width));
         near(again[i],target[i]); /* no accumulation or second Tanh */
     }
@@ -69,11 +71,13 @@ int main(void)
     assert(RLControlExecute(&state,6000,1,&s,&invalid,&frame)==1 && !state.active);
     invalid=c; invalid.preview.target[0]=1.5f*c.action[0];
     assert(RLControlExecute(&state,6000,1,&s,&invalid,&frame)==1 && !state.active);
+    invalid=c; invalid.preview.target[2]=40.0f*c.action[2];
+    assert(RLControlExecute(&state,6000,1,&s,&invalid,&frame)==1 && !state.active);
     invalid=c; invalid.preview.observation[24]=.60f;
     assert(RLControlExecute(&state,6000,1,&s,&invalid,&frame)==1 && !state.active);
     assert(!RLControlExecute(&state,6000,1,&s,&c,&frame) && state.active);
     near(state.adopted_target[0],expected[0]+.03f);
-    near(state.adopted_target[2],4);
+    near(state.adopted_target[2],8);
     s=feedback(6005,&state);
     near(s.motion.previous_target[0],state.adopted_target[0]);
     assert(s.previous_source==RL_PREVIOUS_ADOPTED);
@@ -129,6 +133,29 @@ int main(void)
         assert(state.adopted_sequence==committed.adopted_sequence);
         assert(!memcmp(state.adopted_target,committed.adopted_target,sizeof(state.adopted_target)));
     }
-    puts("PASS supported015: center/scale, real dq, physical previous, PD and causal adoption");
+    /* Full wheel targets are adopted in physical units. Output scale does not
+       alter previous normalization, Kv, fresh PD feedback or current limits. */
+    state=(RLControlState){.ramp_completed=1,.timing=1,.ready=1,.epoch=8};
+    s=feedback(7000,&state);
+    c=(RLShadowCommand){.valid=1,.snapshot_sequence=200,.snapshot_tick_ms=7000,
+        .output_tick_ms=7000,.control_epoch=8,.previous_source=RL_PREVIOUS_INIT_PROXY};
+    c.action[2]=1; c.action[5]=-1;
+    assert(!RLMotion31BuildPreview(&s.motion,c.action,&c.preview));
+    near(c.preview.motor_wheel_target_rad_s[0],-80);
+    near(c.preview.motor_wheel_target_rad_s[1],-80);
+    assert(!RLControlExecute(&state,7000,1,&s,&c,&frame));
+    near(state.adopted_target[2],80); near(state.adopted_target[5],-80);
+    near(frame.tau_pd_nm[2],16); near(frame.tau_pd_nm[5],-16);
+    near(frame.tau_limited_nm[2],5.5f); near(frame.tau_limited_nm[5],-5.5f);
+    near(fabsf(frame.wheel_current_raw[0]),8192);
+    near(fabsf(frame.wheel_current_raw[1]),8192);
+    s=feedback(7005,&state);
+    assert(!RLMotion31BuildObservation(&s.motion,obs));
+    near(obs[20],.8f); near(obs[21],-.8f);
+    s.motion.joint_velocity_rad_s[2]=70; s.motion.joint_velocity_rad_s[5]=-70;
+    assert(!RLControlExecute(&state,7005,1,&s,&c,&frame));
+    near(frame.tau_pd_nm[2],2); near(frame.tau_pd_nm[5],-2);
+    near(state.adopted_target[2],80); near(state.adopted_target[5],-80);
+    puts("PASS supported015/80: center/scale, real dq, physical previous, PD and causal adoption");
     return 0;
 }

@@ -151,7 +151,7 @@ int main(void)
     RLControlFillPrevious(&state,&s);
     assert(s.previous_source==RL_PREVIOUS_ADOPTED && s.adopted_sequence==101);
     assert(fabsf(s.motion.previous_target[0]-(-.02911608294f+.015f))<1e-6f);
-    assert(s.motion.previous_target[2]==4);
+    assert(s.motion.previous_target[2]==8);
 
     /* No new Actor action: PD still uses the new 200Hz feedback. */
     s.tick_ms=5005;s.motion.joint_position_rad[0]=state.adopted_target[0];s.motion.joint_velocity_rad_s[0]=2;

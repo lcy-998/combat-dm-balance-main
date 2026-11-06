@@ -1,0 +1,77 @@
+{
+  "model_name": "motion2320_small31_round02",
+  "teacher_checkpoint_sha256": "086739f263bfca2d5a2bb2da92d69d1ecd7946f50d0a4c5514846bae5f3c4f57",
+  "actor_onnx_sha256": "15814ba537a989d456ce7ffcd0bc8c5ad38564a87c049b8820724c5df0ed08b7",
+  "golden_vectors_sha256": "d6a6a4e93d190103726129e352406eaa8f843995bb2912fdb739d5a5b635c23b",
+  "output_contract_sha256": "98a7d711fe7ecce1d32dc7ac21764160a2e9b62207bf7319e4b66b423fd06d06",
+  "firmware_weight_blob_sha256": "ba1ec887c6924082940caa1c9a76eadf935071ca931054895701fd168acb5853",
+  "parameters": 14630,
+  "weight_bytes": 58520,
+  "action_version": "motion31_kinematic_support_centered_015_80_v1",
+  "architecture": [
+    31,
+    128,
+    64,
+    32,
+    6
+  ],
+  "update_command": "python tools/update_xcube_ai_weights.py .Doc/models/motion2320_small31/actor.onnx --target tjb_network",
+  "source_package": "/home/kellen/wheel_leg_native_train/deployment_protocol/2026_11_06__motion2320_small31_015_80",
+  "source_run": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_06__motion2320_small31_distillation",
+  "mujoco_validation": {
+    "holdout_cases": 19,
+    "teacher_completed": 16,
+    "student_completed": 17,
+    "student_new_falls": 0,
+    "mean_absolute_behavior_gaps_on_both_complete": {
+      "vx_mean": 0.011553655329389787,
+      "yaw_mean": 0.005758498427420323,
+      "height_mean": 8.397849606850069e-05
+    },
+    "failed_cases": [
+      {
+        "command": [
+          -2.0,
+          0.0
+        ],
+        "teacher": "FALL",
+        "student": "COMPLETE",
+        "teacher_seconds": 0.7,
+        "student_seconds": 20.0
+      },
+      {
+        "command": [
+          4.0,
+          0.0
+        ],
+        "teacher": "FALL",
+        "student": "FALL",
+        "teacher_seconds": 0.72,
+        "student_seconds": 8.07
+      },
+      {
+        "command": [
+          -4.0,
+          0.0
+        ],
+        "teacher": "FALL",
+        "student": "FALL",
+        "teacher_seconds": 0.49,
+        "student_seconds": 0.57
+      }
+    ],
+    "plant": "play_onnx_mujoco V4 default; no transport/observation age/motor response; armature .012 friction .5 PD40/2/.2 caps40/2.446947864"
+  },
+  "hardware_validated": false,
+  "st_generated_report_note": "Original ST report and graph metadata describe old generation; updater changed weight array only. This manifest identifies current weights.",
+  "firmware_host_verification": {
+    "weight_bytes_exactly_match_onnx": true,
+    "golden_count": 256,
+    "weight_array_forward_max_abs_error": 1.02818012e-06,
+    "real_decoder_matches_contract": true,
+    "control_host_tests_passed": 6,
+    "weights_only_update_outside_array_unchanged": true,
+    "arm_gcc_available": false,
+    "board_build_and_flash": false
+  }
+}
