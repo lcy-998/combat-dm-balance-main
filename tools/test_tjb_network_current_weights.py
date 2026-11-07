@@ -16,9 +16,10 @@ import numpy as np
 import onnx
 
 import update_xcube_ai_weights as converter
+from fit_c0_height_center import fit_contract
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / '.Doc/models/motion_C0_standing_trial'
+MODEL = ROOT / '.Doc/models/motion_C0_height_formula_trial'
 PARAMS = ROOT / 'X-CUBE-AI/App/tjb_network_data_params.c'
 
 
@@ -29,6 +30,20 @@ def firmware_blob():
 
 
 class CurrentWeightsTests(unittest.TestCase):
+    def test_active_center_is_a_global_polynomial_with_source_anchors_preserved(self):
+        contract=json.loads((MODEL/'output_contract.json').read_text())
+        self.assertNotIn('support_offset_table',contract)
+        p=contract['support_offset_polynomial']
+        self.assertEqual(p['kind'],'global_quintic_support_offset_v1')
+        source=ROOT/'.Doc/models/motion_C0_standing_trial'
+        fit=fit_contract(json.loads((source/'output_contract.json').read_text()))
+        self.assertLess(fit['anchor_max_error_rad'],1e-12)
+        self.assertEqual(p['coefficients_low_to_high'],fit['coefficients_low_to_high'])
+        self.assertEqual((MODEL/'student.pt').read_bytes(),(source/'student.pt').read_bytes())
+        binding=json.loads((MODEL/'firmware_binding.json').read_text())
+        for field in ['stop_gate','standstill_confirmation','new_height_slew_limit']:
+            self.assertFalse(binding[field])
+
     def test_model_declares_full_actor20_v4legs_and_replacement_wheel_delays(self):
         timing = json.loads((MODEL/'execution_timing.json').read_text())
         self.assertEqual(timing['actor_packet_age_ms'],20)
@@ -73,7 +88,7 @@ class CurrentWeightsTests(unittest.TestCase):
 
     def test_real_firmware_decoder_matches_frozen_output_contract(self):
         declaration = json.loads((MODEL/'output_contract.json').read_text())
-        self.assertEqual(declaration['action_version'], 'motion_multiheight_support_center_015_80_v1')
+        self.assertEqual(declaration['action_version'], 'motion_multiheight_support_center_poly5_015_80_v1')
         with tempfile.TemporaryDirectory() as temporary:
             library = Path(temporary)/'decoder.so'
             subprocess.run(['cc','-std=c11','-O2','-shared','-fPIC',

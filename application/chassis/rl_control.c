@@ -10,6 +10,11 @@ static float clampf(float value, float lower, float upper)
     return fminf(fmaxf(value, lower), upper);
 }
 
+float RLControlCommandHeight(const RLControlState *state)
+{
+    return state!=NULL && state->height.initialized ? state->height.command_m : RL_MOTION31_HEIGHT_M;
+}
+
 static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
 {
     if (command == NULL || !command->valid || command->snapshot_sequence == 0u ||
@@ -23,6 +28,9 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
     for (unsigned i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
         if (!isfinite(command->preview.observation[i])) return 0;
     }
+    /* Decode using this packet's original Actor input height, not the newer
+       live height. Transport legitimately overlaps a changed height command;
+       already computed absolute targets must never be recentered in flight. */
     float decoded[6];
     if (RLMotion31DecodeOutput(command->action,
             command->preview.observation[24] * 0.5f, decoded) != 0) return 0;
@@ -127,6 +135,15 @@ int RLControlFeedbackFresh(const RLShadowSnapshot *s,uint32_t now)
     return 1;
 }
 
+int RLControlSetCommandHeight(RLControlState *state,float command_height_m)
+{
+    if(state==NULL || !isfinite(command_height_m) ||
+       command_height_m<RL_MOTION31_HEIGHT_MIN_M-1e-7f ||
+       command_height_m>RL_MOTION31_HEIGHT_MAX_M+1e-7f) return -1;
+    state->height.initialized=1;state->height.command_m=command_height_m;
+    return 0;
+}
+
 int RLControlExecute(RLControlState *state,
                      uint32_t now_ms, int normal_lqr,
                      const RLShadowSnapshot *current, const RLShadowCommand *command,
@@ -151,6 +168,7 @@ int RLControlExecute(RLControlState *state,
             memcpy(pending.adopted_target,command->preview.target,sizeof(pending.adopted_target));
             pending.adopted_sequence=command->snapshot_sequence;
             pending.adopted_tick_ms=now_ms;new_target=1;
+            pending.adopted_height_m=command->preview.observation[24]*.5f;
         }
     }
     if (!state->active && !new_target) return 1; /* keep LQR until the first valid policy command */

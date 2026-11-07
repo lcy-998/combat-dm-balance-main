@@ -1,0 +1,122 @@
+{
+  "source_commit": "e8c7bffe0aa92e800a424a03e428787378ac816e",
+  "status": "CPU_AUDIT_REPAIRED_NOT_COMMITTED",
+  "defect": {
+    "title": "New multiheight decoder allowed non-live-height packet adoption",
+    "reproduced_before_fix": true,
+    "before_failure": "test_other_height_command_cannot_bypass_live_snapshot_guard: RLControlStep.active unexpectedly true for internally consistent .30m packet",
+    "root": "application/chassis/rl_control.c:13 command_usable only redecoded packet height and never enforced live fixed-height contract",
+    "repair": "Reject packet height differing from RL_MOTION31_HEIGHT_M before target adoption",
+    "test_heights_m": [
+      0.3,
+      0.32,
+      0.36,
+      0.38,
+      0.4
+    ],
+    "before_takeover_rejected": true,
+    "active_previous_preserved": true
+  },
+  "tests": {
+    "gcc_host_suites_passed": 7,
+    "clang_host_suites_passed": 7,
+    "phase_schedule_cases": 400,
+    "center_roundtrip_heights": 101,
+    "raw_motor_P_and_D_axes": 4,
+    "P_positive_raw_error_rad": 0.01,
+    "expected_raw_motor_P_torque_Nm": -0.4,
+    "D_positive_raw_velocity_rad_s": 0.1,
+    "expected_raw_motor_D_torque_Nm": -0.2,
+    "real_state_goldens": 432,
+    "center_goldens": 103,
+    "weight_tests_passed": 4,
+    "weight_mean_max_error": 2.75671482e-07,
+    "address_and_undefined_sanitizers_passed": true
+  },
+  "interface": {
+    "absolute_q_inputs": true,
+    "absolute_previous": true,
+    "input_scale_legs": 1.5,
+    "input_scale_wheel": 100,
+    "output_scale_legs": 0.15,
+    "output_scale_wheel": 80,
+    "live_command_height_m": 0.34,
+    "decoder_range_m": [
+      0.3,
+      0.4
+    ],
+    "dynamic_height_enabled": false,
+    "center_uses": "command height only, not measured height",
+    "PD_uses": "absolute target minus absolute measured model q; never subtract support center a second time",
+    "hardware_zero_unchanged": true,
+    "encoder_delta_status": "UNKNOWN_PHYSICAL_CALIBRATION_NOT_PROVEN",
+    "center_table_by_height": {
+      "0.3": [
+        0.0004247730812289019,
+        -0.02844248672000349,
+        -0.0004247730812289019,
+        -0.02844248672000349
+      ],
+      "0.32": [
+        -0.062314026057720184,
+        -0.09167053550481796,
+        0.062314026057720184,
+        -0.09167053550481796
+      ],
+      "0.34": [
+        -0.13097405433654785,
+        -0.15117678046226501,
+        0.13097405433654785,
+        -0.15117678046226501
+      ],
+      "0.36": [
+        -0.20775295794010162,
+        -0.2095864713191986,
+        0.20775295794010162,
+        -0.2095864713191986
+      ],
+      "0.38": [
+        -0.2732885775493883,
+        -0.27561134057435066,
+        0.2732885775493883,
+        -0.27561134057435066
+      ],
+      "0.4": [
+        -0.34162476077810827,
+        -0.3444367734489361,
+        0.34162476077810827,
+        -0.3444367734489361
+      ]
+    },
+    "example_032_vs_034_P_shift_same_mean_q_dq_Nm": [
+      2.7464011311531067,
+      2.380249798297882,
+      -2.7464011311531067,
+      2.380249798297882
+    ]
+  },
+  "actuator_route": {
+    "host_PD_enabled": true,
+    "driver_host_position_PD_disabled_on_RL": true,
+    "driver_kp_kd_zero_on_RL": true,
+    "driver_mode": "torque feedforward only; pos/vel set zero with kp/kd zero, no second position zero",
+    "leg_limits_Nm": 40,
+    "wheel_PD_limit_Nm": 5.5,
+    "wheel_final_raw_limit": 8192,
+    "wheel_final_equivalent_Nm": 2.44694786377709,
+    "spring_source": "measured current geometry, unchanged, applied once after model-to-motor torque mapping"
+  },
+  "hardware_measured": false,
+  "board_build": false,
+  "board_flash": false,
+  "training_changed": false,
+  "source_SHA256": {
+    "/home/kellen/combat-dm-balance-motion31-supported015/application/chassis/rl_control.c": "06f752ff8f7c5dc9332c56b1b23dfa6fa114d3b00aaebfd65528d656a2c78a22",
+    "/home/kellen/combat-dm-balance-motion31-supported015/tests/test_rl_center_contract.c": "f56b8a6059f01ca892ff90e0297e1c6b8910908bf8fbbc9501323c70f7f0ccfa",
+    "/home/kellen/combat-dm-balance-motion31-supported015/tests/run_rl_host_tests.sh": "cfd239f08be2ac10e4d22f8bbdb38e0692742cc8bdecb8368dec03c86b5d812d",
+    "/home/kellen/combat-dm-balance-motion31-supported015/application/chassis/rl_motion31.c": "57dbbae0be476240c80e6b6118ab0c9df097d44a6feb4d504d698a5aba80d724",
+    "/home/kellen/combat-dm-balance-motion31-supported015/application/chassis/chassis.c": "1cf344bd21b16460e0b5f772df5383413836e9a5e74fa0a2431a906092f4b8fb",
+    "/home/kellen/combat-dm-balance-motion31-supported015/modules/motor/DMmotor/dmmotor.c": "48de5e871b1966913f9086ad5273369c01a4bdccfc2b2b01434a879244822c16"
+  },
+  "weights_and_center_unchanged_from_baseline": true
+}

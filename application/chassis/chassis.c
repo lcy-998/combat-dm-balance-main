@@ -135,6 +135,7 @@ uint64_t cent = 0;
 static float del_t;
 static uint8_t chassis_lqr_output_valid;
 static RLControlState rl_control_state;
+static float rl_height_request_m=RL_MOTION31_HEIGHT_M;
 static RLControlFrame rl_control_frame;
 static RLShadowSnapshot rl_pd_snapshot;
 static RLShadowCommand rl_consumed_command;
@@ -838,6 +839,16 @@ static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_
     return mapped;
 }
 
+/* Explicit absolute command API for an upper controller. No stationarity,
+   speed, dwell or slew restriction; only the frozen center-table domain. */
+int ChassisSetRLHeight(float command_height_m)
+{
+    if(!isfinite(command_height_m) || command_height_m<RL_MOTION31_HEIGHT_MIN_M-1e-7f ||
+       command_height_m>RL_MOTION31_HEIGHT_MAX_M+1e-7f) return -1;
+    taskENTER_CRITICAL();rl_height_request_m=command_height_m;taskEXIT_CRITICAL();
+    return 0;
+}
+
 /* One coherent local feedback copy with CAN receipt/filter-completion times.
    Sensor acquisition times remain UNKNOWN; task time is not substituted for them. */
 static RLShadowSnapshot CurrentRLSnapshot(void)
@@ -887,7 +898,19 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     out.leg_spread_rad[0]=lf-lb;out.leg_spread_rad[1]=rf-rb;
     out.lqr_pitch_rad=p;
     out.motion.command_vx_m_s=v_cmd;out.motion.command_yaw_rad_s=w_cmd;
-    out.motion.command_height_m=.34f;
+    /* Same existing changeL lever and increment, now also an Actor root-height
+       request. Do not feed LQR leg length l_xx or measured height to Actor. */
+    taskENTER_CRITICAL();
+    if(rl_control_state.active && ChassisNormalLQRState()) {
+        if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=0.002f*0.03f;
+        if(chassis_cmd_recv.changeL==1) rl_height_request_m-=0.002f*0.03f;
+        rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
+                                 fminf(RL_MOTION31_HEIGHT_MAX_M,rl_height_request_m));
+    }
+    const float requested_height=rl_height_request_m;
+    taskEXIT_CRITICAL();
+    (void)RLControlSetCommandHeight(&rl_control_state,requested_height);
+    out.motion.command_height_m=RLControlCommandHeight(&rl_control_state);
     out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE && !chassis_status);
     out.rl_active=(out.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
                    rl_control_state.ready && !rl_control_state.fault);

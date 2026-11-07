@@ -1,0 +1,40 @@
+{
+  "role": "C0_CONTINUOUS_HEIGHT_FORMULA_CPU_TRIAL",
+  "source_PT_sha256": "8a2e5f89f76247eb5a0c4b03b03ab45833061610a355d03eada5ed3e601413ac",
+  "actor_onnx_sha256": "727943b0b47fc29aeb6726cf0446b3f5079b1f3a0309c58670b4ec14fae46183",
+  "output_contract_sha256": "256b89194370bbc0b36b3e3b9f032c0627d545bb75cc8c90b66ea35b8102d2e9",
+  "firmware_weight_blob_sha256": "e6f20987c65dd8d3795dfef26aee53fe2747a27960cb948ef6cea87be1ae69ee",
+  "parameters": 14630,
+  "source_C0_contract_sha256": "1db5cb51a7d102e738a6ddeb65406f8108463f6eac3dca1be430f9587e4734e5",
+  "encoder_delta_status": "UNKNOWN",
+  "PT_weights_unchanged": true,
+  "center_changed_between_anchors": true,
+  "runtime_center": "analytic geometry plus continuous quintic support offset",
+  "height_command_range_m": [
+    0.3,
+    0.4
+  ],
+  "stop_gate": false,
+  "standstill_confirmation": false,
+  "new_height_slew_limit": false,
+  "board_flashed": false,
+  "hardware_validated": false,
+  "physical_dynamic_height_validation": "NOT_RUN",
+  "source_PT_embedded_contract": "historical source, active contract explicitly provided externally",
+  "validation": {
+    "host_suites_gcc": 8,
+    "host_suites_clang": 8,
+    "actual_chassis_snapshot_boundary_gcc": true,
+    "actual_chassis_snapshot_boundary_clang": true,
+    "network_tests": 5,
+    "converter_tests_passed": 4,
+    "converter_optional_skipped": 2,
+    "actual_center_golden_count": 1001,
+    "actual_center_max_error_rad": 0.0,
+    "real_state_golden_count": 432,
+    "ASan_UBSan_height_regression": true,
+    "weight_updater_dry_run": "UNCHANGED",
+    "new_physics_steps": 0,
+    "new_optimizer_updates": 0
+  }
+}

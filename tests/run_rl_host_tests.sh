@@ -10,7 +10,7 @@ trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015; do
+for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015 test_rl_center_contract test_rl_height_runtime; do
     set -- "$repo/tests/$name.c" "$core/rl_motion31.c" "$core/rl_control.c"
     case "$name" in
         test_rl_capture) set -- "$@" "$core/rl_capture.c" ;;
@@ -27,4 +27,4 @@ for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture te
     fi
     printf 'PASS %s\n' "$name"
 done
-printf '6/6 host tests passed; no firmware flash, hardware access or real-time certification.\n'
+printf '8/8 host tests passed; no firmware flash, hardware access or real-time certification.\n'

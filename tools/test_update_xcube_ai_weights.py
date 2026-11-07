@@ -11,7 +11,7 @@ import update_xcube_ai_weights as converter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / ".Doc/models/motion_C0_standing_trial/actor.onnx"
+MODEL = ROOT / ".Doc/models/motion_C0_height_formula_trial/actor.onnx"
 GENERATED = ROOT / "X-CUBE-AI" / "App" / "tjb_network_data_params.c"
 NETWORK_MODEL = Path("D:/DefaultStore/QQ/mlp/RMUC_H723_smallMLP_v8_20261009/policy.onnx")
 NETWORK_GENERATED = ROOT / "X-CUBE-AI" / "App" / "network_data_params.c"

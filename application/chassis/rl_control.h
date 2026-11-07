@@ -18,6 +18,10 @@
 
 enum { RL_FAULT_NONE=0u, RL_FAULT_INPUT=1u, RL_FAULT_COMMAND=2u,
        RL_FAULT_PD=3u, RL_FAULT_COMPENSATION=4u };
+typedef struct {
+    float command_m;
+    uint8_t initialized;
+} RLControlHeightState;
 
 typedef struct {
     uint32_t ramp_start_tick;
@@ -32,6 +36,8 @@ typedef struct {
     uint32_t adopted_sequence;
     uint32_t adopted_tick_ms;
     float adopted_target[6]; /* local PD adoption, not a claim of remote driver acceptance */
+    float adopted_height_m; /* identity of the actually adopted Actor request */
+    RLControlHeightState height;
 } RLControlState;
 typedef struct {
     uint8_t active;
@@ -63,6 +69,10 @@ int RLControlExecute(RLControlState *state,
 /* Before actual adoption LQR has no unique position target. The q/dq proxy
    is explicit metadata, never a shadow prediction or falsely marked executed. */
 void RLControlFillPrevious(const RLControlState *state, RLShadowSnapshot *snapshot);
+float RLControlCommandHeight(const RLControlState *state);
+/* Explicit height request, no stop/dwell/slew/adoption gate. Does not rewrite
+   actual previous or an in-flight request's physical target. */
+int RLControlSetCommandHeight(RLControlState *state,float command_height_m);
 int RLControlFeedbackFresh(const RLShadowSnapshot *snapshot, uint32_t now_ms);
 /* Only explicit disabled/safe mode acknowledges a latched fault. */
 void RLControlReset(RLControlState *state);

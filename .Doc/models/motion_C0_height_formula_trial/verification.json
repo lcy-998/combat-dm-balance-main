@@ -1,0 +1,75 @@
+{
+  "status": "CPU_VERIFIED_NO_PHYSICS_NO_HARDWARE",
+  "validation": {
+    "host_suites_gcc": 8,
+    "host_suites_clang": 8,
+    "actual_chassis_snapshot_boundary_gcc": true,
+    "actual_chassis_snapshot_boundary_clang": true,
+    "network_tests": 5,
+    "converter_tests_passed": 4,
+    "converter_optional_skipped": 2,
+    "actual_center_golden_count": 1001,
+    "actual_center_max_error_rad": 0.0,
+    "real_state_golden_count": 432,
+    "ASan_UBSan_height_regression": true,
+    "weight_updater_dry_run": "UNCHANGED",
+    "new_physics_steps": 0,
+    "new_optimizer_updates": 0
+  },
+  "fit": {
+    "kind": "global_quintic_support_offset_v1",
+    "normalization": {
+      "height_origin_m": 0.35,
+      "height_scale_m": 0.05
+    },
+    "coefficients_low_to_high": {
+      "hip": [
+        -0.34856693858410187,
+        -0.022292895866604146,
+        0.0129144983397644,
+        0.07054670460612844,
+        -0.009495954661591767,
+        -0.04464695144541761
+      ],
+      "active": [
+        -0.3586744187278344,
+        0.027428468197591423,
+        -0.008430756926274608,
+        -0.026839290520086146,
+        0.006199085975201719,
+        0.0160453031818037
+      ]
+    },
+    "source_height_m": [
+      0.3,
+      0.32,
+      0.34,
+      0.36,
+      0.38,
+      0.4
+    ],
+    "anchor_max_error_rad": 7.216449660063518e-16,
+    "interval_extrema_max_difference_from_source_rad": [
+      0.003870132436579743,
+      0.0015347698688914502
+    ],
+    "interval_extrema_height_m": [
+      0.39243325493944975,
+      0.39239035243192355
+    ],
+    "Kp40_max_request_difference_Nm": [
+      0.15480529746318972,
+      0.06139079475565801
+    ],
+    "difference_scope": "All source intervals: polynomial-minus-linear extrema from derivative roots and endpoints; not only a grid scan",
+    "runtime_lookup": false,
+    "stationarity_gate": false,
+    "confirmation_timer": false,
+    "new_slew_limit": false,
+    "physical_transition_validation": "NOT_RUN",
+    "encoder_delta": "UNKNOWN_NOT_FIT_FROM_CENTER"
+  },
+  "source_policy_unchanged": true,
+  "original_source_package_byte_identical": true,
+  "active_contract_sha256": "256b89194370bbc0b36b3e3b9f032c0627d545bb75cc8c90b66ea35b8102d2e9"
+}

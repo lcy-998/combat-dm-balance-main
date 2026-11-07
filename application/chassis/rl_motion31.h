@@ -7,10 +7,12 @@
 #define RL_MOTION31_ACTION_SIZE 6u
 #define RL_MOTION31_WHEEL_CURRENT_PER_NM (19.0f / 0.00036f / (268.0f / 17.0f))
 
-#define RL_MOTION31_ACTION_CONTRACT "motion_multiheight_support_center_015_80_v1"
+#define RL_MOTION31_ACTION_CONTRACT "motion_multiheight_support_center_poly5_015_80_v1"
 #define RL_MOTION31_LEG_ACTION_SCALE_RAD 0.15f
 #define RL_MOTION31_WHEEL_ACTION_SCALE_RAD_S 80.0f
 #define RL_MOTION31_HEIGHT_M 0.34f
+#define RL_MOTION31_HEIGHT_MIN_M 0.30f
+#define RL_MOTION31_HEIGHT_MAX_M 0.40f
 
 typedef struct {
     float gyro_model_rad_s[3];
@@ -55,9 +57,9 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *sample,
                                float observation[RL_MOTION31_OBSERVATION_SIZE]);
 /* Unit gravity, finite fields and calibrated mechanical input branch. No input clipping. */
 int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *sample);
-/* Frozen C0 height-center table. Mathematical decoding supports .30-.40m,
-   no extrapolation; only .32/.34/.36 are standing anchors. Live snapshot
-   acceptance stays pinned to RL_MOTION31_HEIGHT_M=.34m for this trial.
+/* Continuous C0 quintic height-center formula. Mathematical decoding supports .30-.40m,
+   no extrapolation; live commands use the same .30-.40m contract. Height
+   command changes are allowed during standing or motion; no dwell or slew gate.
    Center is an output reference, never an encoder-zero correction. */
 int RLMotion31SupportCenter(double command_height_m, double center_rad[4]);
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],

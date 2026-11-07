@@ -13,4 +13,8 @@ void ChassisInit();
  */
 void ChassisTask();
 
+/* Ground-to-root command height in meters, full frozen .30-.40m domain.
+   Allowed during motion; no stationarity/dwell/slew gate. */
+int ChassisSetRLHeight(float command_height_m);
+
 #endif // CHASSIS_H

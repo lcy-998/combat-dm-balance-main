@@ -19,7 +19,7 @@ static RLShadowSnapshot feedback(uint32_t now, RLControlState *state)
 int main(void)
 {
     assert(!strcmp(RL_MOTION31_ACTION_CONTRACT,
-                   "motion_multiheight_support_center_015_80_v1"));
+                   "motion_multiheight_support_center_poly5_015_80_v1"));
     const unsigned legs[4]={0,1,3,4};
     const float expected[6]={-0.13097405433655f,-0.15117678046227f,0,
                              0.13097405433655f,-0.15117678046227f,0};
@@ -125,7 +125,7 @@ int main(void)
             .previous_sequence=state.adopted_sequence};
         assert(!RLMotion31BuildPreview(&s.motion,c.action,&c.preview));
         if(mode==0)s.motion.joint_velocity_rad_s[5]=NAN;
-        if(mode==1)s.motion.command_height_m=.30f;
+        if(mode==1)s.motion.command_height_m=.29f;
         if(mode==2)s.leg_length_m[1]=NAN;
         if(mode==3)s.imu_update_tick_ms=6010-25;
         assert(RLControlExecute(&state,6010,1,&s,&c,&frame)<0);

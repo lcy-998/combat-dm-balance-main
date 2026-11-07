@@ -1,0 +1,9 @@
+{
+  "role": "C0_CONTINUOUS_HEIGHT_FORMULA_CPU_TRIAL",
+  "source_checkpoint_sha256": "8a2e5f89f76247eb5a0c4b03b03ab45833061610a355d03eada5ed3e601413ac",
+  "active_contract_sha256": "256b89194370bbc0b36b3e3b9f032c0627d545bb75cc8c90b66ea35b8102d2e9",
+  "source_reference": ".Doc/models/motion_C0_standing_trial/manifest.json",
+  "hardware_validated": false,
+  "new_physics_steps": 0,
+  "new_optimizer_updates": 0
+}
