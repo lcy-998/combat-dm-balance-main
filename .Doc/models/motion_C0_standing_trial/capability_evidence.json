@@ -1,0 +1,11 @@
+{
+  "independent_review": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_07__motion_c0_independent_review/REPORT.md",
+  "terminal_sha256": "90f7892474f0d45f3cc47433f2248415bb1ee06db29361b8c77a29129a3f9a62",
+  "standing": "8/8",
+  "handover": "2/2",
+  "pulse_recovery": "8/8",
+  "straight_vx_pm2": "4/4",
+  "not_passed": "yaw and vx+3 worst5s support",
+  "known_drift_vx_mps": -0.199,
+  "simulation_only": true
+}

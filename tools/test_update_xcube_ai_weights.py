@@ -11,7 +11,7 @@ import update_xcube_ai_weights as converter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT.parent / "2026_10_15-20_16__motion31_u1600_detailed" / "actor1104.onnx"
+MODEL = ROOT / ".Doc/models/motion_C0_standing_trial/actor.onnx"
 GENERATED = ROOT / "X-CUBE-AI" / "App" / "tjb_network_data_params.c"
 NETWORK_MODEL = Path("D:/DefaultStore/QQ/mlp/RMUC_H723_smallMLP_v8_20261009/policy.onnx")
 NETWORK_GENERATED = ROOT / "X-CUBE-AI" / "App" / "network_data_params.c"
@@ -52,9 +52,13 @@ class WeightConverterTests(unittest.TestCase):
             converter.extract_weights(model)
 
     def test_replaces_only_weight_array(self):
-        replacement = MODEL.parent / "actor(1).onnx"
-        blob, _ = converter.extract_weights(onnx.load(str(replacement)))
+        model = onnx.load(str(MODEL))
+        first = model.graph.initializer[0]
+        data = bytearray(first.raw_data); data[0] ^= 1; first.raw_data = bytes(data)
+        blob, _ = converter.extract_weights(model)
         with tempfile.TemporaryDirectory() as directory:
+            replacement = Path(directory)/"changed.onnx"
+            onnx.save(model,str(replacement))
             target = Path(directory) / "tjb_network_data_params.c"
             target.write_bytes(GENERATED.read_bytes())
             subprocess.run(

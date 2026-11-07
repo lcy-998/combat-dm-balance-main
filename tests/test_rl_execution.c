@@ -146,11 +146,11 @@ int main(void)
     s=feedback(5000);RLControlFillPrevious(&state,&s);
     assert(RLControlExecute(&state,5000,1,&s,&c,&out)==0);
     assert(state.active && out.owner==RL_OWNER_RL && state.adopted_sequence==101);
-    assert(fabsf(out.tau_pd_nm[0]-40.0f*(-.02911608294f+.015f))<1e-5f);
+    assert(fabsf(out.tau_pd_nm[0]-40.0f*(-0.13097405433655f+.015f))<1e-5f);
     assert(fabsf(out.wheel_current_raw[0])<=8192 && fabsf(out.wheel_current_raw[1])<=8192);
     RLControlFillPrevious(&state,&s);
     assert(s.previous_source==RL_PREVIOUS_ADOPTED && s.adopted_sequence==101);
-    assert(fabsf(s.motion.previous_target[0]-(-.02911608294f+.015f))<1e-6f);
+    assert(fabsf(s.motion.previous_target[0]-(-0.13097405433655f+.015f))<1e-6f);
     assert(s.motion.previous_target[2]==8);
 
     /* No new Actor action: PD still uses the new 200Hz feedback. */
@@ -158,12 +158,12 @@ int main(void)
     assert(RLControlExecute(&state,5005,1,&s,&c,&out)==0);
     assert(fabsf(out.tau_pd_nm[0]+4)<1e-5f);
     assert(state.adopted_sequence==101);
-    assert(fabsf(out.adopted_target[0]-(-.02911608294f+.015f))<1e-6f);
+    assert(fabsf(out.adopted_target[0]-(-0.13097405433655f+.015f))<1e-6f);
 
     c=command(&state,102,5010,.2f);s=feedback(5010);RLControlFillPrevious(&state,&s);
     assert(RLControlExecute(&state,5010,1,&s,&c,&out)==0);
     assert(state.adopted_sequence==102);
-    assert(fabsf(state.adopted_target[0]-(-.02911608294f+.03f))<1e-6f);
+    assert(fabsf(state.adopted_target[0]-(-0.13097405433655f+.03f))<1e-6f);
     const float adopted=state.adopted_target[0];
     c=command(&state,103,5015,.9f);c.previous_source=RL_PREVIOUS_INIT_PROXY;c.previous_sequence=0;
     s.tick_ms=5015;

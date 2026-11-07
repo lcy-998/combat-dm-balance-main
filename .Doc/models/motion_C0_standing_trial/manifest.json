@@ -1,0 +1,40 @@
+{
+  "role": "C0_STANDING_STRAIGHT_RESEARCH_TRIAL_NOT_INSTALLED",
+  "source_checkpoint": "/home/kellen/wheel_leg_native_train/runs/2026_11_07__motion_directional_repair_v8/branches/C0/student.pt",
+  "source_sha256": "8a2e5f89f76247eb5a0c4b03b03ab45833061610a355d03eada5ed3e601413ac",
+  "action_version": "motion_multiheight_support_center_015_80_v1",
+  "parameters": 14630,
+  "hardware_validated": false,
+  "firmware_installed": false,
+  "delta_status": "UNKNOWN",
+  "verification": {
+    "passed": true,
+    "rows": 432,
+    "errors": {
+      "PT_ONNX_mean_max": 4.544854164123535e-07,
+      "PT_C_mean_max": 3.650784492492676e-07,
+      "physical_target_C_max": 7.569789886474609e-06,
+      "PD_request_C_max": 2.86102294921875e-06
+    },
+    "C": {
+      "golden_count": 432,
+      "c_max_abs_error": 3.650784492492676e-07,
+      "tolerance": 1e-05,
+      "passed": true,
+      "decoder_015_80_parity": true,
+      "hardware_measured": false,
+      "center_golden_count": 103,
+      "center_c_max_abs_error": 2.7755575615628914e-17,
+      "physical_decoder_count": 432,
+      "physical_decoder_max_abs_error": 4.76837158203125e-07,
+      "action_version": "motion_multiheight_support_center_015_80_v1"
+    },
+    "recorded_actual_adopted_leg_PD_max_error": 2.0970555141275327e-06,
+    "note": "Actor/decoder/PD parity on identical recorded feedback; requested target is not retroactively treated as actually adopted. Transport/motorV4/NET not replaced.",
+    "source_checkpoint_sha256": "8a2e5f89f76247eb5a0c4b03b03ab45833061610a355d03eada5ed3e601413ac",
+    "exported_PT_identical": true,
+    "new_physics_steps": 0,
+    "new_optimizer_updates": 0,
+    "hardware_validated": false
+  }
+}

@@ -1,4 +1,4 @@
-"""Verify the checked-in Motion2320 ONNX against firmware bytes and decoder.
+"""Verify the checked-in C0 ONNX against firmware bytes and decoder.
 
 Run with the same Python environment as update_xcube_ai_weights.py.
 No ST runtime, hardware access or firmware flash is involved.
@@ -18,7 +18,7 @@ import onnx
 import update_xcube_ai_weights as converter
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / '.Doc/models/motion2320_actor20'
+MODEL = ROOT / '.Doc/models/motion_C0_standing_trial'
 PARAMS = ROOT / 'X-CUBE-AI/App/tjb_network_data_params.c'
 
 
@@ -40,13 +40,13 @@ class CurrentWeightsTests(unittest.TestCase):
         self.assertEqual(timing['wheel_tau_ms'],0)
         self.assertFalse(timing['old_wheel20_tau2_retained'])
         metadata = {p.key:p.value for p in onnx.load(str(MODEL/'actor.onnx')).metadata_props}
-        self.assertEqual(json.loads(metadata['execution_timing']),timing)
+        self.assertEqual(json.loads(metadata['output_contract']),json.loads((MODEL/'output_contract.json').read_text()))
 
     def test_onnx_bytes_and_provenance(self):
         blob, count = converter.extract_weights(onnx.load(str(MODEL/'actor.onnx')))
         self.assertEqual(count, 14630)
         self.assertEqual(blob, firmware_blob())
-        manifest = json.loads((MODEL/'manifest.json').read_text())
+        manifest = json.loads((MODEL/'firmware_binding.json').read_text())
         self.assertEqual(hashlib.sha256(blob).hexdigest(), manifest['firmware_weight_blob_sha256'])
         self.assertEqual(hashlib.sha256((MODEL/'actor.onnx').read_bytes()).hexdigest(), manifest['actor_onnx_sha256'])
 
@@ -73,16 +73,7 @@ class CurrentWeightsTests(unittest.TestCase):
 
     def test_real_firmware_decoder_matches_frozen_output_contract(self):
         declaration = json.loads((MODEL/'output_contract.json').read_text())
-        self.assertEqual(declaration['action_version'], 'motion31_kinematic_support_centered_015_80_v1')
-        formula = declaration['center_formula']
-        length = .34 + formula['hip_above_root_m'] - formula['wheel_radius_m']
-        upper, lower = formula['equivalent_upper_m'], formula['equivalent_lower_m']
-        beta = np.arccos((length**2+upper**2-lower**2)/(2*length*upper))
-        hip = beta - np.deg2rad(formula['hip_zero_deg'])
-        active = beta - np.deg2rad(formula['active_zero_deg'])
-        center = np.zeros(6)
-        center[[0,1,3,4]] = np.array([hip,active,-hip,active])+declaration['support_target_offset_rad']
-        scale = np.array([.15,.15,80.,.15,.15,80.])
+        self.assertEqual(declaration['action_version'], 'motion_multiheight_support_center_015_80_v1')
         with tempfile.TemporaryDirectory() as temporary:
             library = Path(temporary)/'decoder.so'
             subprocess.run(['cc','-std=c11','-O2','-shared','-fPIC',
@@ -90,13 +81,34 @@ class CurrentWeightsTests(unittest.TestCase):
             lib = ctypes.CDLL(str(library))
             ptr = np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS')
             lib.RLMotion31DecodeOutput.argtypes = [ptr,ctypes.c_float,ptr]
-            with np.load(MODEL/'golden_vectors.npz') as data:
-                actions = data['mean_action']
-            for action in actions:
+            with np.load(MODEL/'physical_decode_golden.npz') as data:
+                actions = data['mean_action']; heights=data['command_height_m']; expected=data['physical_target']
+            for action,height,want in zip(actions,heights,expected):
                 target = np.zeros(6,np.float32)
-                self.assertEqual(lib.RLMotion31DecodeOutput(action,.34,target),0)
-                expected = center+scale*np.clip(action,-1,1)
-                np.testing.assert_allclose(target,expected,atol=8e-6,rtol=0)
+                self.assertEqual(lib.RLMotion31DecodeOutput(action,float(height),target),0)
+                np.testing.assert_allclose(target,want,atol=8e-6,rtol=0)
+            # Feed identical recorded physical feedback to the real firmware
+            # PD function; this requested target is not an adopted-cache write.
+            class Snapshot(ctypes.Structure):
+                _fields_=[('gyro',ctypes.c_float*3),('gravity',ctypes.c_float*3),
+                    ('q',ctypes.c_float*4),('dq',ctypes.c_float*6),('previous',ctypes.c_float*6),
+                    ('valid',ctypes.c_uint8),('leg_tau',ctypes.c_float*4),('wheel_tau',ctypes.c_float*2),
+                    ('tau_valid',ctypes.c_uint8),('vx',ctypes.c_float),('yaw',ctypes.c_float),('height',ctypes.c_float)]
+            lib.RLMotion31ComputePdTorque.argtypes=[ctypes.POINTER(Snapshot),ptr,ptr,ptr]
+            with np.load(MODEL/'real_state_physical_PD_golden.npz') as data:
+                for q,dq,target,want in zip(data['PD_q'],data['PD_dq'],data['physical_target'],data['raw_PD_for_frozen_feedback']):
+                    sample=Snapshot();sample.q[:]=q[[0,1,3,4]];sample.dq[:]=dq
+                    got=np.zeros(6,np.float32);limited=got.copy()
+                    self.assertEqual(lib.RLMotion31ComputePdTorque(ctypes.byref(sample),np.ascontiguousarray(target,np.float32),got,limited),0)
+                    np.testing.assert_allclose(got,want,atol=5e-6,rtol=0)
+            lib.RLMotion31SupportCenter.argtypes=[ctypes.c_double,np.ctypeslib.ndpointer(dtype=np.float64,ndim=1,flags='C_CONTIGUOUS')]
+            with np.load(MODEL/'center_golden_vectors.npz') as data:
+                for height,want in zip(data['command_height_m'],data['center_rad']):
+                    got=np.zeros(4,np.float64)
+                    self.assertEqual(lib.RLMotion31SupportCenter(float(height),got),0)
+                    np.testing.assert_allclose(got,want,atol=1e-12,rtol=0)
+            for height in [.29,.41,float('nan')]:
+                self.assertNotEqual(lib.RLMotion31DecodeOutput(actions[0],height,np.zeros(6,np.float32)),0)
         print(f'Actual firmware decoder: {len(actions)} vectors match frozen 015/80 contract')
 
 

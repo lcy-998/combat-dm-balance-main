@@ -19,10 +19,10 @@ static RLShadowSnapshot feedback(uint32_t now, RLControlState *state)
 int main(void)
 {
     assert(!strcmp(RL_MOTION31_ACTION_CONTRACT,
-                   "motion31_kinematic_support_centered_015_80_v1"));
+                   "motion_multiheight_support_center_015_80_v1"));
     const unsigned legs[4]={0,1,3,4};
-    const float expected[6]={-.029116082936525345f,-.09327510744333267f,0,
-                             .029116082936525345f,-.09327510744333267f,0};
+    const float expected[6]={-0.13097405433655f,-0.15117678046227f,0,
+                             0.13097405433655f,-0.15117678046227f,0};
     float action[6]={0}, target[6], again[6], requested[6], limited[6], obs[31];
     assert(!RLMotion31DecodeOutput(action,.34f,target));
     for(unsigned i=0;i<6;++i) near(target[i],expected[i]);
@@ -55,7 +55,7 @@ int main(void)
         near(target[i],expected[i]+((i&1)?-width:width));
         near(again[i],target[i]); /* no accumulation or second Tanh */
     }
-    assert(RLMotion31DecodeOutput(action,.30f,target)<0);
+    assert(RLMotion31DecodeOutput(action,.29f,target)<0);
     assert(RLMotion31DecodeOutput(action,NAN,target)<0);
     action[0]=NAN; assert(RLMotion31DecodeOutput(action,.34f,target)<0); action[0]=.2f;
     assert(RLMotion31DecodeOutput(NULL,.34f,target)<0);
