@@ -82,6 +82,12 @@ int RLShadowBuildObservation(const RLShadowSnapshot *s,
     if (s == NULL || o == NULL) {
         return -1;
     }
+    /* fminf/fmaxf can turn NAN into a finite clip limit. Reject invalid speed
+     * estimates and targets BEFORE clipping, so no invalid command is sent. */
+    if (!isfinite(s->heading_vx_m_s) || !isfinite(s->target_vx_m_s) ||
+        !isfinite(s->target_yaw_rad_s)) {
+        return -1;
+    }
     const float cp = cosf(s->pitch_rad);
     const float sr = sinf(s->roll_rad);
     const float cr = cosf(s->roll_rad);
@@ -91,8 +97,9 @@ int RLShadowBuildObservation(const RLShadowSnapshot *s,
     o[0] = 0.25f * s->roll_rate_rad_s;
     o[1] = -0.25f * s->pitch_rate_rad_s;
     o[2] = 0.25f * yaw_rate;
-    o[3] = sinf(s->pitch_rad);          /* projected gravity: nose down + */
-    o[4] = sr * cp;                     /* projected gravity: right lean + */
+    /* INS Pitch is Euler X; chassis roll = -INS Roll (Euler Y). */
+    o[3] = sinf(s->pitch_rad) * cr;     /* projected gravity: nose down + */
+    o[4] = sr;                     /* projected gravity: right lean + */
     o[5] = -cr * cp;
     o[6] = clipf(2.10f * (s->target_vx_m_s - s->heading_vx_m_s), -2.0f, 2.0f);
     o[7] = clipf(0.50f * s->target_vx_m_s, -2.0f, 2.0f);

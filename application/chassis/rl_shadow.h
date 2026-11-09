@@ -37,6 +37,9 @@ typedef struct {
     float motor_torque_nm[4];   /* DM feedback in RL active/hip-positive axes: lf, lb, rf, rb; stale if offline */
     float wheel_current_cmd[2];/* physical left, right; driver command units */
     float previous_action[RL_SHADOW_ACTION_SIZE]; /* last action applied by chassis */
+    float heading_vx_legacy_m_s; /* original unfiltered wheel/virtual-leg proxy */
+    float heading_vx_sides_m_s[2]; /* root-reference speed, physical left/right */
+    uint8_t heading_vx_estimator_valid; /* finite geometry, NOT slip/contact certification */
 } RLShadowSnapshot;
 
 typedef struct {
@@ -106,6 +109,9 @@ typedef struct {
     float wheel_current_cmd[2];
     float heading_vx_m_s;
     float lqr_speed_m_s;
+    float heading_vx_legacy_m_s;
+    float heading_vx_sides_m_s[2];
+    uint8_t heading_vx_estimator_valid;
 } RLShadowDebug;
 
 extern volatile RLShadowDebug g_rl_shadow_debug;

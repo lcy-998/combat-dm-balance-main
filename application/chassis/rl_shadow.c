@@ -123,6 +123,10 @@ static void publish_debug(const RLShadowSnapshot *sample, const float *observati
         d->remote_vx_m_s = sample->remote_vx_m_s;
         d->heading_vx_m_s = sample->heading_vx_m_s;
         d->lqr_speed_m_s = sample->lqr_speed_m_s;
+        d->heading_vx_legacy_m_s = sample->heading_vx_legacy_m_s;
+        d->heading_vx_sides_m_s[0] = sample->heading_vx_sides_m_s[0];
+        d->heading_vx_sides_m_s[1] = sample->heading_vx_sides_m_s[1];
+        d->heading_vx_estimator_valid = sample->heading_vx_estimator_valid;
         d->target_vx_m_s = sample->target_vx_m_s;
         d->lqr_wheel_torque_nm[0] = sample->lqr_torque_nm[0];
         d->lqr_wheel_torque_nm[1] = sample->lqr_torque_nm[1];
