@@ -31,10 +31,10 @@ TARGETS = {
         "weight_bytes": 58520,
     },
     "network": {
-        "dims": [(128, 25), (128, 128), (6, 128)],
+        "dims": [(160, 25), (152, 160), (6, 152)],
         "ops": ["Gemm", "Relu", "Gemm", "Relu", "Gemm"],
         "input": 25,
-        "weight_bytes": 82456,
+        "weight_bytes": 118200,
     },
 }
 
@@ -123,8 +123,8 @@ def format_u64(data):
         raise ValueError("weight blob is not aligned to uint64")
     words = [int.from_bytes(data[i : i + 8], "little") for i in range(0, len(data), 8)]
     lines = []
-    for i in range(0, len(words), 8):
-        lines.append("  " + ", ".join(f"0x{x:016x}U" for x in words[i : i + 8]) + ",")
+    for i in range(0, len(words), 4):
+        lines.append("  " + ", ".join(f"0x{x:016x}U" for x in words[i : i + 4]) + ",")
     return "\n" + "\n".join(lines)
 
 

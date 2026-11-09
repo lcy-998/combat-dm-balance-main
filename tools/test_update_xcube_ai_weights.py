@@ -13,7 +13,7 @@ import update_xcube_ai_weights as converter
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT.parent / "2026_10_15-20_16__motion31_u1600_detailed" / "actor1104.onnx"
 GENERATED = ROOT / "X-CUBE-AI" / "App" / "tjb_network_data_params.c"
-NETWORK_MODEL = Path("D:/DefaultStore/QQ/mlp/RMUC_H723_smallMLP_v8_20261009/policy.onnx")
+NETWORK_MODEL = Path("D:/Combat/nzh_network/policy.onnx")
 NETWORK_GENERATED = ROOT / "X-CUBE-AI" / "App" / "network_data_params.c"
 
 
@@ -21,7 +21,7 @@ class WeightConverterTests(unittest.TestCase):
     def test_matches_st_generated_bytes(self):
         for target, model_path, generated_path, count in (
             ("tjb_network", MODEL, GENERATED, 14630),
-            ("network", NETWORK_MODEL, NETWORK_GENERATED, 20614),
+            ("network", NETWORK_MODEL, NETWORK_GENERATED, 29550),
         ):
             with self.subTest(target=target):
                 if not model_path.is_file():
@@ -40,12 +40,16 @@ class WeightConverterTests(unittest.TestCase):
             converter.extract_weights(onnx.load(str(NETWORK_MODEL)), "tjb_network")
 
     def test_rejects_changed_gemm_layout(self):
+        if not MODEL.is_file():
+            self.skipTest("original actor ONNX is not available")
         model = onnx.load(str(MODEL))
         next(attr for attr in model.graph.node[0].attribute if attr.name == "transB").i = 0
         with self.assertRaisesRegex(ValueError, "incompatible attributes"):
             converter.extract_weights(model)
 
     def test_rejects_changed_shape(self):
+        if not MODEL.is_file():
+            self.skipTest("original actor ONNX is not available")
         model = onnx.load(str(MODEL))
         model.graph.input[0].type.tensor_type.shape.dim[1].dim_value = 30
         with self.assertRaisesRegex(ValueError, "expected input shape"):
@@ -53,6 +57,8 @@ class WeightConverterTests(unittest.TestCase):
 
     def test_replaces_only_weight_array(self):
         replacement = MODEL.parent / "actor(1).onnx"
+        if not replacement.is_file():
+            self.skipTest("replacement actor ONNX is not available")
         blob, _ = converter.extract_weights(onnx.load(str(replacement)))
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "tjb_network_data_params.c"

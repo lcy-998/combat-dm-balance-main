@@ -91,8 +91,11 @@ int RLShadowBuildObservation(const RLShadowSnapshot *s,
     o[0] = 0.25f * s->roll_rate_rad_s;
     o[1] = -0.25f * s->pitch_rate_rad_s;
     o[2] = 0.25f * yaw_rate;
-    o[3] = sinf(s->pitch_rad);          /* projected gravity: nose down + */
-    o[4] = sr * cp;                     /* projected gravity: right lean + */
+    /* INS uses Rz(Yaw) * Ry(Roll) * Rx(Pitch); chassis p=Pitch, r=-Roll.
+     * Project world down into INS, then map policy gravity as [-g_y,-g_x,g_z].
+     * These chassis angles are not conventional ZYX pitch/roll. */
+    o[3] = sinf(s->pitch_rad) * cr;      /* projected gravity: nose down + */
+    o[4] = sr;                         /* projected gravity: right lean + */
     o[5] = -cr * cp;
     o[6] = clipf(2.10f * (s->target_vx_m_s - s->heading_vx_m_s), -2.0f, 2.0f);
     o[7] = clipf(0.50f * s->target_vx_m_s, -2.0f, 2.0f);

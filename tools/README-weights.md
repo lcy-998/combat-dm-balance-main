@@ -7,7 +7,7 @@
 - Python 3.9+；安装依赖：`python -m pip install onnx`
 - Windows 上若 `python` 指向其他解释器，请使用安装了 `onnx` 的 Python 完整路径运行脚本。例如本机可将下方命令的 `python` 替换为 `& 'C:\Users\18167\AppData\Local\Programs\Python\Python313\python.exe'`。用同一个解释器执行 `-m pip install onnx`。
 - `tjb_network`：输入 `float32[1,31]`，网络 `31 -> 128 -> 64 -> 32 -> 6`，三层 ELU(alpha=1)，末层 Tanh；权重 58,520 字节。
-- `network`：输入 `float32[1,25]`，网络 `25 -> 128 -> 128 -> 6`，两层 ReLU，最后一层直接输出；权重 82,456 字节。
+- `network`：输入 `float32[1,25]`，网络 `25 -> 160 -> 152 -> 6`，两层 ReLU，最后一层直接输出；权重 118,200 字节。
 - 两者输出均为 `float32[1,6]`。Gemm 权重形状和转置参数必须与当前模型一致。只允许更改权重和偏置数值。
 
 ## 使用
