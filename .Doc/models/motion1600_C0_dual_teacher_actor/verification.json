@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "rows": 1488,
+  "errors": {
+    "PT_ONNX_mean_max": 2.6226043701171875e-06,
+    "PT_C_mean_max": 2.0563602447509766e-06,
+    "physical_target_C_max": 2.956390380859375e-05,
+    "PD_request_C_max": 1.33514404296875e-05
+  },
+  "C": {
+    "golden_count": 1488,
+    "c_max_abs_error": 2.0563602447509766e-06,
+    "tolerance": 1e-05,
+    "passed": true,
+    "decoder_015_80_parity": true,
+    "hardware_measured": false,
+    "center_golden_count": 103,
+    "center_c_max_abs_error": 2.7755575615628914e-17,
+    "physical_decoder_count": 1488,
+    "physical_decoder_max_abs_error": 1.9073486328125e-06,
+    "action_version": "motion_multiheight_support_center_015_80_v1"
+  },
+  "recorded_actual_adopted_leg_PD_max_error": 2.86638385915694e-06,
+  "note": "Actor/decoder/PD parity on identical recorded feedback; requested target is not retroactively treated as actually adopted. Transport/motorV4/NET not replaced.",
+  "source_checkpoint_sha256": "5ec49436c18d1924c38605dcd69bfff51a5afe6cf90da70552127df6b3c5c1ae",
+  "exported_PT_identical": true,
+  "new_physics_steps": 0,
+  "new_optimizer_updates": 0,
+  "hardware_validated": false
+}

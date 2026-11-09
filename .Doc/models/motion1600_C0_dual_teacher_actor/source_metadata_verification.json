@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "all_actor_tensors_exactly_equal": true,
+  "output_contract_exactly_equal": true,
+  "execution_timing_exactly_equal": true,
+  "original_selected_checkpoint": "/home/kellen/wheel_leg_native_train/runs/2026_11_09__motion1600_C0_dual_teacher_small/round03/student.pt",
+  "original_selected_sha256": "7bc18faa5de67a00ad32151d19d741dbfbbbfe3008582f9812a3eef124906248",
+  "clean_checkpoint": "/home/kellen/wheel_leg_native_train/runs/2026_11_09__motion1600_C0_dual_teacher_small/actor_delivery_review/student_actor.pt",
+  "clean_sha256": "5ec49436c18d1924c38605dcd69bfff51a5afe6cf90da70552127df6b3c5c1ae",
+  "old_single_teacher_fields_moved_to": "initialization_ancestor_metadata",
+  "current_teachers": {
+    "C0": {
+      "path": "/home/kellen/wheel_leg_native_train/deployment_protocol/2026_11_07__motion_C0_standing_trial/student.pt",
+      "sha256": "8a2e5f89f76247eb5a0c4b03b03ab45833061610a355d03eada5ed3e601413ac"
+    },
+    "u1600": {
+      "path": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_09__motion_yaw1to4_u1600_preserved/model_update_1600.pt",
+      "sha256": "09f27b74507b55da1a7cc0c81e2b77ed7b25a0d43bfe7a74a1806d2252915ef5"
+    }
+  },
+  "new_physics_steps": 0,
+  "new_supervised_updates": 0,
+  "new_PPO_updates": 0
+}

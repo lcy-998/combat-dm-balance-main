@@ -1,0 +1,78 @@
+{
+  "role": "MOTION1600_C0_DUAL_TEACHER_ACTOR_ON_EXISTING_SUPPORTED015_POLY5",
+  "branch": "feature/rl-motion31-supported015",
+  "base_commit": "c092381b247ea5eca7d5180470d880e9d5437345",
+  "source_package": "/home/kellen/wheel_leg_native_train/deployment_protocol/2026_11_09__motion1600_C0_dual_teacher_actor",
+  "source_PT_sha256": "5ec49436c18d1924c38605dcd69bfff51a5afe6cf90da70552127df6b3c5c1ae",
+  "actor_onnx_sha256": "48cc007cd545e4efcbf06342c34dcd353fbeb02493894985c5457f1229f614b5",
+  "parameters": 14630,
+  "firmware_weight_bytes": 58520,
+  "firmware_weight_blob_sha256": "ccaf0b7809a6093824f0883e26719c9a9e43075400bf8cf366aa3cddbafb10da",
+  "target_network": "tjb_network",
+  "firmware_weight_path": "X-CUBE-AI/App/tjb_network_data_params.c",
+  "source_output_contract": "output_contract.json",
+  "source_action_version": "motion_multiheight_support_center_015_80_v1",
+  "source_output_contract_sha256": "1db5cb51a7d102e738a6ddeb65406f8108463f6eac3dca1be430f9587e4734e5",
+  "active_output_contract": "firmware_output_contract.json",
+  "active_action_version": "motion_multiheight_support_center_poly5_015_80_v1",
+  "active_output_contract_sha256": "256b89194370bbc0b36b3e3b9f032c0627d545bb75cc8c90b66ea35b8102d2e9",
+  "active_contract_unchanged_from": ".Doc/models/motion_C0_height_formula_trial/output_contract.json",
+  "source_ONNX_and_PT_unmodified": true,
+  "source_ONNX_embedded_contract_role": "Frozen training/export table contract; active firmware polynomial contract is explicit in firmware_output_contract.json",
+  "runtime_center": "existing analytic geometry plus continuous quintic support offset; no new decoder or controller",
+  "source_vs_firmware_center": {
+    "same_source_six_anchors": true,
+    "source_table_firmware_polynomial": true,
+    "interval_max_difference_rad_hip_active": [
+      0.003870132436579743,
+      0.0015347698688914502
+    ],
+    "detail": "Exact extrema are in firmware_center_fit.json. Fixed .34m matches; capability validation does not cover continuous height transitions."
+  },
+  "validated_simulation_height_m": [
+    0.34
+  ],
+  "height_command_range_m": [
+    0.3,
+    0.4
+  ],
+  "physical_dynamic_height_validation": "NOT_RUN",
+  "full_DR_validated": false,
+  "stop_gate": false,
+  "standstill_confirmation": false,
+  "new_height_slew_limit": false,
+  "encoder_delta_status": "UNKNOWN",
+  "firmware_delay_policy": "Use latest valid feedback; do not add simulation observation/transport/motor delays to firmware",
+  "firmware_runtime_sources_sha256": {
+    "application/chassis/rl_motion31.c": "4a99e09b7ba87f68244151889dfd0f0caa633e3743f6a1d3cd7ed2dfd3d5082b",
+    "application/chassis/rl_motion31.h": "a3929ec395e17bdff9d6af261a51268f174fe319a75dd0dd9b3082352d5ae5af",
+    "application/chassis/rl_control.c": "7e3b00c6cf6a2c18cd805e5eb6590a21d6f8acdf2718fea6d83621846fe136de",
+    "application/chassis/rl_shadow.c": "447ed475948cb49625fdf3b4ee921e034277900580f23a8f93fc0cce5a25c94a"
+  },
+  "board_flashed": false,
+  "hardware_validated": false,
+  "whole_board_build": "NOT_RUN_ARM_GCC_NOT_ON_PATH",
+  "validation": {
+    "report": "firmware_verification.json",
+    "passed": true,
+    "host_suites_per_compiler": 8,
+    "current_network_tests_passed": 6,
+    "converter_tests_passed": 4,
+    "converter_optional_skipped": 2,
+    "golden_count": 1488,
+    "center_golden_count": 1001,
+    "new_physics_steps": 0,
+    "new_optimizer_updates": 0
+  },
+  "source_teachers": {
+    "C0": {
+      "path": "/home/kellen/wheel_leg_native_train/deployment_protocol/2026_11_07__motion_C0_standing_trial/student.pt",
+      "sha256": "8a2e5f89f76247eb5a0c4b03b03ab45833061610a355d03eada5ed3e601413ac"
+    },
+    "u1600": {
+      "path": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_09__motion_yaw1to4_u1600_preserved/model_update_1600.pt",
+      "sha256": "09f27b74507b55da1a7cc0c81e2b77ed7b25a0d43bfe7a74a1806d2252915ef5"
+    }
+  },
+  "firmware_source_integrated": true
+}

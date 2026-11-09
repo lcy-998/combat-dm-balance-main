@@ -1,0 +1,87 @@
+{
+  "results": "/home/kellen/wheel_leg_native_train/runs/2026_11_09__motion1600_C0_dual_teacher_small/final_summary.json",
+  "source_comparison": {
+    "student": {
+      "episodes": 62,
+      "survived": 62,
+      "task_passed": 50,
+      "groups": {
+        "zero": {
+          "cases": 2,
+          "passed": 2
+        },
+        "motion": {
+          "cases": 28,
+          "passed": 16
+        },
+        "pulse": {
+          "cases": 16,
+          "passed": 16
+        },
+        "push": {
+          "cases": 16,
+          "passed": 16
+        }
+      }
+    },
+    "u1600": {
+      "episodes": 62,
+      "survived": 60,
+      "task_passed": 46,
+      "groups": {
+        "zero": {
+          "cases": 2,
+          "passed": 2
+        },
+        "motion": {
+          "cases": 28,
+          "passed": 14
+        },
+        "pulse": {
+          "cases": 16,
+          "passed": 16
+        },
+        "push": {
+          "cases": 16,
+          "passed": 14
+        }
+      }
+    },
+    "C0": {
+      "episodes": 10,
+      "survived": 8,
+      "task_passed": 8,
+      "groups": {
+        "zero": {
+          "cases": 2,
+          "passed": 2
+        },
+        "motion": {
+          "cases": 0,
+          "passed": 0
+        },
+        "pulse": {
+          "cases": 0,
+          "passed": 0
+        },
+        "push": {
+          "cases": 8,
+          "passed": 6
+        }
+      }
+    }
+  },
+  "dual_support_fraction_min": 0.9,
+  "full_task_accepted": false,
+  "selected_on_development_only": true,
+  "fresh_final_seeds": [
+    92501,
+    92502
+  ],
+  "final_used_for_learning": false,
+  "source_model_CP_SHA256": "5ec49436c18d1924c38605dcd69bfff51a5afe6cf90da70552127df6b3c5c1ae",
+  "original_selected_CP_SHA256": "7bc18faa5de67a00ad32151d19d741dbfbbbfe3008582f9812a3eef124906248",
+  "actor_tensors_unchanged": true,
+  "physical_parameters_and_decoder_unchanged": true,
+  "scope": "0.34m nominal completeV4; Actor20ms,target5ms,wheelch2/ch5 7/11ms,tau0; 1/5/10ms physics/PD/policy"
+}

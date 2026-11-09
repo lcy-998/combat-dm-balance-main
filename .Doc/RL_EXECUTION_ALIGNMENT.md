@@ -11,10 +11,13 @@
 right hip/active/wheel，对应几何右三通道在前、几何左三通道在后。几何左右以站车尾朝车头看为准。
 关节标定零位与正方向没有改变，不能按几何左优先重排数组。
 
-当前`tjb_network`已通过`tools/update_xcube_ai_weights.py`更新为C0小模型
-（31→128→64→32→6，14,630参数，FP32权重58,520字节），已用完整V4延迟执行器补教。
-来源PT/ONNX、冻结高度中心契约、432组真实状态golden与SHA记录保存在
-[当前模型目录](models/motion_C0_height_formula_trial/firmware_binding.json)。旧模型目录保留。
+当前`tjb_network`已通过`tools/update_xcube_ai_weights.py`更新为1600＋C0双教师蒸馏的小Actor
+（31→128→64→32→6，14,630参数，FP32权重58,520字节）。部署只运行一个学生网络。
+来源PT/ONNX、1,488组真实状态golden与SHA记录保存在
+[当前接入记录](models/motion1600_C0_dual_teacher_actor/FIRMWARE_INTEGRATION.md)。旧模型目录保留。
+源ONNX内嵌训练查表合同保持原样；活动固件继续使用本分支原poly5合同。
+两者在0.34m锚点一致，来源与活动合同分别见包内`output_contract.json`、`firmware_output_contract.json`，
+对应SHA和差异见`firmware_binding.json`。新学生的物理验证范围仅固定0.34m。
 部署模型必须明确声明上述015/80契约；015/40或旧1.5/100模型均不能直接配用本解码器。
 2048大Actor不能直接写入现有31→128→64→32→6的权重数组；需先蒸馏或重新生成匹配网络。
 
@@ -67,7 +70,7 @@ right hip/active/wheel，对应几何右三通道在前、几何左三通道在�
 - 原弹簧补偿、硬件零位、限矩、驱动、任务周期及真实反馈获取未在本次接口任务中重构。
 
 修复了首个目标序号处于高半区被误拒，以及已完成等待在uint32时钟回绕后撤销ready的问题。
-本次已接入C0固件权重和连续高度中心；没有刷写设备或修改训练进程。
+当前接入双教师蒸馏小Actor，沿用既有连续高度中心；本次未刷写设备。
 
 ## 本机验证
 
@@ -88,32 +91,31 @@ sh tests/run_rl_supported015_tests.sh
 ## 当前网络更新与核对
 
 ```bash
-python tools/update_xcube_ai_weights.py .Doc/models/motion2320_actor20/actor.onnx --target tjb_network --dry-run
-python tools/update_xcube_ai_weights.py .Doc/models/motion2320_actor20/actor.onnx --target tjb_network
+python tools/update_xcube_ai_weights.py .Doc/models/motion1600_C0_dual_teacher_actor/actor.onnx --target tjb_network --dry-run
+python tools/update_xcube_ai_weights.py .Doc/models/motion1600_C0_dual_teacher_actor/actor.onnx --target tjb_network
+python tools/test_update_xcube_ai_weights.py
 python tools/test_tjb_network_current_weights.py
 ```
 
-更新器仅替换`tjb_network_data_params.c`的权重数组，不修改其他网络、拓扑或接口。
-本次已核对固件数组与ONNX逐字节相同；数组独立前向的256组golden最大误差
-低于`1e-5`；真实`RLMotion31DecodeOutput`的256组输出与冻结015/80契约一致。
-旧ST自动生成报告及图元数据仍记录最初生成的模型，当前权重身份以模型目录的manifest为准。
+更新器仅替换`tjb_network_data_params.c`的权重数组，不修改其他网络、拓扑或控制接口。
+源PT SHA为`5ec49436c18d1924c38605dcd69bfff51a5afe6cf90da70552127df6b3c5c1ae`；
+ONNX SHA为`48cc007cd545e4efcbf06342c34dcd353fbeb02493894985c5457f1229f614b5`。
+固件数组逐字节绑定该ONNX，独立前向核对1,488组golden；真实固件解码与PD使用相同记录复核。
+连续高度公式另用1,001组参考复核。具体CPU结果见包内`firmware_verification.json`。
+旧ST自动生成报告及图元数据仍记录最初生成的模型，当前权重身份以`firmware_binding.json`为准。
 
-本次新增6,000次监督更新，修正了上一版四腿q/dq未进20ms Actor报文队列的问题。
-现在Actor前16维全部物理观测统一标称20ms，包括四腿q/dq；previous和命令不随物理报文延迟。
-腿执行保留完整V4响应。几何右轮ch2为7ms、左轮ch5为11ms的post-PD等效运输，tau0；
-明确替换旧轮20ms+tau2，不重复叠加。每个最终回合均核对真实报文来源和轮力矩到达时序。
-时序记录在[execution_timing.json](models/motion2320_actor20/execution_timing.json)，ONNX元数据也包含同一声明。
-旧提交dff9a0b的统计不证明全物理20ms条件，旧结果只作为历史证据保留。
+新学生主要模仿1600，C0补充静态与部分接扰。固定0.34m、名义完整V4、Actor前16维物理字段20ms、
+目标5ms、轮几何右ch2为7ms／左ch5为11ms且tau0；没有重复叠加旧轮20ms＋tau2。
+实机继续用最新有效反馈，不人为增加仿真等待。包内`execution_timing.json`含配方的DR定义，
+不代表本学生已完成完整DR能力验证。部署不运行教师选择器，也不新增滤波、补偿或提高限矩。
 
-当前仍部署单个14,630参数MLP。34个新时序工况中，教师和学生各完成30项，学生无新增跌倒；
-教师完成的30项中26项满足全部相对保真门限，核心18项全部通过。
-剩余4项涉及+2m/s直行速度/轮目标抖动、combined-2m/s腿速度与俯仰峰、combined-4rad/s侧倾峰；
-具体教师/学生数值在当前模型manifest.remaining_fidelity_gaps中，不宣称完全复刻。
-3项无延迟基础对照也通过。完整两组延迟参数和原始结果见当前模型manifest指向的部署包。
-本次只更新权重，不在固件中新增时延、滤波、补偿或提高限矩。
-该结果不是目标板ST runtime、实时性或实机验证。
+两个新seed共62回合：学生62回合无跌倒、50项满足完整任务门；1600为60回合无跌倒、46项满足任务门。
+保留1600已通过的所有任务，±3m/s直线、腿扰16/16和机体推扰16/16通过。
+站立腿10–40Hz速度RMS较1600降低59.4%，后漂约0.203m/s；±4/±8rad/s自转未达到双轮同时承重90%门限。
+完整结果见包内`capability_evidence.json`、`final_summary.json`和`distillation_report.md`。
+这些是源训练run的冻结MuJoCo证据，本次权重集成未新增物理步或优化，不等于动态高度、板端实时性或实机验证。
 
-## C0试验范围与记录
+## 历史C0试验范围与记录
 
 C0是站立／直线试验候选：两个初态seed站立8/8、交接2/2、受扰恢复8/8，±2m/s直线4/4。
 转向与+3m/s最差5秒支撑未过，站立仍约-0.199m/s后漂，不称完整运动或实机已通过。
@@ -128,7 +130,8 @@ Actor物理观测20ms/目标5ms/完整V4/轮几何右7ms左11ms是仿真验证�
 
 ## 连续高度公式与异步采用
 
-当前有效包为[连续公式包](models/motion_C0_height_formula_trial/README.md)，原C0查表包与源PT保留。
+当前有效包为[双教师小Actor接入包](models/motion1600_C0_dual_teacher_actor/FIRMWARE_INTEGRATION.md)。
+[原连续公式包](models/motion_C0_height_formula_trial/README.md)保留为中心来源，原C0查表包与源PT也保留。
 全局五次多项式通过六个原锚点；运行时只做Horner多项式和解析几何计算，不查表、不分段插值。
 与旧表插值在锚点间的最大差为髋.003870rad、主动.001535rad，Kp40对应约.155/.061Nm请求变化；
 这是新解码版本，不能按旧公式物理能力全部自动通过解释。

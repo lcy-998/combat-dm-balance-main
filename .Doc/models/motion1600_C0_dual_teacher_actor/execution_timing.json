@@ -1,0 +1,33 @@
+{
+  "version": "motion_v4_wheel_reported_delay_actor20_dr_v1",
+  "actor_packet_nominal_ms": 20,
+  "actor_leg_packet_nominal_ms": 20,
+  "actor_packet_DR_support_ms": [
+    0,
+    10,
+    20
+  ],
+  "target_nominal_ms": 5,
+  "wheel_channels": [
+    2,
+    5
+  ],
+  "wheel_transport_nominal_ms": [
+    7,
+    11
+  ],
+  "wheel_tau_ms": [
+    0.0,
+    0.0
+  ],
+  "wheel_transport_DR_halfwidth_ms": 4.0,
+  "wheel_delay_semantics": "reported combined onset, represented once as post-PD transport; not an independently measured pure delay",
+  "leg_response": "complete V4 tuple and existing DR; no additional20ms motor delay",
+  "DR": "existing reset-only per-env curriculum, nominal anchors retained",
+  "previous": "actual locally adopted physical target; not sensor-delayed",
+  "input_scales": [
+    1.5,
+    100.0
+  ],
+  "motor_limits_unchanged": true
+}

@@ -25,3 +25,16 @@ python tools/update_xcube_ai_weights.py "D:\Combat\新policy.onnx" --target netw
 省略 `--target` 时默认为 `tjb_network`。检查 `git diff -- X-CUBE-AI/App/<目标>_data_params.c`，确认只有权重数组变化，再编译固件。已有模型生成文件有本地修改时，脚本不会重写其他文件。
 
 脚本根据 ONNX Gemm 节点的权重和偏置张量，按所选目标的 ST 布局排列 FP32 数据，并转为 `ai_u64` 数组。它会核对模型拓扑、张量类型/尺寸、Gemm 与 ELU 属性和目标数组长度。若更换网络结构或输出语义，请重新用 ST Edge AI 生成整套 C 文件；此脚本不适用。
+
+## 015分支当前模型
+
+`feature/rl-motion31-supported015`使用1600＋C0双教师蒸馏的单个小Actor。当前来源包与固件连续高度公式的绑定见[接入记录](../.Doc/models/motion1600_C0_dual_teacher_actor/FIRMWARE_INTEGRATION.md)。源ONNX保留训练查表合同；活动固件继续使用既有poly5合同，两者在已验证的0.34m锚点一致。更新器仅检查网络数值布局，不能替代物理合同核验。
+
+```sh
+python tools/update_xcube_ai_weights.py .Doc/models/motion1600_C0_dual_teacher_actor/actor.onnx --target tjb_network --dry-run
+python tools/update_xcube_ai_weights.py .Doc/models/motion1600_C0_dual_teacher_actor/actor.onnx --target tjb_network
+python tools/test_update_xcube_ai_weights.py
+python tools/test_tjb_network_current_weights.py
+```
+
+当前网络测试绑定此模型，核对固件数组、1,488组Actor/物理目标/PD数据及既有连续中心公式。原C0模型包保持为历史证据。

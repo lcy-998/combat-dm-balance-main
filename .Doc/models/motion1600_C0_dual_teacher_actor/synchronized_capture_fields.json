@@ -1,0 +1,26 @@
+{
+  "clock": "One monotonic timestamp/sequence, actor100Hz + PD200Hz + physical feedback as available; retain each sampling/arrival/adoption time",
+  "fields": [
+    "model_and_center_SHA",
+    "encoder_calibration_evidence_and_delta_status",
+    "command_vx_yaw_height",
+    "raw_31D_actor_input",
+    "raw_6D_mean",
+    "center_4leg_rad",
+    "unprotected_target_6physical",
+    "protected_target",
+    "actual_adopted_target_and_timestamp",
+    "actual_previous_encoded",
+    "reported_q_dq_and_model_q_dq",
+    "PD_feedback_q_dq",
+    "raw_PD_request",
+    "motor_requested_and_executed_torque",
+    "motor_saturation_and_mechanical_clip",
+    "gyro_gravity_pitch_roll",
+    "height_or_body_reference_if_measured",
+    "wheel_contact_or_support_measurement_if_available",
+    "safety_stop_reason"
+  ],
+  "no_encoder_delta_inference": true,
+  "no_online_trim": true
+}

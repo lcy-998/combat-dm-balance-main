@@ -1,0 +1,8 @@
+{
+  "status": "UNKNOWN",
+  "delta_rad": null,
+  "evidence_reference": null,
+  "definition": "q_report=q_model+delta",
+  "delta_changes_dq": false,
+  "no_estimation_from_support_center": true
+}

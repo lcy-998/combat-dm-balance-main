@@ -1,0 +1,71 @@
+{
+  "student": {
+    "episodes": 62,
+    "survived": 62,
+    "task_passed": 50,
+    "groups": {
+      "zero": {
+        "cases": 2,
+        "passed": 2
+      },
+      "motion": {
+        "cases": 28,
+        "passed": 16
+      },
+      "pulse": {
+        "cases": 16,
+        "passed": 16
+      },
+      "push": {
+        "cases": 16,
+        "passed": 16
+      }
+    }
+  },
+  "u1600": {
+    "episodes": 62,
+    "survived": 60,
+    "task_passed": 46,
+    "groups": {
+      "zero": {
+        "cases": 2,
+        "passed": 2
+      },
+      "motion": {
+        "cases": 28,
+        "passed": 14
+      },
+      "pulse": {
+        "cases": 16,
+        "passed": 16
+      },
+      "push": {
+        "cases": 16,
+        "passed": 14
+      }
+    }
+  },
+  "C0": {
+    "episodes": 10,
+    "survived": 8,
+    "task_passed": 8,
+    "groups": {
+      "zero": {
+        "cases": 2,
+        "passed": 2
+      },
+      "motion": {
+        "cases": 0,
+        "passed": 0
+      },
+      "pulse": {
+        "cases": 0,
+        "passed": 0
+      },
+      "push": {
+        "cases": 8,
+        "passed": 6
+      }
+    }
+  }
+}

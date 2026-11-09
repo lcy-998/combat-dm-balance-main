@@ -1,0 +1,13 @@
+{
+  "golden_count": 1488,
+  "c_max_abs_error": 2.0563602447509766e-06,
+  "tolerance": 1e-05,
+  "passed": true,
+  "decoder_015_80_parity": true,
+  "hardware_measured": false,
+  "center_golden_count": 103,
+  "center_c_max_abs_error": 2.7755575615628914e-17,
+  "physical_decoder_count": 1488,
+  "physical_decoder_max_abs_error": 1.9073486328125e-06,
+  "action_version": "motion_multiheight_support_center_015_80_v1"
+}
