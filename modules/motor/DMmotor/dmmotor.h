@@ -21,6 +21,7 @@
 typedef struct
 {
     uint8_t mode;
+    uint8_t host_position_pd; /* MCU shortest-angle PD; MIT gains sent as zero */
     float pos_set;
     float vel_set;
     float tor_set;
@@ -55,6 +56,8 @@ typedef struct
     CANInstance *motor_can_instance; // 电机CAN实例
     MotorSet motor_set;
     motor_ctrl_t ctrl;
+    float sent_torque_nm;
+    float host_position_error_rad;
 
     motor_fbpara_t measure;         // 电机测量值
     Motor_Working_Type_e stop_flag; // 启停标志

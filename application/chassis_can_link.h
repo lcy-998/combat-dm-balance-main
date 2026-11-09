@@ -8,6 +8,8 @@
 typedef struct
 {
     Chassis_Ctrl_Cmd_s *ctrl_dst;
+    volatile uint32_t rx_sequence; /* completed control frames; ISR writer */
+    volatile uint32_t last_rx_tick_ms;
 } ChassisCanCtrlRxCtx;
 
 typedef struct
@@ -64,8 +66,20 @@ static void ChassisCanCtrlRxCallback(CANInstance *_instance)
     ChassisCanCtrlRxCtx *ctx = (ChassisCanCtrlRxCtx *)_instance->id;
     Chassis_Ctrl_Cmd_CAN_s rx_data;
 
-    memcpy(&rx_data, _instance->rx_buff, sizeof(rx_data));
-    ChassisCanUnpackCtrl(ctx->ctrl_dst, &rx_data);
+    if (_instance->rx_len != sizeof(rx_data))
+    {
+        memset(ctx->ctrl_dst, 0, sizeof(*ctx->ctrl_dst));
+    }
+    else
+    {
+        memcpy(&rx_data, _instance->rx_buff, sizeof(rx_data));
+        if (rx_data.chassis_mode > CHASSIS_FOLLOW_GIMBAL_YAW)
+            memset(ctx->ctrl_dst, 0, sizeof(*ctx->ctrl_dst));
+        else
+            ChassisCanUnpackCtrl(ctx->ctrl_dst, &rx_data);
+    }
+    ctx->last_rx_tick_ms = HAL_GetTick();
+    ++ctx->rx_sequence;
 }
 
 static void ChassisCanUploadRxCallback(CANInstance *_instance)

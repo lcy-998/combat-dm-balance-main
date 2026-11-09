@@ -104,13 +104,7 @@ void spd(float dphi1, float dphi4,
     float t113 = -t78 * t80 * (t91 + t58 * (t20 - t95));
     float t114 = -t79 * t80 * (t90 + t58 * (t19 - t94));
     float t115 = -t79 * t80 * (t91 + t58 * (t20 - t95));
-    float t100 = t12 + t79;
-    float t103 = l5 / 2.0 - t10 - t78;
-    float t104 = 1.0 / sqrtf(t86 * t86 + t88 * t88);
-    float t105 = t103 * t103;
-    float t106 = 1.0 / t103;
-    float t107 = 1.0 / t105;
-    float t111 = 1.0 / (t100 * t100 + t105);
+    float t104 = 1.0f / sqrtf(t86 * t86 + t88 * t88);
     static uint32_t cnt;
     static float dt;
 
@@ -118,7 +112,14 @@ void spd(float dphi1, float dphi4,
 
     *spd1 = 0.5 * dphi1 * t104 * (2.0 * t86 * (t10 - t78 * t80 * (t90 + t58 * (t19 - t94)) * 2.0) - 2.0 * t88 * (t12 - t79 * t80 * (t90 + t58 * (t19 - t94)) * 2.0)) + 0.5 * dphi4 * t104 * (4.0 * t78 * t80 * t86 * (t91 + t58 * (t20 - t95)) - 4.0 * t79 * t80 * t88 * (t91 + t58 * (t20 - t95)));
 
-    *spd2 = dphi4 * t105 * t111 * (-2.0 * t106 * t113 + 2.0 * t100 * t107 * t115) + dphi1 * t105 * t111 * (2.0 * t106 * (t10 + 2.0 * t112) - 2.0 * t100 * t107 * (t12 + 2.0 * t114));
+    /* Cartesian Jacobian of the same closed-chain branch as getPhi.
+     * theta_l = pi/2 - theta0 + pitch, so w = -d(theta0)/dt.
+     * Differentiate atan2(y,x) without dividing by x (upright x ~= 0).
+     * Symmetric coincident pivots reduce to -(dphi1+dphi4)/2.
+     */
+    const float dx = -(t12 + 2.0f * t114) * dphi1 + 2.0f * t115 * dphi4;
+    const float dy = (t10 + 2.0f * t112) * dphi1 - 2.0f * t113 * dphi4;
+    *spd2 = (t86 * dx - t88 * dy) / (t86 * t86 + t88 * t88);
     dt = DWT_GetDeltaT(&cnt);
     *spd3 = (*spd1 - *spd3) / dt, *spd4 = (*spd2 - *spd4) / dt;
 }

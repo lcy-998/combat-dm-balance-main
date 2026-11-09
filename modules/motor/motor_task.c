@@ -1,5 +1,6 @@
 #include "motor_task.h"
-#include "DMmotor.h"
+#include "chassis.h"
+#include "dmmotor.h"
 #include "HT04.h"
 #include "dji_motor.h"
 #include "dji_motor.h"
@@ -16,6 +17,7 @@ void MotorControlTask()
         DMMotorControl();
         cnt = 0;
     }
+    ChassisWheelControlTick();
     DJIMotorControl();
 
     cnt++;
