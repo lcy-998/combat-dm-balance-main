@@ -56,8 +56,8 @@ int main(void)
     near(o[0], 0.5f);
     near(o[1], -0.75f);
     near(o[2], 0.125f);
-    near(o[3], sinf(0.1f));
-    near(o[4], sinf(0.2f) * cosf(0.1f));
+    near(o[3], sinf(0.1f) * cosf(0.2f));
+    near(o[4], sinf(0.2f));
     near(o[6], 1.05f);
     near(o[7], 0.5f);
     near(o[8], 0.5f); /* unscaled yaw rate */
@@ -72,6 +72,28 @@ int main(void)
     near(o[17], -0.2f);
     near(o[18], -0.3f);
 
+    /* Independent quaternion gravity reference, including combined rotations.
+     * IMU q = Rz(yaw) Ry(-chassis_roll) Rx(chassis_pitch).
+     * Policy transform of IMU projected gravity: [-imu_y, -imu_x, imu_z]. */
+    for (int ip = -6; ip <= 6; ++ip) {
+        for (int ir = -6; ir <= 6; ++ir) {
+            const float a = ip * 0.15f, b = ir * 0.15f, yaw = 0.73f;
+            const float ca = cosf(a/2), sa = sinf(a/2);
+            const float cb = cosf(-b/2), sb = sinf(-b/2);
+            const float cy = cosf(yaw/2), sy = sinf(yaw/2);
+            const float qw = cy*cb*ca + sy*sb*sa;
+            const float qx = cy*cb*sa - sy*sb*ca;
+            const float qy = cy*sb*ca + sy*cb*sa;
+            const float qz = sy*cb*ca - cy*sb*sa;
+            s.pitch_rad = a; s.roll_rad = b;
+            assert(RLShadowBuildObservation(&s, o) == 0);
+            near(o[3], 2*(qy*qz + qw*qx));
+            near(o[4], 2*(qx*qz - qw*qy));
+            near(o[5], -(1-2*(qx*qx+qy*qy)));
+            near(o[3]*o[3]+o[4]*o[4]+o[5]*o[5], 1.0f);
+        }
+    }
+
     s.target_vx_m_s = 10.0f;
     s.target_yaw_rad_s = 10.0f;
     assert(RLShadowBuildObservation(&s, o) == 0);
@@ -79,6 +101,15 @@ int main(void)
     near(o[7], 2.0f);
     near(o[8], 2.0f);
     s.joint_rate_rad_s[0] = NAN;
+    assert(RLShadowBuildObservation(&s, o) != 0);
+    s.joint_rate_rad_s[0] = 0.0f;
+    s.heading_vx_m_s = NAN;
+    assert(RLShadowBuildObservation(&s, o) != 0);
+    s.heading_vx_m_s = 0.0f;
+    s.target_vx_m_s = NAN;
+    assert(RLShadowBuildObservation(&s, o) != 0);
+    s.target_vx_m_s = 0.0f;
+    s.target_yaw_rad_s = INFINITY;
     assert(RLShadowBuildObservation(&s, o) != 0);
     puts("rl observation tests passed");
     return 0;

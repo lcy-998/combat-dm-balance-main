@@ -34,7 +34,7 @@ int main(void)
     const float action[RL_SHADOW_ACTION_SIZE] = {0};
     RLShadowOutputPreview converted;
     assert(RLShadowConvertOutput(sample.target_vx_m_s, action, &converted) == 0);
-    near(converted.leg_scale_rad_per_action, 0.186f);
+    near(converted.leg_scale_rad_per_action, 0.190f); /* D5 scale at 0.1 m/s. */
 
     sample.rl_active = 1u;
     sample.rl_activation_sequence = 1u;

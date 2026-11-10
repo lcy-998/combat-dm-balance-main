@@ -82,6 +82,12 @@ int RLShadowBuildObservation(const RLShadowSnapshot *s,
     if (s == NULL || o == NULL) {
         return -1;
     }
+    /* fminf/fmaxf can turn NAN into a finite clip limit. Reject invalid speed
+     * estimates and targets BEFORE clipping, so no invalid command is sent. */
+    if (!isfinite(s->heading_vx_m_s) || !isfinite(s->target_vx_m_s) ||
+        !isfinite(s->target_yaw_rad_s)) {
+        return -1;
+    }
     const float cp = cosf(s->pitch_rad);
     const float sr = sinf(s->roll_rad);
     const float cr = cosf(s->roll_rad);

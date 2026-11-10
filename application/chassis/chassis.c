@@ -33,7 +33,9 @@
 #include "chassis_can_link.h"
 #include "chassis_cmd_watchdog.h"
 #include "rl_shadow.h"
+#include "rl_heading_velocity.h"
 #include "rl_control.h"
+#include "rl_spring_compensation.h"
 #include "wheel_friction.h"
 #include "buzzer.h"
 #include "FreeRTOS.h"
@@ -50,7 +52,6 @@ static ChassisCmdWatchdog chassis_cmd_watchdog;
 #define HALF_TRACK_WIDTH (TRACK_WIDTH / 2.0f)   // 半轮�?
 #define PERIMETER_WHEEL (RADIUS_WHEEL * 2 * PI) // 轮子周长
 
-#define RL_TRAINED_SPRING_NM 4.31f
 /* 一些安装和机械引入的�?*/
 #define REDUCE_RATIO (268.0f / 17.0f)
 // #define LF_ENCODE_OFFSET 5.54346179038468985769f - 5.4739542f + PI / 2
@@ -125,7 +126,7 @@ float F_roll_vmc, F_l_vmc, F_g_vmc, F_in_vmc, T_vmc;
 ctrl_pair tau_l, tau_r;
 float l_xx = 0.16, ttl = 1, ttr = 0;
 float a_xb, a_yb, a_zb, a_w_l, a_w_r, a_w;
-static float rl_heading_vx_raw;
+static float rl_heading_vx_legacy_raw;
 static uint32_t rl_snapshot_sequence;
 static RLControlState rl_control_state;
 static uint32_t rl_activation_sequence;
@@ -505,23 +506,8 @@ void getStateData()
     // 速度需要滤波以防打�?
     float acc_b[3] = {-IMU_data->Accel[1], -IMU_data->Accel[0], IMU_data->Accel[2]};
     float eul_deg[3] = {roll * RAD_2_DEG, pitch * RAD_2_DEG, yaw * RAD_2_DEG};
-    rl_heading_vx_raw = s_dot;
+    rl_heading_vx_legacy_raw = s_dot;
     s_dot = WorldXSpeedKF(del_t, acc_b, eul_deg, s_dot, NULL);
-}
-
-static int RLSpringDifferenceTorque(float left_scalar, float right_scalar,
-                                           float left_angle, float right_angle,
-                                           float trained_nm, float out[4])
-{
-    for (unsigned i=0;i<4;++i) out[i]=0.0f;
-    if (!isfinite(left_scalar)||!isfinite(right_scalar)||!isfinite(left_angle)||
-        !isfinite(right_angle)||!isfinite(trained_nm)||left_scalar<0||
-        right_scalar<0||left_scalar>27||right_scalar>27||trained_nm<0||trained_nm>10.775f)
-        return -1;
-    const float sl=left_scalar*sinf(left_angle), sr=right_scalar*sinf(right_angle);
-    out[0]=trained_nm-sl; out[1]=sl;
-    out[2]=sr-trained_nm; out[3]=-sr;
-    return 0;
 }
 
 static void PublishRLShadowSnapshot(void)
@@ -542,7 +528,7 @@ static void PublishRLShadowSnapshot(void)
     sample.pitch_rate_rad_s = pitch_dot;
     sample.yaw_rate_rad_s = yaw_dot;
     sample.target_yaw_rad_s = w_cmd;
-    sample.heading_vx_m_s = rl_heading_vx_raw;
+    sample.heading_vx_legacy_m_s = rl_heading_vx_legacy_raw;
     sample.lqr_speed_m_s = s_dot;
     sample.joint_angle_rad[0] = lfangle;
     sample.joint_angle_rad[1] = lbangle;
@@ -555,6 +541,11 @@ static void PublishRLShadowSnapshot(void)
     /* Both model wheel joints have negative velocity during forward rolling. */
     sample.wheel_rate_rad_s[0] = motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
     sample.wheel_rate_rad_s[1] = -motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
+    /* RL needs the heading velocity of the training root reference point.
+     * LQR's wheel/virtual-leg proxy and its KF remain on their own path. */
+    sample.heading_vx_estimator_valid =
+        (RLHeadingVelocity(&sample, &sample.heading_vx_m_s,
+                           sample.heading_vx_sides_m_s) == 0);
     sample.lqr_torque_nm[0] = lwt;
     sample.lqr_torque_nm[1] = rwt;
     sample.lqr_torque_nm[2] = lbt;
@@ -962,11 +953,12 @@ static void ApplyRLJointOutput(const float target[4], float blend)
     DMMotorInstance *joint[4] = {jiont_motorlf, jiont_motorlb,
                                  jiont_motorrf, jiont_motorrb};
     float spring_difference[4] = {0};
-
+#if RL_SPRING_DIFFERENCE_ENABLED
+    /* Experimental feedforward only; physical spring is not applied in code. */
     (void)RLSpringDifferenceTorque(GetSpringTorqueByLegLength(Lleg->result->L0),
         GetSpringTorqueByLegLength(Rleg->result->L0), lmangle, rmangle,
         RL_TRAINED_SPRING_NM, spring_difference);
-
+#endif
     for (unsigned i = 0; i < 4u; ++i)
     {
         float position, torque, kp, kd;

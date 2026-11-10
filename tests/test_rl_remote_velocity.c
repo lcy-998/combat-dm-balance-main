@@ -54,7 +54,7 @@ int main(void)
     const float action[RL_SHADOW_ACTION_SIZE] = {0};
     RLShadowOutputPreview converted;
     assert(RLShadowConvertOutput(sample.target_vx_m_s, action, &converted) == 0);
-    near(converted.leg_scale_rad_per_action, 0.180f);
+    near(converted.leg_scale_rad_per_action, 0.190f); /* D5 scale at zero speed. */
     puts("rl remote velocity tests passed");
     return 0;
 }

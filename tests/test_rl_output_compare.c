@@ -11,15 +11,8 @@ static void near(float actual, float expected)
 
 int main(void)
 {
-    static const float speeds[] = {
-        0.0f, 1.0f, 1.2f, 1.35f, 1.5f, 1.6f, 1.75f, 2.0f,
-        2.2f, 2.4f, 2.5f, 2.6f, 2.7f, 2.8f, 2.9f, 3.0f, 3.1f, 3.2f
-    };
-    static const float scales[] = {
-        0.180f, 0.220f, 0.240f, 0.240f, 0.240f, 0.242f,
-        0.245f, 0.250f, 0.255f, 0.262f, 0.265f, 0.268f,
-        0.270f, 0.273f, 0.276f, 0.280f, 0.283f, 0.286f
-    };
+    static const float speeds[] = {0.000000f, 0.050000f, 0.100000f, 0.150000f, 0.225000f, 0.250000f, 0.275000f, 0.350000f, 0.500000f, 0.750000f, 1.000000f, 1.200000f, 1.250000f, 1.350000f, 1.500000f, 2.000000f, 2.500000f, 2.600000f, 2.700000f, 2.800000f, 2.900000f, 3.000000f, 3.100000f, 3.200000f};
+    static const float scales[] = {0.190000f, 0.190000f, 0.190000f, 0.190000f, 0.190000f, 0.190000f, 0.191000f, 0.194000f, 0.200000f, 0.210000f, 0.220000f, 0.240000f, 0.240000f, 0.240000f, 0.240000f, 0.250000f, 0.265000f, 0.268000f, 0.270000f, 0.273000f, 0.276000f, 0.280000f, 0.283000f, 0.286000f};
     float action[RL_SHADOW_ACTION_SIZE] = {0};
     RLShadowOutputPreview preview;
     for (unsigned i = 0; i < sizeof(speeds) / sizeof(speeds[0]); ++i) {
