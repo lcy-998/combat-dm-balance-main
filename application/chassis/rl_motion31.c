@@ -60,9 +60,13 @@ void RLMotion31MapLqrAttitude(RLMotion31Snapshot *s,
     /* LQR theta_b=pitch is nose-down positive, and phi=yaw is left-turn
        positive. These are +FLU Y and +FLU Z rotations, respectively. */
     const float gyro_flu[3] = {roll_rate_rad_s, pitch_rate_rad_s, yaw_rate_rad_s};
+    /* EKF ZYX angles are named Pitch (IMU X) and Roll (IMU Y).
+       The caller supplies pitch=INS.Pitch, roll=-INS.Roll, in radians.
+       Project world down in IMU axes, then map to FLU [-IMU Y, IMU X, IMU Z].
+       Swapping Euler angle names does not preserve the rotation order. */
     const float gravity_flu[3] = {
-        sinf(pitch_rad),
-        -sinf(roll_rad) * cosf(pitch_rad),
+        sinf(pitch_rad) * cosf(roll_rad),
+        -sinf(roll_rad),
         -cosf(roll_rad) * cosf(pitch_rad)};
     RLMotion31MapBodyImu(s, gyro_flu, gravity_flu);
 }

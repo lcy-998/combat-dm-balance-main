@@ -12,8 +12,53 @@ static void near(float actual, float expected)
     assert(fabsf(actual - expected) < 0.00001f);
 }
 
+static void test_attitude_against_quaternion(void)
+{
+    /* Build IMU ZYX quaternions with simultaneous X/Y tilt and varying yaw.
+       The EKF calls the X angle Pitch and the Y angle Roll. */
+    const float angles[][3] = {
+        {0.523598776f, -0.523598776f, 0.0f},
+        {0.523598776f, -0.523598776f, 1.308996939f},
+        {0.35f, 0.26f, -0.7f},
+        {-0.6f, -0.4f, 2.1f},
+        {-0.3f, 0.5f, -2.8f}
+    };
+    for (unsigned i = 0; i < sizeof(angles) / sizeof(angles[0]); ++i) {
+        const float cx = cosf(angles[i][0] / 2.0f), sx = sinf(angles[i][0] / 2.0f);
+        const float cy = cosf(angles[i][1] / 2.0f), sy = sinf(angles[i][1] / 2.0f);
+        const float cz = cosf(angles[i][2] / 2.0f), sz = sinf(angles[i][2] / 2.0f);
+        const float w = cx*cy*cz + sx*sy*sz;
+        const float x = sx*cy*cz - cx*sy*sz;
+        const float y = cx*sy*cz + sx*cy*sz;
+        const float z = cx*cy*sz - sx*sy*cz;
+        /* Match QuaternionEKF.c extraction and CurrentRLSnapshot's signs. */
+        const float pitch = atan2f(2.0f*(w*x + y*z), 2.0f*(w*w + z*z) - 1.0f);
+        const float roll = -asinf(2.0f*(w*y - x*z));
+        /* Independent reference: rotate world down into the IMU frame.
+           IMU -> FLU is [-Y, X, Z]; FLU -> model is [-Y, Z, -X]. */
+        const float gravity_imu[3] = {
+            -2.0f*(x*z - w*y),
+            -2.0f*(y*z + w*x),
+            -(1.0f - 2.0f*(x*x + y*y))
+        };
+        RLMotion31Snapshot s = {0};
+        s.previous_target_valid = 1u;
+        s.command_height_m = 0.34f;
+        float observation[RL_MOTION31_OBSERVATION_SIZE];
+        RLMotion31MapLqrAttitude(&s, roll, pitch, 0.2f, -0.3f, 0.4f);
+        assert(RLMotion31BuildObservation(&s, observation) == 0);
+        near(observation[0], 0.075f);
+        near(observation[1], 0.1f);
+        near(observation[2], -0.05f);
+        near(observation[3], -gravity_imu[0]);
+        near(observation[4], gravity_imu[2]);
+        near(observation[5], gravity_imu[1]);
+    }
+}
+
 int main(void)
 {
+    test_attitude_against_quaternion();
     RLMotion31Snapshot s = {0};
     s.previous_target_valid = 1u;
     const float pi = 3.14159265358979323846f;

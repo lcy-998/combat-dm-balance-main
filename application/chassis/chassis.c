@@ -135,6 +135,9 @@ uint64_t cent = 0;
 static float del_t;
 static uint8_t chassis_lqr_output_valid;
 static RLControlState rl_control_state;
+/* Keep the fallback position reference current until LQR actually outputs.
+   This survives inhibited/standup frames and faults detected after calc_lqr(). */
+static uint8_t lqr_reentry_pending;
 static float rl_height_request_m=RL_MOTION31_HEIGHT_M;
 static RLControlFrame rl_control_frame;
 static RLShadowSnapshot rl_pd_snapshot;
@@ -651,6 +654,10 @@ void setTargetData()
     {
         s_tar = s + v_cmd * 0.003f + 1.2;
     }
+    /* Prepare the first fallback frame before RL can fail later in outputTorque.
+       After LQR adoption, neutral-command position holding resumes normally. */
+    if (rl_control_state.active || lqr_reentry_pending)
+        s_tar = s;
     del_t = DWT_GetDeltaT(&balance_dwt_cnt);
     // if(fabs(absds)<0.0001) s_tar =s;
 
@@ -1063,9 +1070,15 @@ void outputTorque()
                     DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) + RBtor);
                     if (theta_l < 0.50f && theta_r < 0.50f && fabs(theta_b) < 0.01)
                     {
-                        step_3 = true, Rwheel = motor_r->measure.total_angle, Lwheel = motor_l->measure.total_angle; // 复位完成，重置轮子编码器的初始值,新增复为完成后将轮子的初始位置重置为当前值，防止复位过程中轮子转动过多导致的编码器值过大影响后续位置估计，这是应该用卡尔曼滤波修复的东西
+                        step_3 = true;
+                        /* Rebase feedback and target together; s still contains
+                           the old encoder-origin measurement at this point. */
+                        taskENTER_CRITICAL();
+                        Rwheel = motor_r->measure.total_angle;
+                        Lwheel = motor_l->measure.total_angle;
+                        s = s_tar = 0.0f;
+                        taskEXIT_CRITICAL();
                         Unsetlegkd();
-                        s_tar = s;
                         w_cmd = 0;
                         v_cmd = 0;
                         phi_tar = phi;
@@ -1229,6 +1242,7 @@ void outputTorque()
                 }
                 lwi=selected_wheel[0];rwi=selected_wheel[1];
                 rl_control_state=pending;
+                lqr_reentry_pending=(uint8_t)use_rl;
                 if (use_rl) rl_control_frame=frame;
                 else {memset(&rl_control_frame,0,sizeof(rl_control_frame));
                       rl_control_frame.tick_ms=current.tick_ms;rl_control_frame.fault=pending.fault;}

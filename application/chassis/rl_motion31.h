@@ -40,7 +40,9 @@ typedef struct {
 void RLMotion31MapBodyImu(RLMotion31Snapshot *sample,
                           const float gyro_flu_rad_s[3],
                           const float gravity_flu[3]);
-/* LQR theta_b=pitch is positive nose-down (+FLU Y); phi=yaw is left-turn (+FLU Z). */
+/* LQR theta_b=pitch is positive nose-down (+FLU Y); phi=yaw is left-turn (+FLU Z).
+   Angles must be pitch=INS.Pitch, roll=-INS.Roll in radians, not standard FLU
+   ZYX Euler angles. Rates are body gyro components in FLU axes, not Euler derivatives. */
 void RLMotion31MapLqrAttitude(RLMotion31Snapshot *sample,
                               float roll_rad, float pitch_rad,
                               float roll_rate_rad_s, float pitch_rate_rad_s,
