@@ -243,8 +243,8 @@ int RLControlMapOutput(const RLMotion31Preview *preview,
             !isfinite(wheel_forward_torque_nm[i])) return -1;
     }
     wheel_current[0] = clampf(-wheel_forward_torque_nm[0] * RL_MOTION31_WHEEL_CURRENT_PER_NM,
-                              -8192.0f, 8192.0f);
+                              -RL_CONTROL_WHEEL_RAW_LIMIT, RL_CONTROL_WHEEL_RAW_LIMIT);
     wheel_current[1] = clampf(wheel_forward_torque_nm[1] * RL_MOTION31_WHEEL_CURRENT_PER_NM,
-                              -8192.0f, 8192.0f);
+                              -RL_CONTROL_WHEEL_RAW_LIMIT, RL_CONTROL_WHEEL_RAW_LIMIT);
     return 0;
 }

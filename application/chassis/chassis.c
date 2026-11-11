@@ -69,6 +69,8 @@ static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
 #define ROTATE_WZ_TARGET 1100.0f
 #define ROTATE_WZ_STEP 0.80f
 #define ROTATE_WZ_DOWN_STEP 1.60f
+#define LEG_LENGTH_SPEED_M_S 0.048f
+#define LEG_LENGTH_STEP_M (LEG_LENGTH_SPEED_M_S * 0.005f)
 #define LEG_SWING_CUTOFF_RAD (PI / 2.0f)
 #define UPSTAIR_ACCEL_CUTOFF -3.5f
 #define STANDUP_GIMBAL_RESET_ERR_DEG 8.0f
@@ -259,7 +261,7 @@ void ChassisInit()
                 .Kd = 0.0, // 0
                 .IntegralLimit = 800,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 8192,
+                .MaxOut = RL_CONTROL_WHEEL_RAW_LIMIT,
             }},
         .controller_setting_init_config = {
             .feedforward_flag = CURRENT_FEEDFORWARD,
@@ -513,12 +515,12 @@ void legLengthCalc()
     {
     case 1:
 
-        l_xx -= 0.002f * 0.03f;
+        l_xx -= LEG_LENGTH_STEP_M;
         break;
     case -1:
         // jumpingflag = 1;
         // clockcent = 0;
-        l_xx += 0.002f * 0.03f;
+        l_xx += LEG_LENGTH_STEP_M;
         break;
     case 2:
         upstair_flag0 = 1;
@@ -909,8 +911,8 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
        request. Do not feed LQR leg length l_xx or measured height to Actor. */
     taskENTER_CRITICAL();
     if(rl_control_state.active && ChassisNormalLQRState()) {
-        if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=0.002f*0.03f;
-        if(chassis_cmd_recv.changeL==1) rl_height_request_m-=0.002f*0.03f;
+        if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=LEG_LENGTH_STEP_M;
+        if(chassis_cmd_recv.changeL==1) rl_height_request_m-=LEG_LENGTH_STEP_M;
         rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
                                  fminf(RL_MOTION31_HEIGHT_MAX_M,rl_height_request_m));
     }
@@ -1213,7 +1215,7 @@ void outputTorque()
                                          rwt*RL_MOTION31_WHEEL_CURRENT_PER_NM};
                 /* Existing LQR-only term. Never add it to RL output. */
                 if (v_cmd<=.03f) {selected_wheel[0]+=s_dot*500;selected_wheel[1]-=s_dot*500;}
-                for (unsigned i=0;i<2;++i) selected_wheel[i]=fmaxf(-8192.0f,fminf(8192.0f,selected_wheel[i]));
+                for (unsigned i=0;i<2;++i) selected_wheel[i]=fmaxf(-RL_CONTROL_WHEEL_RAW_LIMIT,fminf(RL_CONTROL_WHEEL_RAW_LIMIT,selected_wheel[i]));
                 if (!upstair_flag0) {upstair_flag0_cnt=0;upstair_flag0_latch=0;}
                 chassis_lqr_output_valid=1u;
                 RLShadowCommand command;

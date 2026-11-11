@@ -147,8 +147,8 @@ int main(void)
     near(state.adopted_target[2],80); near(state.adopted_target[5],-80);
     near(frame.tau_pd_nm[2],16); near(frame.tau_pd_nm[5],-16);
     near(frame.tau_limited_nm[2],5.5f); near(frame.tau_limited_nm[5],-5.5f);
-    near(fabsf(frame.wheel_current_raw[0]),8192);
-    near(fabsf(frame.wheel_current_raw[1]),8192);
+    near(fabsf(frame.wheel_current_raw[0]),RL_CONTROL_WHEEL_RAW_LIMIT);
+    near(fabsf(frame.wheel_current_raw[1]),RL_CONTROL_WHEEL_RAW_LIMIT);
     s=feedback(7005,&state);
     assert(!RLMotion31BuildObservation(&s.motion,obs));
     near(obs[20],.8f); near(obs[21],-.8f);

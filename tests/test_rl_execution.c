@@ -147,7 +147,8 @@ int main(void)
     assert(RLControlExecute(&state,5000,1,&s,&c,&out)==0);
     assert(state.active && out.owner==RL_OWNER_RL && state.adopted_sequence==101);
     assert(fabsf(out.tau_pd_nm[0]-40.0f*(-0.13097405433655f+.015f))<1e-5f);
-    assert(fabsf(out.wheel_current_raw[0])<=8192 && fabsf(out.wheel_current_raw[1])<=8192);
+    assert(fabsf(out.wheel_current_raw[0])<=RL_CONTROL_WHEEL_RAW_LIMIT &&
+           fabsf(out.wheel_current_raw[1])<=RL_CONTROL_WHEEL_RAW_LIMIT);
     RLControlFillPrevious(&state,&s);
     assert(s.previous_source==RL_PREVIOUS_ADOPTED && s.adopted_sequence==101);
     assert(fabsf(s.motion.previous_target[0]-(-0.13097405433655f+.015f))<1e-6f);
