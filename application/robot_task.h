@@ -34,7 +34,6 @@ void StartMOTORTASK(void const *argument);
 void StartDAEMONTASK(void const *argument);
 void StartROBOTTASK(void const *argument);
 void StartUITASK(void const *argument);
-void StartRLMotion31ShadowTask(void const *argument);
 
 /**
  * @brief 初始化机器人任务,所有持续运行的任务都在这里初始化

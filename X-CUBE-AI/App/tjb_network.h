@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    tjb_network.h
   * @author  AST Embedded Analytics Research Platform
-  * @date    2026-11-04T22:23:45+0800
+  * @date    2026-11-12T18:00:42+0800
   * @brief   AI Tool Automatic Code Generator for Embedded NN computing
   ******************************************************************************
   * @attention
@@ -23,7 +23,7 @@
 
 /******************************************************************************/
 #define AI_TJB_NETWORK_MODEL_NAME          "tjb_network"
-#define AI_TJB_NETWORK_ORIGIN_MODEL_NAME   "actor1104"
+#define AI_TJB_NETWORK_ORIGIN_MODEL_NAME   "actor1112"
 
 /******************************************************************************/
 #define AI_TJB_NETWORK_ACTIVATIONS_ALIGNMENT   (4)

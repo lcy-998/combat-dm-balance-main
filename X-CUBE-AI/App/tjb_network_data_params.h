@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    tjb_network_data_params.h
   * @author  AST Embedded Analytics Research Platform
-  * @date    2026-11-04T21:12:04+0800
+  * @date    2026-11-12T18:00:42+0800
   * @brief   AI Tool Automatic Code Generator for Embedded NN computing
   ******************************************************************************
   * Copyright (c) 2026 STMicroelectronics.
@@ -28,18 +28,18 @@
 
 
 #define AI_TJB_NETWORK_DATA_ACTIVATIONS_SIZES \
-  { 768, }
-#define AI_TJB_NETWORK_DATA_ACTIVATIONS_SIZE     (768)
+  { 1536, }
+#define AI_TJB_NETWORK_DATA_ACTIVATIONS_SIZE     (1536)
 #define AI_TJB_NETWORK_DATA_ACTIVATIONS_COUNT    (1)
-#define AI_TJB_NETWORK_DATA_ACTIVATION_1_SIZE    (768)
+#define AI_TJB_NETWORK_DATA_ACTIVATION_1_SIZE    (1536)
 
 
 
 #define AI_TJB_NETWORK_DATA_WEIGHTS_SIZES \
-  { 58520, }
-#define AI_TJB_NETWORK_DATA_WEIGHTS_SIZE         (58520)
+  { 198936, }
+#define AI_TJB_NETWORK_DATA_WEIGHTS_SIZE         (198936)
 #define AI_TJB_NETWORK_DATA_WEIGHTS_COUNT        (1)
-#define AI_TJB_NETWORK_DATA_WEIGHT_1_SIZE        (58520)
+#define AI_TJB_NETWORK_DATA_WEIGHT_1_SIZE        (198936)
 
 
 

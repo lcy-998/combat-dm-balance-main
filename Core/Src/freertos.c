@@ -47,18 +47,22 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+static osThreadId rlMotion31TaskHandle;
+#endif
 
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
-osThreadId rlMotion31TaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
+#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+static void StartRLMotion31ShadowTask(void const *argument);
+#endif
 
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
-void StartRLMotion31ShadowTask(void const * argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -143,14 +147,12 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
+  /* USER CODE BEGIN RTOS_THREADS */
 #if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
   osThreadDef(rlMotion31Task, StartRLMotion31ShadowTask, osPriorityBelowNormal, 0, 1024);
   rlMotion31TaskHandle = osThreadCreate(osThread(rlMotion31Task), NULL);
   if (rlMotion31TaskHandle == NULL) Error_Handler();
 #endif
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
 }
@@ -175,13 +177,14 @@ void StartDefaultTask(void const * argument)
   /* USER CODE END StartDefaultTask */
 }
 
-void StartRLMotion31ShadowTask(void const *argument)
+/* Private application code --------------------------------------------------*/
+/* USER CODE BEGIN Application */
+#if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
+static void StartRLMotion31ShadowTask(void const *argument)
 {
   RLShadowTask(argument);
   for (;;) osDelay(1000);
 }
-
-/* Private application code --------------------------------------------------*/
-/* USER CODE BEGIN Application */
+#endif
 
 /* USER CODE END Application */

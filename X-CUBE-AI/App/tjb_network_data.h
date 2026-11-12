@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    tjb_network_data.h
   * @author  AST Embedded Analytics Research Platform
-  * @date    2026-11-04T21:12:04+0800
+  * @date    2026-11-12T18:00:42+0800
   * @brief   AI Tool Automatic Code Generator for Embedded NN computing
   ******************************************************************************
   * Copyright (c) 2026 STMicroelectronics.
@@ -32,7 +32,7 @@ AI_DEPRECATED
 AI_API_DECLARE_BEGIN
 
 
-extern const ai_u64 s_tjb_network_weights_array_u64[7315];
+extern const ai_u64 s_tjb_network_weights_array_u64[24867];
 
 
 
