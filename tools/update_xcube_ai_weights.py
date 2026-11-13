@@ -25,10 +25,10 @@ except ImportError as exc:
 
 TARGETS = {
     "tjb_network": {
-        "dims": [(128, 31), (64, 128), (32, 64), (6, 32)],
+        "dims": [(256, 31), (128, 256), (64, 128), (6, 64)],
         "ops": ["Gemm", "Elu", "Gemm", "Elu", "Gemm", "Elu", "Gemm", "Tanh"],
         "input": 31,
-        "weight_bytes": 58520,
+        "weight_bytes": 198936,
     },
     "network": {
         "dims": [(128, 25), (128, 128), (6, 128)],

@@ -80,8 +80,8 @@ int main(int argc,char **argv)
         assert(published.preview.target[2]==64);
     }else assert(!inferences && !published.valid);
     assert(g_rl_shadow_debug.controller_owner==(!scenario?RL_OWNER_RL:RL_OWNER_LQR));
-    assert(g_rl_shadow_debug.frame_begin==g_rl_shadow_debug.frame_end);
-    assert(!(g_rl_shadow_debug.frame_begin&1));
+    assert(g_rl_shadow_debug.publish_seq==g_rl_shadow_debug.frame_end);
+    assert(!(g_rl_shadow_debug.publish_seq&1));
     puts("PASS supported015 real task: adopted cache, real dq and invalid/inactive boundaries");
     return 0;
 }
