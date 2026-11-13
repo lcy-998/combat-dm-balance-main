@@ -50,8 +50,8 @@ typedef struct {
 } RLShadowCommand;
 
 typedef struct {
-    uint32_t frame_begin; /* odd/in-progress; compare with frame_end before using a snapshot */
-    uint32_t sequence;
+    uint32_t publish_seq; /* odd/in-progress; compare with frame_end before using a snapshot */
+    uint32_t snapshot_seq;
     uint32_t stage; /* 0=no sample, 1=fresh, 2=obs, 3=inference, 4=decode, 5=PD */
     uint32_t failure; /* 0=none, 1=init, 2=no sample, 3=stale, 4=input, 5=network,
                          6=decode, 7=target mapping, 8=PD, 9=torque mapping/compensation */
@@ -68,7 +68,7 @@ typedef struct {
     uint8_t rl_active;
     uint8_t rl_torque_valid; /* current inference torque calculation succeeded */
     float observation[RL_MOTION31_OBSERVATION_SIZE];
-    float mean_action[RL_MOTION31_ACTION_SIZE];
+    float raw_action[RL_MOTION31_ACTION_SIZE];
     float decoded_target[RL_MOTION31_ACTION_SIZE];
     float rl_wheel_target_rad_s[2]; /* left/right, wheel-output rad/s, motor-axis sign */
     float rl_wheel_current_rad_s[2]; /* measured left/right, same units and motor-axis signs */

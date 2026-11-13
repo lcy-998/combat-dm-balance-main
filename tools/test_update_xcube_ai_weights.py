@@ -11,16 +11,17 @@ import update_xcube_ai_weights as converter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / ".Doc/models/motion1600_C0_dual_teacher_actor/actor.onnx"
+MODEL = Path("D:/Combat/tjb_network/actor1112.onnx")
 GENERATED = ROOT / "X-CUBE-AI" / "App" / "tjb_network_data_params.c"
 NETWORK_MODEL = Path("D:/DefaultStore/QQ/mlp/RMUC_H723_smallMLP_v8_20261009/policy.onnx")
 NETWORK_GENERATED = ROOT / "X-CUBE-AI" / "App" / "network_data_params.c"
+OLD_MODEL = ROOT / ".Doc/models/motion1600_C0_dual_teacher_actor/actor.onnx"
 
 
 class WeightConverterTests(unittest.TestCase):
     def test_matches_st_generated_bytes(self):
         for target, model_path, generated_path, count in (
-            ("tjb_network", MODEL, GENERATED, 14630),
+            ("tjb_network", MODEL, GENERATED, 49734),
             ("network", NETWORK_MODEL, NETWORK_GENERATED, 20614),
         ):
             with self.subTest(target=target):
@@ -40,18 +41,28 @@ class WeightConverterTests(unittest.TestCase):
             converter.extract_weights(onnx.load(str(NETWORK_MODEL)), "tjb_network")
 
     def test_rejects_changed_gemm_layout(self):
+        if not MODEL.is_file():
+            self.skipTest("current tjb_network ONNX is not available")
         model = onnx.load(str(MODEL))
         next(attr for attr in model.graph.node[0].attribute if attr.name == "transB").i = 0
         with self.assertRaisesRegex(ValueError, "incompatible attributes"):
             converter.extract_weights(model)
 
     def test_rejects_changed_shape(self):
+        if not MODEL.is_file():
+            self.skipTest("current tjb_network ONNX is not available")
         model = onnx.load(str(MODEL))
         model.graph.input[0].type.tensor_type.shape.dim[1].dim_value = 30
         with self.assertRaisesRegex(ValueError, "expected input shape"):
             converter.extract_weights(model)
 
+    def test_rejects_old_tjb_network_architecture(self):
+        with self.assertRaisesRegex(ValueError, "has shape"):
+            converter.extract_weights(onnx.load(str(OLD_MODEL)))
+
     def test_replaces_only_weight_array(self):
+        if not MODEL.is_file():
+            self.skipTest("current tjb_network ONNX is not available")
         model = onnx.load(str(MODEL))
         first = model.graph.initializer[0]
         data = bytearray(first.raw_data); data[0] ^= 1; first.raw_data = bytes(data)
@@ -62,7 +73,7 @@ class WeightConverterTests(unittest.TestCase):
             target = Path(directory) / "tjb_network_data_params.c"
             target.write_bytes(GENERATED.read_bytes())
             subprocess.run(
-                [sys.executable, str(Path(converter.__file__)), str(replacement), "--output", str(target)],
+                [sys.executable, "-B", str(Path(converter.__file__)), str(replacement), "--output", str(target)],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -92,7 +103,7 @@ class WeightConverterTests(unittest.TestCase):
             onnx.save(model, str(model_path))
             target.write_bytes(NETWORK_GENERATED.read_bytes())
             subprocess.run(
-                [sys.executable, str(Path(converter.__file__)), str(model_path),
+                [sys.executable, "-B", str(Path(converter.__file__)), str(model_path),
                  "--target", "network", "--output", str(target)],
                 check=True, capture_output=True, text=True,
             )

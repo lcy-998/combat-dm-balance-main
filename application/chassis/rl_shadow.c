@@ -30,13 +30,13 @@ static uint8_t inference_pending_timing;
 static void commit_debug(void)
 {
     const uint32_t generation=(debug_generation+=2u);
-    g_rl_shadow_debug.frame_begin=generation|1u;
+    g_rl_shadow_debug.publish_seq=generation|1u;
     __atomic_thread_fence(__ATOMIC_RELEASE);
-    working_debug.frame_begin=generation|1u;
+    working_debug.publish_seq=generation|1u;
     working_debug.frame_end=generation;
     g_rl_shadow_debug=working_debug;
     __atomic_thread_fence(__ATOMIC_RELEASE);
-    g_rl_shadow_debug.frame_begin=generation;
+    g_rl_shadow_debug.publish_seq=generation;
 }
 static StaticQueue_t snapshot_queue_struct;
 static uint8_t snapshot_queue_storage[sizeof(RLShadowSnapshot)];
@@ -167,13 +167,13 @@ static void publish_debug(const RLShadowSnapshot *sample)
     float rl_leg_torque[4] = {0};
     float rl_wheel_torque[2] = {0};
     if (sample != NULL) {
-        d->sequence = sample->sequence;
+        d->snapshot_seq = sample->sequence;
         d->rl_active = sample->rl_active;
         /* Snapshot wheel velocities use model signs: left raw, right inverted. */
         d->rl_wheel_current_rad_s[0] = sample->motion.joint_velocity_rad_s[5];
         d->rl_wheel_current_rad_s[1] = -sample->motion.joint_velocity_rad_s[2];
     } else {
-        d->sequence = 0u;
+        d->snapshot_seq = 0u;
         d->rl_active = 0u;
         d->rl_wheel_current_rad_s[0] = 0.0f;
         d->rl_wheel_current_rad_s[1] = 0.0f;
@@ -284,7 +284,7 @@ void RLShadowTask(void const *argument)
             commit_debug();
             continue;
         }
-        working_debug.sequence = sample.sequence;
+        working_debug.snapshot_seq = sample.sequence;
         TickType_t now = xTaskGetTickCount();
         working_debug.snapshot_age_ms = (uint32_t)(now - sample.tick_ms);
         for (size_t i = 0; i < 4u; ++i) {
@@ -367,7 +367,7 @@ void RLShadowTask(void const *argument)
             continue;
         }
         for (size_t i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
-            working_debug.mean_action[i] = action[i];
+            working_debug.raw_action[i] = action[i];
         }
         working_debug.stage = 3u;
         if ((sample.motion.recovery_mode ? RLMotion31DecodeRecoveryMean(action,preview.target) :
