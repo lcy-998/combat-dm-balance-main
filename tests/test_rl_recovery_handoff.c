@@ -643,8 +643,8 @@ static void test_real_recovery_shadow_task(void)
                 ++failures;
             }
         }
-        CHECK(g_rl_shadow_debug.frame_begin==g_rl_shadow_debug.frame_end);
-        CHECK(!(g_rl_shadow_debug.frame_begin&1));
+        CHECK(g_rl_shadow_debug.publish_seq==g_rl_shadow_debug.frame_end);
+        CHECK(!(g_rl_shadow_debug.publish_seq&1));
     }
     printf("%s real Recovery shadow task: 8 routing/input scenarios + 6 latency/failure/wrap scenarios\n",
            failures==failures_before?"PASS":"FAIL");
