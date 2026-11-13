@@ -2,6 +2,7 @@
 #define RL_SHADOW_H
 
 #include "rl_motion31.h"
+#include "rl_handoff.h"
 
 #include <stdint.h>
 
@@ -27,6 +28,8 @@ typedef struct {
     float applied_wheel_current_raw[2];
     float leg_length_m[2]; /* left, right; spring compensation input */
     float leg_spread_rad[2]; /* left, right; spring compensation input */
+    uint8_t recovery_session, motion_probe;
+    RLHandoffSample handoff; /* qualified external evidence; UNKNOWN by default */
     RLMotion31Snapshot motion;
 } RLShadowSnapshot;
 
@@ -38,6 +41,10 @@ typedef struct {
     uint8_t previous_source;
     uint32_t control_epoch;
     uint32_t previous_sequence;
+    uint8_t recovery_mode, motion_valid;
+    uint32_t actor_input_tick_ms;
+    float motion_action[6];
+    RLMotion31Preview motion_preview;
     float action[RL_MOTION31_ACTION_SIZE];
     RLMotion31Preview preview;
 } RLShadowCommand;

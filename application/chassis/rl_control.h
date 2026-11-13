@@ -15,6 +15,7 @@
 #define RL_PREVIOUS_ADOPTED 2u
 #define RL_OWNER_LQR 0u
 #define RL_OWNER_RL 1u
+#define RL_OWNER_SAFE 2u /* explicit Recovery fault/wait: zero six-channel output */
 
 enum { RL_FAULT_NONE=0u, RL_FAULT_INPUT=1u, RL_FAULT_COMMAND=2u,
        RL_FAULT_PD=3u, RL_FAULT_COMPENSATION=4u };
@@ -38,6 +39,12 @@ typedef struct {
     float adopted_target[6]; /* local PD adoption, not a claim of remote driver acceptance */
     float adopted_height_m; /* identity of the actually adopted Actor request */
     RLControlHeightState height;
+    uint8_t recovery_session, recovering, recovery_initialized, recovery_pd_valid;
+    uint32_t recovery_last_ms, recovery_output_ms, recovery_request_sequence;
+    float recovery_request[6], recovery_targets[32][6], recovery_wheels[32][2];
+    float recovery_pd[6], recovery_raw_pd[6];
+    uint32_t recovery_target_sequence[32];
+    RLHandoffState handoff;
 } RLControlState;
 typedef struct {
     uint8_t active;
@@ -53,6 +60,9 @@ typedef struct {
     float wheel_current_raw[2]; /* physical L/R, signed driver units, not measured A */
 } RLControlFrame;
 
+extern const RLHandoffConfig RL_HANDOFF_CONFIG;
+/* Explicitly start only from a safe/idle state; does not auto-enable hardware. */
+int RLControlStartRecovery(RLControlState *state);
 /* Ramp the leg target for five seconds, then hold five seconds before inference. */
 float RLControlLegRampStep(RLControlState *state, uint32_t now_tick,
                            int normal_lqr, float current_target_m);

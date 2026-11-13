@@ -14,6 +14,7 @@ int main(int argc,char **argv)
     assert(g_rl_capture.count==RL_CAPTURE_CAPACITY && !g_rl_capture.triggered);
     frame.owner=RL_OWNER_RL;frame.tick_ms+=5;
     frame.tau_pd_nm[0]=8;frame.final_motor_nm[0]=2;
+    c.actor_input_tick_ms=17;c.recovery_mode=1;c.motion_valid=1;
     c.valid=1;c.snapshot_sequence=99;c.previous_source=RL_PREVIOUS_INIT_PROXY;
     c.preview.observation[24]=.68f;
     RLCapturePush(&s,&c,&frame);
@@ -25,6 +26,9 @@ int main(int argc,char **argv)
     const unsigned last=(g_rl_capture.write_index+RL_CAPTURE_CAPACITY-1u)%RL_CAPTURE_CAPACITY;
     assert(g_rl_capture.records[last].frame_begin==g_rl_capture.records[last].frame_end);
     assert(!(g_rl_capture.records[last].frame_begin&1));
+    assert(g_rl_capture.schema_version==2);
+    assert(g_rl_capture.records[last].actor_input_tick_ms==17);
+    assert(g_rl_capture.records[last].recovery_mode==1 && g_rl_capture.records[last].motion_candidate_valid==1);
     assert(g_rl_capture.records[last].policy_sequence==99);
     assert(g_rl_capture.records[last].valid_mask==7);
     assert(g_rl_capture.records[last].pd_q[0]==.2f && g_rl_capture.records[last].final_motor_command_nm[0]==2);

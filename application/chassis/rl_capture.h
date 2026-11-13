@@ -2,7 +2,7 @@
 #define RL_CAPTURE_H
 #include "rl_control.h"
 
-#define RL_CAPTURE_VERSION 1u
+#define RL_CAPTURE_VERSION 2u
 #ifndef RL_CAPTURE_CAPACITY
 #define RL_CAPTURE_CAPACITY 128u
 #endif
@@ -20,6 +20,7 @@ typedef struct {
     float pd_q[4], pd_dq[6], pd_request_nm[6], pd_limited_nm[6];
     float spring_motor_nm[4], final_motor_command_nm[4], wheel_command_raw[2];
     float driver_reported_leg_torque_motor_nm[4], driver_reported_wheel_current_raw[2];
+    uint32_t actor_input_tick_ms, recovery_mode, motion_candidate_valid;
     uint32_t frame_end;
 } RLCaptureRecord;
 

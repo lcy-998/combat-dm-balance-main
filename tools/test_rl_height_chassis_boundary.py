@@ -26,7 +26,7 @@ def function(source,name):
 class ChassisHeightBoundary(unittest.TestCase):
     def test_actual_snapshot_and_external_height_api_keep_axes_previous_and_motion(self):
         source=(ROOT/'application/chassis/chassis.c').read_text()
-        macros='\n'.join(line for line in source.splitlines() if re.match(r'#define (?:LF|LB|RF|RB)_ENCODE_OFFSET\b|#define REDUCE_RATIO\b',line))
+        macros='\n'.join(line for line in source.splitlines() if re.match(r'#define (?:LF|LB|RF|RB)_ENCODE_OFFSET\b|#define REDUCE_RATIO\b|#define LEG_LENGTH_(?:SPEED_M_S|STEP_M)\b',line))
         c='''
 #include "rl_control.h"
 #include <math.h>
@@ -50,6 +50,7 @@ static struct {float Pitch,Roll,Gyro[3];uint32_t update_tick_ms,update_sequence;
 static __typeof__(imu) *IMU_data=&imu;
 static struct {int changeL,chassis_mode;} chassis_cmd_recv;
 static RLControlState rl_control_state;
+static RLHandoffSample rl_handoff_evidence;
 static float rl_height_request_m=RL_MOTION31_HEIGHT_M;
 static float v_cmd=1.2f,w_cmd=.4f;
 static int chassis_status,upstair_flag,jumpingflag,upstair_flag0;
@@ -70,7 +71,7 @@ int main(void){
   imu.update_tick_ms=100;imu.update_sequence=1;chassis_cmd_recv.chassis_mode=1;
   rl_control_state.active=1;rl_control_state.ready=1;rl_control_state.adopted_sequence=99;
   memcpy(rl_control_state.adopted_target,prev,sizeof(prev));
-  assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot();
+  assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot(1);
   assert(a.motion.command_height_m==.40f);
   assert(a.motion.command_vx_m_s==1.2f && a.motion.command_yaw_rad_s==.4f);
   assert(a.previous_source==RL_PREVIOUS_ADOPTED && a.adopted_sequence==99);
@@ -80,11 +81,11 @@ int main(void){
   assert(a.motion.joint_velocity_rad_s[1]==.4f);
   assert(a.motion.joint_velocity_rad_s[3]==-.4f);
   assert(a.motion.joint_velocity_rad_s[4]==-.4f);
-  assert(!ChassisSetRLHeight(.30f));RLShadowSnapshot b=CurrentRLSnapshot();
+  assert(!ChassisSetRLHeight(.30f));RLShadowSnapshot b=CurrentRLSnapshot(1);
   assert(b.motion.command_height_m==.30f);
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
-  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot();
-  assert(fabsf(b.motion.command_height_m-(.30f+.002f*.03f))<1e-7f);
+  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot(1);
+  assert(fabsf(b.motion.command_height_m-(.30f+.048f*.005f))<1e-7f);
   assert(b.motion.command_vx_m_s==1.2f && b.motion.command_yaw_rad_s==.4f);
   assert(ChassisSetRLHeight(.41f)<0);assert(ChassisSetRLHeight(NAN)<0);
   return 0;
@@ -94,7 +95,7 @@ int main(void){
             path=Path(tmp)/'actual_snapshot.c';path.write_text(c)
             subprocess.run([os.getenv('CC','cc'),'-std=gnu11','-O2','-Wall','-Wextra','-Werror',
                 '-I'+str(ROOT/'application/chassis'),str(path),str(ROOT/'application/chassis/rl_motion31.c'),
-                str(ROOT/'application/chassis/rl_control.c'),'-lm','-o',str(Path(tmp)/'snapshot')],check=True)
+                str(ROOT/'application/chassis/rl_control.c'),str(ROOT/'application/chassis/rl_handoff.c'),'-lm','-o',str(Path(tmp)/'snapshot')],check=True)
             subprocess.run([str(Path(tmp)/'snapshot')],check=True)
 
 

@@ -166,7 +166,7 @@ class ChassisLqrReentry(unittest.TestCase):
             boundary = path / 'boundary.c'
             boundary.write_text(harness(source), encoding='utf-8')
             sources = [boundary, ROOT / 'application/chassis/rl_motion31.c',
-                       ROOT / 'application/chassis/rl_control.c']
+                       ROOT / 'application/chassis/rl_control.c', ROOT / 'application/chassis/rl_handoff.c']
             objects = []
             for index, src in enumerate(sources):
                 obj = path / f'{index}.o'

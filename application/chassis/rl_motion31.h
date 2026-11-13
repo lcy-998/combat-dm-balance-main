@@ -21,6 +21,7 @@ typedef struct {
     float joint_velocity_rad_s[6]; /* physical RH, RA, RW, LH, LA, LW */
     float previous_target[6]; /* locally adopted target or explicitly marked initialization proxy */
     uint8_t previous_target_valid;
+    uint8_t recovery_mode; /* 0=015 Motion, 1=Recovery2100 cubic */
     float lqr_leg_torque_motor_nm[4]; /* existing DMMotor order: lf, lb, rf, rb */
     float lqr_wheel_torque_forward_nm[2]; /* LQR wheel torque, forward-positive: left, right */
     uint8_t lqr_torque_valid;
@@ -64,6 +65,7 @@ int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *sample);
    command changes are allowed during standing or motion; no dwell or slew gate.
    Center is an output reference, never an encoder-zero correction. */
 int RLMotion31SupportCenter(double command_height_m, double center_rad[4]);
+int RLMotion31DecodeRecoveryMean(const float mean[6], float target[6]);
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
                            float command_height_m,
                            float target[RL_MOTION31_ACTION_SIZE]);

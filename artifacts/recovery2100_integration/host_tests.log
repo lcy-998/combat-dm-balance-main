@@ -1,0 +1,23 @@
+Motion31 observation and decode tests passed
+PASS test_rl_motion31
+PASS test_rl_spring
+PASS 400 Actor/PD phase, inference-cost, owner-order and clock-wrap schedules
+RL execution: actual adoption, fresh PD, causal previous and latched faults passed
+PASS test_rl_execution
+capture record_bytes=452 buffer_bytes=57904; wrap, trigger, freeze, guards passed
+PASS test_rl_capture
+PASS supported015 real task: adopted cache, real dq and invalid/inactive boundaries
+PASS supported015 real task: adopted cache, real dq and invalid/inactive boundaries
+PASS supported015 real task: adopted cache, real dq and invalid/inactive boundaries
+PASS supported015 real task: adopted cache, real dq and invalid/inactive boundaries
+PASS test_rl_shadow_boundary
+PASS supported015/80: center/scale, real dq, physical previous, PD and causal adoption
+PASS test_rl_supported015
+PASS C0 center: height/encoder roundtrip, PD zero and motor damping, physical previous, height-domain adoption guard
+PASS test_rl_center_contract
+PASS runtime height: full .30-.40m, motion allowed, original packet center, actual previous and absolute PD, no dwell/slew gate
+PASS test_rl_height_runtime
+PASS real Recovery shadow task: 8 routing/input scenarios + 6 latency/failure/wrap scenarios
+PASS Recovery/handoff: decoder/skill, actual previous, transport/PD, latched zero, quality and epoch
+PASS test_rl_recovery_handoff
+9/9 host tests passed; no firmware flash, hardware access or real-time certification.

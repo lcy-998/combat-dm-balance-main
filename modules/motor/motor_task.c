@@ -1,5 +1,5 @@
 #include "motor_task.h"
-#include "DMmotor.h"
+#include "dmmotor.h"
 #include "HT04.h"
 #include "dji_motor.h"
 #include "dji_motor.h"

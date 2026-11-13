@@ -149,7 +149,7 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
 #if defined(ONE_BOARD) || defined(CHASSIS_BOARD)
-  osThreadDef(rlMotion31Task, StartRLMotion31ShadowTask, osPriorityBelowNormal, 0, 1024);
+  osThreadDef(rlMotion31Task, StartRLMotion31ShadowTask, osPriorityBelowNormal, 0, 2048);
   rlMotion31TaskHandle = osThreadCreate(osThread(rlMotion31Task), NULL);
   if (rlMotion31TaskHandle == NULL) Error_Handler();
 #endif

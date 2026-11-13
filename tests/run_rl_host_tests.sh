@@ -10,11 +10,12 @@ trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015 test_rl_center_contract test_rl_height_runtime; do
-    set -- "$repo/tests/$name.c" "$core/rl_motion31.c" "$core/rl_control.c"
+for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015 test_rl_center_contract test_rl_height_runtime test_rl_recovery_handoff; do
+    set -- "$repo/tests/$name.c" "$core/rl_motion31.c" "$core/rl_control.c" "$core/rl_handoff.c"
     case "$name" in
         test_rl_capture) set -- "$@" "$core/rl_capture.c" ;;
-        test_rl_shadow_boundary) set -- "-I$repo/tests/host" "$@" "$core/rl_shadow.c" ;;
+        test_rl_shadow_boundary) set -- "-I$repo/tests/host" "$@" "$core/rl_shadow.c" "$core/recovery2100/recovery_actor.c" ;;
+        test_rl_recovery_handoff) set -- "-DRL_RECOVERY_SHADOW_HOST" "-I$repo/tests/host" "$@" "$core/rl_shadow.c" "$core/recovery2100/recovery_actor.c" ;;
     esac
     "$cc_bin" -std=c11 -O2 -Wall -Wextra -Werror "-I$core" "$@" -lm -o "$tmp/$name"
     if [ "$name" = test_rl_capture ]; then
@@ -27,4 +28,4 @@ for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture te
     fi
     printf 'PASS %s\n' "$name"
 done
-printf '8/8 host tests passed; no firmware flash, hardware access or real-time certification.\n'
+printf '9/9 host tests passed; no firmware flash, hardware access or real-time certification.\n'

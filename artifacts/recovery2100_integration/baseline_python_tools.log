@@ -1,0 +1,56 @@
+PASS chassis recovery, same-frame RL faults, inhibited reentry and subsequent position hold
+./tmp/tmp4dxx_8q9/actual_snapshot.c: In function ‘CurrentRLSnapshot’:
+/tmp/tmp4dxx_8q9/actual_snapshot.c:96:63: error: ‘LEG_LENGTH_STEP_M’ undeclared (first use in this function)
+   96 |         if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=LEG_LENGTH_STEP_M;
+      |                                                               ^~~~~~~~~~~~~~~~~
+/tmp/tmp4dxx_8q9/actual_snapshot.c:96:63: note: each undeclared identifier is reported only once for each function it appears in
+E.F.F..Fs..sE
+======================================================================
+ERROR: test_actual_snapshot_and_external_height_api_keep_axes_previous_and_motion (test_rl_height_chassis_boundary.ChassisHeightBoundary.test_actual_snapshot_and_external_height_api_keep_axes_previous_and_motion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/kellen/combat-dm-balance-supported015-remote/tools/test_rl_height_chassis_boundary.py", line 95, in test_actual_snapshot_and_external_height_api_keep_axes_previous_and_motion
+    subprocess.run([os.getenv('CC','cc'),'-std=gnu11','-O2','-Wall','-Wextra','-Werror',
+  File "/home/kellen/anaconda3/envs/issaclab/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cc', '-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror', '-I/home/kellen/combat-dm-balance-supported015-remote/application/chassis', '/tmp/tmp4dxx_8q9/actual_snapshot.c', '/home/kellen/combat-dm-balance-supported015-remote/application/chassis/rl_motion31.c', '/home/kellen/combat-dm-balance-supported015-remote/application/chassis/rl_control.c', '-lm', '-o', '/tmp/tmp4dxx_8q9/snapshot']' returned non-zero exit status 1.
+
+======================================================================
+ERROR: test_replaces_only_weight_array (test_update_xcube_ai_weights.WeightConverterTests.test_replaces_only_weight_array)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/kellen/combat-dm-balance-supported015-remote/tools/test_update_xcube_ai_weights.py", line 64, in test_replaces_only_weight_array
+    subprocess.run(
+  File "/home/kellen/anaconda3/envs/issaclab/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/home/kellen/anaconda3/envs/issaclab/bin/python', '/home/kellen/combat-dm-balance-supported015-remote/tools/update_xcube_ai_weights.py', '/tmp/tmp1lakngfr/changed.onnx', '--output', '/tmp/tmp1lakngfr/tjb_network_data_params.c']' returned non-zero exit status 1.
+
+======================================================================
+FAIL: test_firmware_blob_inference_on_golden_vectors (test_tjb_network_current_weights.CurrentWeightsTests.test_firmware_blob_inference_on_golden_vectors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/kellen/combat-dm-balance-supported015-remote/tools/test_tjb_network_current_weights.py", line 103, in test_firmware_blob_inference_on_golden_vectors
+    self.assertLess(error, 1e-5)
+AssertionError: 1.8719475269317627 not less than 1e-05
+
+======================================================================
+FAIL: test_onnx_bytes_and_provenance (test_tjb_network_current_weights.CurrentWeightsTests.test_onnx_bytes_and_provenance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/kellen/combat-dm-balance-supported015-remote/tools/test_tjb_network_current_weights.py", line 75, in test_onnx_bytes_and_provenance
+    self.assertEqual(blob, firmware_blob())
+AssertionError: b'\x00\xca\\\xbeg\xbdK\xbdg\x11\x07\xc0g;\xbf[164002 chars]xc3=' != b'\xa0\x91,\xbe\xe4\x95\xe8\xbd\xd1\x95\x00\x[558867 chars]xa3='
+
+======================================================================
+FAIL: test_matches_st_generated_bytes (test_update_xcube_ai_weights.WeightConverterTests.test_matches_st_generated_bytes) (target='tjb_network')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/kellen/combat-dm-balance-supported015-remote/tools/test_update_xcube_ai_weights.py", line 34, in test_matches_st_generated_bytes
+    self.assertEqual(blob, generated)
+AssertionError: b'\x00\xca\\\xbeg\xbdK\xbdg\x11\x07\xc0g;\xbf[164002 chars]xc3=' != b'\xa0\x91,\xbe\xe4\x95\xe8\xbd\xd1\x95\x00\x[558867 chars]xa3='
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.938s
+
+FAILED (failures=3, errors=2, skipped=2)
+Actual firmware decoder: 1488 vectors match frozen 015/80 contract

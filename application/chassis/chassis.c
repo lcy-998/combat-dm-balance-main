@@ -14,7 +14,7 @@
 #include "chassis.h"
 #include "robot_def.h"
 #include "dji_motor.h"
-#include "DMmotor.h"
+#include "dmmotor.h"
 #include "super_cap.h"
 #include "message_center.h"
 #include "LQR.h"
@@ -858,9 +858,34 @@ int ChassisSetRLHeight(float command_height_m)
     return 0;
 }
 
+/* Explicit entry for an upper controller; safe mode only. No RC mode is repurposed.
+   The next nonzero-force cycle starts Recovery rather than the legacy LQR rise. */
+volatile unsigned char g_rl_recovery_request;
+
+int ChassisStartRLRecovery(void)
+{
+    int result=-1;
+    taskENTER_CRITICAL();
+    if(chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE)
+        result=RLControlStartRecovery(&rl_control_state);
+    taskEXIT_CRITICAL();return result;
+}
+
+static RLHandoffSample rl_handoff_evidence;
+/* Evidence provider must qualify height and EACH wheel support independently.
+   F_n derived from commanded LQR torques is not accepted as measured support. */
+__attribute__((used,section(".text.rl_platform_api")))
+void ChassisUpdateRLHandoffEvidence(const RLHandoffSample *evidence)
+{
+    taskENTER_CRITICAL();
+    if(evidence)rl_handoff_evidence=*evidence;
+    else memset(&rl_handoff_evidence,0,sizeof(rl_handoff_evidence));
+    taskEXIT_CRITICAL();
+}
+
 /* One coherent local feedback copy with CAN receipt/filter-completion times.
    Sensor acquisition times remain UNKNOWN; task time is not substituted for them. */
-static RLShadowSnapshot CurrentRLSnapshot(void)
+static RLShadowSnapshot CurrentRLSnapshot(int update_commands)
 {
     RLShadowSnapshot out={0};
     float q[4],dq[4],wheel[2],r,p,dr,dp,dy;
@@ -910,7 +935,8 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     /* Same existing changeL lever and increment, now also an Actor root-height
        request. Do not feed LQR leg length l_xx or measured height to Actor. */
     taskENTER_CRITICAL();
-    if(rl_control_state.active && ChassisNormalLQRState()) {
+    if(update_commands && rl_control_state.active &&
+       (rl_control_state.recovery_session || ChassisNormalLQRState())) {
         if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=LEG_LENGTH_STEP_M;
         if(chassis_cmd_recv.changeL==1) rl_height_request_m-=LEG_LENGTH_STEP_M;
         rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
@@ -918,13 +944,49 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     }
     const float requested_height=rl_height_request_m;
     taskEXIT_CRITICAL();
-    (void)RLControlSetCommandHeight(&rl_control_state,requested_height);
+    if(update_commands)
+        (void)RLControlSetCommandHeight(&rl_control_state,rl_control_state.recovering ? .34f : requested_height);
     out.motion.command_height_m=RLControlCommandHeight(&rl_control_state);
-    out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE && !chassis_status);
+    out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE &&
+                        (rl_control_state.recovery_session || !chassis_status));
+    if(rl_control_state.recovering)out.motion.command_vx_m_s=out.motion.command_yaw_rad_s=0.f;
+    taskENTER_CRITICAL();out.handoff=rl_handoff_evidence;taskEXIT_CRITICAL();
     out.rl_active=(out.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
                    rl_control_state.ready && !rl_control_state.fault);
     RLControlFillPrevious(&rl_control_state,&out);
     return out;
+}
+
+/* Sole owner during an explicit Recovery->Motion session. Called immediately
+   before motor transmission; ordinary015 remains on its existing5ms owner. */
+void ChassisRLRecoveryTick(void)
+{
+    if(!rl_control_state.recovery_session || chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE)return;
+        RLShadowCommand command;
+        const RLShadowCommand *candidate=RLShadowReadCommand(&command)==0?&command:NULL;
+        RLShadowSnapshot current=CurrentRLSnapshot(0);
+        RLControlFillPrevious(&rl_control_state,&current);
+        if(candidate){rl_consumed_command=*candidate;rl_command_consumed=1u;}
+        const int enabled=chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE &&
+                          !upstair_flag && !upstair_flag0 && !jumpingflag;
+        const int executed=RLControlExecute(&rl_control_state,xTaskGetTickCount(),enabled,
+                                           &current,candidate,&rl_control_frame)==0;
+        taskENTER_CRITICAL();
+        DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
+        for(unsigned i=0;i<4;i++) {
+            motors[i]->ctrl.host_position_pd=0;motors[i]->ctrl.kp_set=motors[i]->ctrl.kd_set=0;
+            motors[i]->ctrl.pos_set=motors[i]->ctrl.vel_set=0;
+            DMMotorSetTorque(motors[i],executed ? rl_control_frame.final_motor_nm[i] : 0.f);
+        }
+        lwi=executed ? rl_control_frame.wheel_current_raw[0] : 0.f;
+        rwi=executed ? rl_control_frame.wheel_current_raw[1] : 0.f;
+        motor_l->motor_controller.current_feedforward_ptr=&lwi;
+        motor_r->motor_controller.current_feedforward_ptr=&rwi;
+        taskEXIT_CRITICAL();
+        RLCapturePush(&current,candidate,&rl_control_frame);
+        RLControlFillPrevious(&rl_control_state,&current);
+        current.rl_active=current.chassis_ready && rl_control_state.ready && !rl_control_state.fault;
+        RLShadowPublish(&current);
 }
 
 void outputTorque()
@@ -933,9 +995,11 @@ void outputTorque()
     rl_control_frame.tick_ms=rl_pd_snapshot.tick_ms;
     rl_command_consumed=0u;
     chassis_lqr_output_valid = 0u;
+    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE)return;
     /* Start the inference hold only after the leg ramp completes. */
-    (void)RLControlStep(&rl_control_state,
-                        xTaskGetTickCount(), ChassisNormalLQRState(), NULL);
+    if(!rl_control_state.recovery_session)
+        (void)RLControlStep(&rl_control_state,
+                          xTaskGetTickCount(), ChassisNormalLQRState(), NULL);
     // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
     // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
 
@@ -1264,6 +1328,12 @@ void ChassisTask()
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
 #endif
 
+    /* A request only arms Recovery while outputs are stopped. It never overrides
+       the existing external emergency-stop/nonzero-force enable decision. */
+    if(g_rl_recovery_request && chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE) {
+        g_rl_recovery_request=0u;
+        (void)ChassisStartRLRecovery();
+    }
     chassis_wz_cmd = chassis_cmd_recv.wz;
 
     if (chassis_status && !upstair_flag && chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
@@ -1329,7 +1399,8 @@ void ChassisTask()
     switch (chassis_cmd_recv.chassis_mode)
     {
     case CHASSIS_ZERO_FORCE:
-        if (rl_control_state.timing || rl_control_state.active || rl_control_state.fault)
+        if (rl_control_state.active || rl_control_state.fault ||
+            (rl_control_state.timing && !rl_control_state.recovery_session))
             RLControlReset(&rl_control_state);
         chassis_status = 1;
         cent = 0;
@@ -1385,7 +1456,9 @@ void ChassisTask()
     getLegData();
     getStateData();
     setTargetData();
-    rl_pd_snapshot=CurrentRLSnapshot();
+    rl_pd_snapshot=CurrentRLSnapshot(1);
+    /* The 1ms owner alone writes commands/capture/policy snapshots in this session. */
+    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE)return;
     legLengthCalc();
     vmcCalc();
     flyDetect();

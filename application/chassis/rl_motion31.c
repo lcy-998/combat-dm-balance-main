@@ -139,7 +139,7 @@ int RLMotion31BuildObservation(const RLMotion31Snapshot *s,
     o[22] = s->command_vx_m_s / 4.0f;
     o[23] = s->command_yaw_rad_s / 4.0f;
     o[24] = s->command_height_m / 0.5f;
-    o[25] = 1.0f; o[26] = 0.0f; o[27] = 0.0f;
+    o[25] = s->recovery_mode ? 0.0f : 1.0f; o[26] = s->recovery_mode ? 1.0f : 0.0f; o[27] = 0.0f;
     o[28] = 1.0f; o[29] = 0.0f; o[30] = 0.0f;
     return finite_array(o, RL_MOTION31_OBSERVATION_SIZE) ? 0 : -1;
 }
@@ -191,6 +191,21 @@ int RLMotion31SupportCenter(double h,double out[4])
     const double active=beta-47.1080837*(3.14159265358979323846/180.)+ba;
     out[0]=hip;out[1]=active;out[2]=-hip;out[3]=active;
     return 0;
+}
+
+int RLMotion31DecodeRecoveryMean(const float mean[6], float target[6])
+{
+    static const float center[4]={-0.13097405433654785f,-0.15117678046226501f,
+                                  0.13097405433654785f,-0.15117678046226501f};
+    const unsigned legs[4]={0,1,3,4};
+    if(!mean||!target||!finite_array(mean,6))return -1;
+    for(unsigned i=0;i<6;i++)if(fabsf(mean[i])>1.000001f)return -1;
+    target[2]=100.f*mean[2];target[5]=100.f*mean[5];
+    for(unsigned j=0;j<4;j++){
+        float a=mean[legs[j]],reach=a>=0?1.5f-center[j]:center[j]+1.5f;
+        target[legs[j]]=center[j]+.15f*a+(reach-.15f)*a*a*a;
+    }
+    return finite_array(target,6)?0:-1;
 }
 
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
@@ -291,7 +306,7 @@ int RLMotion31BuildPreview(const RLMotion31Snapshot *sample,
 {
     if (preview == NULL ||
         RLMotion31BuildObservation(sample, preview->observation) != 0 ||
-        RLMotion31DecodeOutput(action, sample->command_height_m, preview->target) != 0 ||
+        (sample->recovery_mode ? RLMotion31DecodeRecoveryMean(action, preview->target) : RLMotion31DecodeOutput(action, sample->command_height_m, preview->target)) != 0 ||
         RLMotion31MapPolicyTargets(preview->target, preview->hardware_joint_target_rad,
                                    preview->motor_wheel_target_rad_s) != 0) {
         return -1;

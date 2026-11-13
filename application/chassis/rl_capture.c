@@ -2,6 +2,10 @@
 #include <stddef.h>
 #include <string.h>
 
+#if defined(__arm__) || defined(__thumb__)
+/* CPU-only trace ring; explicitly initialized by RLCaptureArm before tasks. */
+__attribute__((section(".rl_capture"),aligned(32)))
+#endif
 volatile RLCaptureBuffer g_rl_capture;
 _Static_assert(sizeof(RLCaptureRecord)%4u==0u,"capture must be 32-bit aligned");
 
@@ -35,6 +39,8 @@ void RLCapturePush(const RLShadowSnapshot *feedback, const RLShadowCommand *comm
     memcpy(r.driver_reported_wheel_current_raw,feedback->driver_reported_wheel_current_raw,sizeof(r.driver_reported_wheel_current_raw));
     if (command!=NULL && command->valid) {
         r.valid_mask|=1u;r.previous_source=command->previous_source;r.previous_sequence=command->previous_sequence;
+        r.actor_input_tick_ms=command->actor_input_tick_ms;
+        r.recovery_mode=command->recovery_mode;r.motion_candidate_valid=command->motion_valid;
         r.policy_sequence=command->snapshot_sequence;
         r.policy_snapshot_tick_ms=command->snapshot_tick_ms;r.policy_output_tick_ms=command->output_tick_ms;
         memcpy(r.observation,command->preview.observation,sizeof(r.observation));

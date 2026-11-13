@@ -84,6 +84,7 @@ SECTIONS
   .text :
   {
     . = ALIGN(4);
+    KEEP(*(.text.rl_platform_api)) /* explicit qualified-evidence integration API */
     *(.text)           /* .text sections (code) */
     *(.text*)          /* .text* sections (code) */
     *(.glue_7)         /* glue arm to thumb code */
@@ -184,6 +185,14 @@ SECTIONS
     _ebss = .;         /* define a global symbol at bss end */
     __bss_end__ = _ebss;
   } >DTCMRAM
+
+  /* CPU-only capture ring, initialized explicitly by RLCaptureArm(). */
+  .rl_capture (NOLOAD) :
+  {
+    . = ALIGN(32);
+    KEEP(*(.rl_capture))
+    . = ALIGN(32);
+  } >RAM_D1
 
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :

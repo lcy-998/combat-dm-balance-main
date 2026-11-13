@@ -1,4 +1,4 @@
-#include "DMmotor.h"
+#include "dmmotor.h"
 #include "stdlib.h"
 #include "general_def.h"
 #include "daemon.h"

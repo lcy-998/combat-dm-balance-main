@@ -151,6 +151,8 @@ modules/alarm/buzzer.c \
 application/chassis/chassis.c \
 application/chassis/rl_motion31.c \
 application/chassis/rl_control.c \
+application/chassis/rl_handoff.c \
+application/chassis/recovery2100/recovery_actor.c \
 application/chassis/rl_capture.c \
 application/chassis/rl_shadow.c \
 application/cmd/robot_cmd.c \
@@ -177,11 +179,11 @@ $(BALANCE_CPP_SOURCES)
 
 # ASM sources
 ASM_SOURCES =  \
-startup_stm32h723xx.s
+startup_stm32h723xx.s \
+Middlewares/Third_Party/SEGGER/RTT/SEGGER_RTT_ASM_ARMv7M.s
 
 # ASM sources
-ASMM_SOURCES = \
-Middlewares/Third_Party/SEGGER/RTT/SEGGER_RTT_ASM_ARMv7M.S
+ASMM_SOURCES =
 
 
 #######################################
