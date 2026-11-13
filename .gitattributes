@@ -1,0 +1,3 @@
+
+# Flashable Intel HEX is an artifact; preserve objcopy line endings verbatim.
+firmware/recovery2100_motion015/*.hex binary
