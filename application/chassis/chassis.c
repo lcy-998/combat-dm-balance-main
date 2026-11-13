@@ -117,7 +117,6 @@ float lfangle, rfangle, lbangle, rbangle, lmangle, rmangle, lfw, lbw, rfw, rbw;
 float lbt, rbt, lwt, rwt, lwi, rwi, lfjt, lbjt, rfjt, rbjt;
 static float wheel_send_current[2];
 static float wheel_drive_snapshot[2];
-static uint8_t wheel_rl_snapshot;
 float wheel_friction_torque_nm[2]; /* physical left/right, forward positive */
 float l_tar, r_tar, sol_alpha, sol_beta;
 double ChangeL;
@@ -1535,7 +1534,6 @@ void ChassisTask()
     taskENTER_CRITICAL();
     wheel_drive_snapshot[0] = lwi;
     wheel_drive_snapshot[1] = rwi;
-    wheel_rl_snapshot = rl_joint_mode;
     taskEXIT_CRITICAL();
     PublishRLShadowSnapshot();
 
@@ -1553,24 +1551,13 @@ void ChassisTask()
 #endif // CHASSIS_BOARD
 }
 
-/* Called immediately before DJI send at1kHz. Targets and RL mode are read as
- * one snapshot. Wheel encoder source/filter matches PublishRL observation.
- * Leg PD remains in DMMotorControl at2ms. */
+/* Called immediately before DJI send at1kHz. Leg PD remains in DMMotorControl at2ms. */
 void ChassisWheelControlTick(void)
 {
     if (motor_l == NULL || motor_r == NULL) return;
     taskENTER_CRITICAL();
     float left = wheel_drive_snapshot[0], right = wheel_drive_snapshot[1];
-    const uint8_t use_rl = wheel_rl_snapshot;
-    const float wl = -motor_l->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
-    const float wr = motor_r->measure.speed_aps / REDUCE_RATIO * DEGREE_2_RAD;
     taskEXIT_CRITICAL();
-    if (use_rl) {
-        if (WheelRLCompensate(WHEEL_FRICTION_LEFT, wl, left,
-                             &wheel_friction_torque_nm[0], &left) != 0) left = 0;
-        if (WheelRLCompensate(WHEEL_FRICTION_RIGHT, wr, right,
-                             &wheel_friction_torque_nm[1], &right) != 0) right = 0;
-    }
     wheel_send_current[0] = isfinite(left) ? fminf(fmaxf(left, -WHEEL_CURRENT_LIMIT), WHEEL_CURRENT_LIMIT) : 0;
     wheel_send_current[1] = isfinite(right) ? fminf(fmaxf(right, -WHEEL_CURRENT_LIMIT), WHEEL_CURRENT_LIMIT) : 0;
 }
