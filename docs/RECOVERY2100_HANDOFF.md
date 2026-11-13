@@ -66,3 +66,11 @@ make -j12 SHELL=/bin/sh \
 可烧写hex/bin与SHA在`firmware/recovery2100_motion015/`，bin加载地址`0x08000000`；源码构建仍生成`build/Basic_Framework_MC02.*`。本次未连接设备或刷机。栈与实时期限目前有静态构建和计数器，尚无目标MCU高水位/推理时限实测。
 
 CPU原0158组与Recovery控制/真实shadow14情景通过；128条真实golden误差mean4.29e-7、物理目标2.29e-5。闭环本体判据结果与失败边界见`docs/SIMULATION_RESULTS.md`和release验证收据。能力范围是已测合法Swing，不是任意倒地方向的实机成功认证。
+
+## 实车前兼容审查更新
+
+两套权重均为C，Recovery是独立const float推理核，Motion为ST打包ai_u64推理，格式不同但不依赖ONNX运行。旧128的`tjb_recover*`已从活动Makefile移除，不能用它代替2100。
+
+本次修复模式冲突误释放会话、新会话复用旧FIFO和采集过早冻结三项bug，旧ffed642固件/ZIP被当前产物取代。15种真实shadow情景与9/9测试通过。新固件只能称可进入有保护的分步实车验证，尚无目标deadline/栈高水位及本车零位、方向、力矩标定实测证据。详细根因/定位/处理和边界见`artifacts/recovery2100_vehicle_audit/REPORT.md`。
+
+Recovery会话采集按200Hz，在接管/故障触发并保存约555ms后续；冻结后保留供读取，不随安全模式自动清除。需要新一轮采集时显式调用`RLCaptureArm(RL_CAPTURE_CAPACITY-17u)`。

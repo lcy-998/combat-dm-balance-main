@@ -165,10 +165,7 @@ X-CUBE-AI/App/network_data_params.c \
 X-CUBE-AI/App/app_x-cube-ai.c \
 X-CUBE-AI/App/tjb_network.c \
 X-CUBE-AI/App/tjb_network_data.c \
-X-CUBE-AI/App/tjb_network_data_params.c \
-X-CUBE-AI/App/tjb_recover.c \
-X-CUBE-AI/App/tjb_recover_data.c \
-X-CUBE-AI/App/tjb_recover_data_params.c
+X-CUBE-AI/App/tjb_network_data_params.c
 
 
 

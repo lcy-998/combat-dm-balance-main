@@ -1,0 +1,7 @@
+{
+  "data_bytes_checked": 640144,
+  "initial_SP": "0x20020000",
+  "reset_vector": "0x801ee3d",
+  "Intel_HEX_checksums": "PASS",
+  "HEX_BIN_bytes": "PASS"
+}

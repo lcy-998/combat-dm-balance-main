@@ -18,7 +18,7 @@
 #define RL_OWNER_SAFE 2u /* explicit Recovery fault/wait: zero six-channel output */
 
 enum { RL_FAULT_NONE=0u, RL_FAULT_INPUT=1u, RL_FAULT_COMMAND=2u,
-       RL_FAULT_PD=3u, RL_FAULT_COMPENSATION=4u };
+       RL_FAULT_PD=3u, RL_FAULT_COMPENSATION=4u, RL_FAULT_MODE=5u };
 typedef struct {
     float command_m;
     uint8_t initialized;
@@ -70,9 +70,10 @@ float RLControlLegRampStep(RLControlState *state, uint32_t now_tick,
 RLControlDecision RLControlStep(RLControlState *state,
                                 uint32_t now_tick, int normal_lqr,
                                 const RLShadowCommand *command);
-/* Called by the real 200Hz control owner. Recomputes PD on every call, even
-   when no new policy target arrives. State commits only after all six outputs validate.
-   Nonzero return keeps the existing LQR path and latches RL fault until mode reset. */
+/* Ordinary015: called by200Hz owner; state commits after all outputs validate.
+   Recovery session: called by1kHz motor owner, PD200Hz. Permission=false is a
+   conflicting mode and latches SAFE ownership; only explicit ZERO_FORCE reset
+   may clear the session. Errors never release Recovery to the legacy LQR. */
 int RLControlExecute(RLControlState *state,
                      uint32_t now_ms, int normal_lqr,
                      const RLShadowSnapshot *current, const RLShadowCommand *command,

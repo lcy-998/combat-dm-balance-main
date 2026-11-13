@@ -307,6 +307,24 @@ static void test_faults_latch_zero(void)
     }
 }
 
+static void test_inhibited_session_keeps_safe_owner(void)
+{
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+    RLShadowCommand c=packet(&s,100,1,NULL,0);
+    CHECK(!step(&s,100,&c,0,&f));
+    RLShadowSnapshot x=feedback(&s,101);
+    /* Here permission=false means conflicting legacy mode. ZERO_FORCE is
+       handled outside this callback by the chassis explicit safe reset. */
+    CHECK(RLControlExecute(&s,101,0,&x,&c,&f)<0);
+    CHECK(s.recovery_session && s.fault && !s.active && f.owner==RL_OWNER_SAFE);
+    CHECK(zero_output(&f));
+    const uint32_t epoch=s.epoch;
+    x=feedback(&s,102);
+    CHECK(RLControlExecute(&s,102,0,&x,&c,&f)<0);
+    CHECK(s.recovery_session && s.epoch==epoch && zero_output(&f));
+    RLControlReset(&s);CHECK(!s.recovery_session && !s.fault);
+}
+
 static void test_quality_rejections(void)
 {
     CHECK(RL_HANDOFF_CONFIG.dwell_ms==200);
@@ -490,6 +508,7 @@ int xQueuePeek(QueueHandle_t q,void *dst,unsigned timeout)
 static unsigned received_iteration(void)
 {
     if(task_scenario==7 && task_iteration>=5)return 5;
+    if(task_scenario==14 && task_iteration>=4)return task_iteration>6?task_iteration-2:4;
     if(!task_snapshot.recovery_session)return task_iteration;
     return task_iteration>2?task_iteration-2:1;
 }
@@ -569,7 +588,8 @@ void vTaskDelayUntil(TickType_t *last,TickType_t period)
         .recovery_session=1,.recovering=1};
     if(task_scenario==1 || (task_scenario>=8 && task_scenario!=11))state.handoff.requested=1;
     if(task_scenario==11)state.recovering=0;
-    if(task_scenario==2 && task_iteration>=4){state.recovering=0;state.epoch=8;}
+    if(task_scenario==2 && task_iteration>=4){state.recovering=0;state.epoch=8;state.handoff.committed=1;}
+    if(task_scenario==14 && task_iteration>=4)state.epoch=9;
     if(task_scenario==7 && (task_iteration==3 || task_iteration==4)){
         state.recovery_session=state.recovering=0;
     }
@@ -614,7 +634,7 @@ void getPhi(float a,float b,float c,float d,float e,float f,float g,
 static void test_real_recovery_shadow_task(void)
 {
     const unsigned failures_before=failures;
-    for(task_scenario=0;task_scenario<14;task_scenario++){
+    for(task_scenario=0;task_scenario<15;task_scenario++){
         task_iteration=task_writes=motion_calls=0;
         task_clock_base=task_scenario==13?UINT32_MAX-15u:0;
         task_tick=task_clock_base;
@@ -646,7 +666,7 @@ static void test_real_recovery_shadow_task(void)
         CHECK(g_rl_shadow_debug.publish_seq==g_rl_shadow_debug.frame_end);
         CHECK(!(g_rl_shadow_debug.publish_seq&1));
     }
-    printf("%s real Recovery shadow task: 8 routing/input scenarios + 6 latency/failure/wrap scenarios\n",
+    printf("%s real Recovery shadow task: 9 routing/input scenarios + 6 latency/failure/wrap scenarios\n",
            failures==failures_before?"PASS":"FAIL");
 }
 #endif
@@ -721,6 +741,7 @@ int main(void)
     test_wheel_session_cap();
     test_faults_latch_zero();
     test_quality_rejections();
+    test_inhibited_session_keeps_safe_owner();
     test_unqualified_session_never_hands_off();
     test_handoff();
     test_proprioceptive_readiness();

@@ -14,14 +14,14 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 639932,
+    "Flash_bytes": 640156,
     "DTCM_bytes": 82592,
     "RAM_D1_bytes": 59456
   },
   "validation": {
     "host_suites": 9,
     "host_suites_passed": 9,
-    "real_shadow_scenarios": 14,
+    "real_shadow_scenarios": 15,
     "portable_passed": 2011,
     "portable_skipped": 31,
     "simulation_cases": 7,
@@ -29,13 +29,18 @@
     "shared_pre_handoff_failure": 1,
     "proprioceptive_100ms_cases": 7,
     "proprioceptive_100ms_handoff_hold10": 6,
-    "fast_simulation_run": "posture100ms_r1"
+    "fast_simulation_run": "posture100ms_r1",
+    "reviewed_lifecycle_bug_fixes": [
+      "conflicting mode retains SAFE session",
+      "new session warms packet history while committed handoff preserves it",
+      "capture at200Hz triggers onhandoff/fault and retains555ms post-event"
+    ]
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "549cebff8fc18dc232acfd5d688ebff9c0a40fbe6f554d2eeb1129dc6ea57149",
-    "recovery2100_motion015.hex": "45c44065217b5deedaa8aa11b07b49636d48349f93f9434cd3f0e95fe28312e1"
+    "recovery2100_motion015.bin": "d9960b54d387bbb1bf0c61d99e4655a401daf1fb6a05cad509223364f97137ed",
+    "recovery2100_motion015.hex": "6b589316c0f6d74977f41da01f0bed06678864eb4a135a124e79c340f782ddc4"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -92,15 +97,15 @@
     "application/chassis/mecanum.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "application/chassis/recovery2100/recovery_actor.c": "22851bd06a827a3016bcf551745a2afaa21f137642a2c6d32750ea9410f13b06",
     "application/chassis/recovery2100/recovery_actor.h": "2fbb04d75b1a5ff682e19554e161b68bb7b58ea817ce99446a353683bb2a1e8c",
-    "application/chassis/rl_capture.c": "affd619de91889e88985b2dda68c19dc691671b32f4cb12c41d6d30c46a6c676",
+    "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
-    "application/chassis/rl_control.c": "2a50a8b9a17df754dedd40ef18fd036e92a3b24a91246ed456999a741d6c6b33",
-    "application/chassis/rl_control.h": "ccbd0ffc9df1bfbbd75f9f96e95490944a00534e4b670f1d54be95495e66a50d",
+    "application/chassis/rl_control.c": "8b52ea9d4a8ff2036733dcc3de7a5ab47541c26e220c2c94237d9f4f6af65e90",
+    "application/chassis/rl_control.h": "9c223a2d194f1770abe51a8a0eed8d3885565713d979bd16d763dbb4abb87d7c",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
     "application/chassis/rl_motion31.c": "65bc903a659dbf1df3b509319fd62d61a7076ec72ef4b907a68f34071370f1fa",
     "application/chassis/rl_motion31.h": "701b6ab0a9013284f8ab9c2742dd018ae9ae7fe622efe77cf982a14515762581",
-    "application/chassis/rl_shadow.c": "e74a8d6e5d45f66e42ffb70d45ab7a70db454af2b66afb57e812404a56a51a1d",
+    "application/chassis/rl_shadow.c": "d3dc13ed5bfaf2f481f516ee87583eb80f487f31ce2569568bccbc3a1225fdfc",
     "application/chassis/rl_shadow.h": "6949ea9e7c5ba1b8ae110d472d8470d6c598ddd4207f3722f1494e5ed2e38edb",
     "application/chassis/steering.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "application/chassis_can_link.h": "7d3d9cbb3a64be77c8100452849478dfde04d5ea234a9edc8cd48eeda5c7fb26",
@@ -135,5 +140,11 @@
     "application/chassis/rl_recovery_config.h": "6d857c23298444960a7ff115ae6a289375b5f00dcd1b558e31fb7804fac76d90"
   },
   "default_proprioceptive_dwell_ms": 100,
-  "default_proprioceptive_leg_center_error_rad": 0.5
+  "default_proprioceptive_leg_center_error_rad": 0.5,
+  "audit_revision": "vehicle_compatibility_audit_v1",
+  "supersedes_firmware_commit": "ffed642",
+  "build_source_sha256": {
+    "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
+    "STM32H723XG_FLASH.ld": "43393d00f784a7d78b305f3fa5bee6175829eb3319bd48cd5898b448d18ca390"
+  }
 }

@@ -261,7 +261,8 @@ void RLShadowTask(void const *argument)
     uint8_t network_ready = 0u;
     static RLMotion31Snapshot recovery_packets[3];
     static uint32_t recovery_ticks[3];
-    unsigned cursor=0u;uint8_t packet_initialized=0u;
+    unsigned cursor=0u;uint8_t packet_initialized=0u,packet_mode=0u;
+    uint32_t packet_epoch=0u;
     if (snapshot_queue == NULL) {
         working_debug.failure = 1u;
         publish_debug(NULL);
@@ -304,10 +305,14 @@ void RLShadowTask(void const *argument)
             continue;
         }
         if(sample.recovery_session) {
-            if(!packet_initialized) {
+            const int handoff_epoch=packet_initialized && packet_mode &&
+                !sample.motion.recovery_mode && sample.handoff_committed &&
+                sample.control_epoch==packet_epoch+1u;
+            if(!packet_initialized || (sample.control_epoch!=packet_epoch && !handoff_epoch)) {
                 for(unsigned i=0;i<3u;i++){recovery_packets[i]=sample.motion;recovery_ticks[i]=sample.tick_ms;}
                 cursor=0u;packet_initialized=1u;
             }
+            packet_epoch=sample.control_epoch;packet_mode=sample.motion.recovery_mode;
             recovery_packets[cursor%3u]=sample.motion;recovery_ticks[cursor%3u]=sample.tick_ms;
             RLMotion31Snapshot received=recovery_packets[(cursor+1u)%3u];
             /* The received state is old; previous is current adopted physical target.

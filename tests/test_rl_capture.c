@@ -36,5 +36,19 @@ int main(int argc,char **argv)
         assert(fwrite((const void *)&g_rl_capture,sizeof(g_rl_capture),1,f)==1);assert(!fclose(f));}
     printf("capture record_bytes=%zu buffer_bytes=%zu; wrap, trigger, freeze, guards passed\n",
            sizeof(RLCaptureRecord),sizeof(RLCaptureBuffer));
+    RLCaptureArm(RL_CAPTURE_CAPACITY-17u);
+    memset(&s,0,sizeof(s));memset(&frame,0,sizeof(frame));
+    s.recovery_session=1;frame.owner=RL_OWNER_RL;
+    for(unsigned t=0;t<=1100;t++){
+        frame.tick_ms=1000+t;s.handoff_committed=t>=500;
+        RLCapturePush(&s,NULL,&frame);
+        if(t==400)assert(!g_rl_capture.triggered && !g_rl_capture.frozen);
+        if(t==500)assert(g_rl_capture.triggered && !g_rl_capture.frozen);
+    }
+    assert(g_rl_capture.frozen && g_rl_capture.records_written>200);
+    const unsigned tail=(g_rl_capture.write_index+RL_CAPTURE_CAPACITY-1u)%RL_CAPTURE_CAPACITY;
+    assert(g_rl_capture.records[tail].tick_ms==2055);
+    assert(g_rl_capture.records[tail].handoff_committed==1);
+    puts("PASS Recovery capture:200Hz, handoff trigger and555ms post-switch retained");
     return 0;
 }

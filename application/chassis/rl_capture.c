@@ -7,11 +7,14 @@
 __attribute__((section(".rl_capture"),aligned(32)))
 #endif
 volatile RLCaptureBuffer g_rl_capture;
+static uint32_t capture_last_tick;
+static uint8_t capture_started;
 _Static_assert(sizeof(RLCaptureRecord)%4u==0u,"capture must be 32-bit aligned");
 
 void RLCaptureArm(uint32_t post_records)
 {
     memset((void *)&g_rl_capture,0,sizeof(g_rl_capture));
+    capture_started=0;capture_last_tick=0;
     g_rl_capture.schema_version=RL_CAPTURE_VERSION;
     g_rl_capture.record_bytes=sizeof(RLCaptureRecord);
     g_rl_capture.capacity=RL_CAPTURE_CAPACITY;
@@ -23,6 +26,14 @@ void RLCapturePush(const RLShadowSnapshot *feedback, const RLShadowCommand *comm
                     const RLControlFrame *control)
 {
     if (!g_rl_capture.armed || g_rl_capture.frozen || feedback==NULL || control==NULL) return;
+    /* Recovery owner runs1kHz; sample at200Hz to retain a useful handoff window.
+       Wait for actual handoff/fault rather than freezing112ms after first RL. */
+    const int transition=feedback->recovery_session ? feedback->handoff_committed :
+        (control->owner==RL_OWNER_RL && g_rl_capture.owner_previous!=RL_OWNER_RL);
+    const int event=!g_rl_capture.triggered && (transition || control->fault);
+    if(feedback->recovery_session && capture_started && !event &&
+       (uint32_t)(control->tick_ms-capture_last_tick)<5u)return;
+    capture_started=1;capture_last_tick=control->tick_ms;
     RLCaptureRecord r={0};
     r.sequence=++g_rl_capture.records_written;
     r.frame_begin=r.sequence*2u;r.frame_end=r.frame_begin;
@@ -64,7 +75,7 @@ void RLCapturePush(const RLShadowSnapshot *feedback, const RLShadowCommand *comm
     g_rl_capture.write_index=(g_rl_capture.write_index+1u)%RL_CAPTURE_CAPACITY;
     if (g_rl_capture.count<RL_CAPTURE_CAPACITY) g_rl_capture.count++;
     if (!g_rl_capture.triggered &&
-        ((control->owner==RL_OWNER_RL && g_rl_capture.owner_previous!=RL_OWNER_RL) || control->fault)) {
+        (transition || control->fault)) {
         g_rl_capture.triggered=1u;g_rl_capture.remaining=g_rl_capture.post_records;
     } else if (g_rl_capture.triggered && g_rl_capture.remaining) g_rl_capture.remaining--;
     if (g_rl_capture.triggered && !g_rl_capture.remaining) g_rl_capture.frozen=1u;

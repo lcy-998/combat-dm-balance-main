@@ -1,0 +1,70 @@
+/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin/arm-none-eabi-gcc -c -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -DUSE_HAL_DRIVER -DSTM32H723xx -DARM_MATH_CM7 -DDISABLE_LOG_SYSTEM  -ICore/Inc -IUSB_DEVICE/App -IUSB_DEVICE/Target -IDrivers/STM32H7xx_HAL_Driver/Inc -IDrivers/STM32H7xx_HAL_Driver/Inc/Legacy -IMiddlewares/Third_Party/FreeRTOS/Source/include -IMiddlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS -IMiddlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -IMiddlewares/ST/STM32_USB_Device_Library/Core/Inc -IMiddlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc -IDrivers/CMSIS/Device/ST/STM32H7xx/Include -IDrivers/CMSIS/Include -Iapplication/chassis -Iapplication/balance -Iapplication/shoot -Iapplication/gimbal -Iapplication/cmd -Iapplication -Ibsp/dwt -Ibsp/can -Ibsp/usart -Ibsp/gpio -Ibsp/spi -Ibsp/iic -Ibsp/log -Ibsp/pwm -Ibsp -Imodules/algorithm -Imodules/bluetooth -Imodules/BMI088 -Imodules/imu -Imodules/master_machine -Imodules/tool -Imodules/motor/DJImotor -Imodules/motor/LKmotor -Imodules/motor/HTmotor -Imodules/motor/step_motor -Imodules/motor/servo_motor -Imodules/motor/DMmotor -Imodules/motor -Imodules/oled -Imodules/referee -Imodules/remote -Imodules/super_cap -Imodules/can_comm -Imodules/message_center -Imodules/daemon -Imodules/alarm -Imodules -IMiddlewares/ST/ARM/DSP/Inc -IMiddlewares/ST/ARM/DSP/Include/dsp -IMiddlewares/Third_Party/SEGGER/RTT -IMiddlewares/Third_Party/SEGGER/Config -IX-CUBE-AI/App -IX-CUBE-AI -IMiddlewares/ST/AI/Inc  -Og -fstack-usage -Wall -fdata-sections -ffunction-sections -g -gdwarf-2 -MMD -MP -MF"build/chassis.d" -Wa,-a,-ad,-alms=build/chassis.lst application/chassis/chassis.c -o build/chassis.o
+In file included from application/chassis/chassis.c:30:
+application/balance/leg_const.hpp:12:9: warning: "PI" redefined
+   12 | #define PI        3.14159265358979323846f
+      |         ^~
+In file included from modules/algorithm/kalman_filter.h:26,
+                 from modules/algorithm/QuaternionEKF.h:15,
+                 from modules/imu/ins_task.h:20,
+                 from application/robot_def.h:15,
+                 from application/chassis/chassis.c:15:
+Middlewares/ST/ARM/DSP/Inc/arm_math.h:475:11: note: this is the location of the previous definition
+  475 |   #define PI               3.14159265358979f
+      |           ^~
+application/chassis/chassis.c: In function 'outputTorque':
+application/chassis/chassis.c:1233:112: warning: suggest parentheses around '&&' within '||' [-Wparentheses]
+ 1233 |             if (fabs(theta_l) > LEG_SWING_CUTOFF_RAD || fabs(theta_r) > LEG_SWING_CUTOFF_RAD || (upstair_flag0 && (a_zb < UPSTAIR_ACCEL_CUTOFF) || (fabs(theta_l) > (PI / 4) || fabs(theta_r) > (PI / 4))))
+      |                                                                                                  ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+application/chassis/chassis.c:1021:11: warning: unused variable 'leg_retract_tor_r' [-Wunused-variable]
+ 1021 |     float leg_retract_tor_r = 0.0f;
+      |           ^~~~~~~~~~~~~~~~~
+application/chassis/chassis.c:1020:11: warning: unused variable 'leg_retract_tor_l' [-Wunused-variable]
+ 1020 |     float leg_retract_tor_l = 0.0f;
+      |           ^~~~~~~~~~~~~~~~~
+In file included from application/chassis/chassis.c:46:
+application/balance/vel_meas.h: At top level:
+application/balance/vel_meas.h:12:20: warning: 'mat2_mul' declared 'static' but never defined [-Wunused-function]
+   12 | static inline void mat2_mul(const float A[2][2], const float B[2][2], float C[2][2]);
+      |                    ^~~~~~~~
+application/balance/vel_meas.h:13:20: warning: 'mat2_add' declared 'static' but never defined [-Wunused-function]
+   13 | static inline void mat2_add(const float A[2][2], const float B[2][2], float C[2][2]);
+      |                    ^~~~~~~~
+application/balance/vel_meas.h:14:20: warning: 'mat2_transpose' declared 'static' but never defined [-Wunused-function]
+   14 | static inline void mat2_transpose(const float A[2][2], float AT[2][2]);
+      |                    ^~~~~~~~~~~~~~
+application/balance/vel_meas.h:15:20: warning: 'mat2_vec2_mul' declared 'static' but never defined [-Wunused-function]
+   15 | static inline void mat2_vec2_mul(const float A[2][2], const float x[2], float y[2]);
+      |                    ^~~~~~~~~~~~~
+application/balance/vel_meas.h:16:20: warning: 'mat2_inv' declared 'static' but never defined [-Wunused-function]
+   16 | static inline void mat2_inv(const float A[2][2], float Ainv[2][2]);
+      |                    ^~~~~~~~
+application/balance/vel_meas.h:17:13: warning: 'eul2R_bw_deg' declared 'static' but never defined [-Wunused-function]
+   17 | static void eul2R_bw_deg(float roll_deg, float pitch_deg, float yaw_deg, float R[3][3]);
+      |             ^~~~~~~~~~~~
+application/chassis/chassis.c:833:14: warning: 'MapToNearestEncoder' defined but not used [-Wunused-function]
+  833 | static float MapToNearestEncoder(float raw_target, float encoder_now, float pos_limit)
+      |              ^~~~~~~~~~~~~~~~~~~
+application/chassis/chassis.c:185:13: warning: 'GetLegRetractTorquePair' defined but not used [-Wunused-function]
+  185 | static void GetLegRetractTorquePair(bool enable, float *left_torque, float *right_torque)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~
+application/chassis/chassis.c:92:22: warning: 'chassis_sub' defined but not used [-Wunused-variable]
+   92 | static Subscriber_t *chassis_sub; // 用于订阅底盘的控制命令
+      |                      ^~~~~~~~~~~
+In file included from application/chassis/chassis.c:33:
+application/chassis_can_link.h:71:13: warning: 'ChassisCanUploadRxCallback' defined but not used [-Wunused-function]
+   71 | static void ChassisCanUploadRxCallback(CANInstance *_instance)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin/arm-none-eabi-g++ build/main.o build/gpio.o build/freertos.o build/adc.o build/dma.o build/fdcan.o build/octospi.o build/spi.o build/tim.o build/usart.o build/stm32h7xx_it.o build/stm32h7xx_hal_msp.o build/stm32h7xx_hal_timebase_tim.o build/usb_device.o build/usbd_desc.o build/usbd_cdc_if.o build/usbd_conf.o build/stm32h7xx_hal_pcd.o build/stm32h7xx_hal_pcd_ex.o build/stm32h7xx_ll_usb.o build/stm32h7xx_hal_rcc.o build/stm32h7xx_hal_rcc_ex.o build/stm32h7xx_hal_flash.o build/stm32h7xx_hal_flash_ex.o build/stm32h7xx_hal_gpio.o build/stm32h7xx_hal_hsem.o build/stm32h7xx_hal_dma.o build/stm32h7xx_hal_dma_ex.o build/stm32h7xx_hal_mdma.o build/stm32h7xx_hal_pwr.o build/stm32h7xx_hal_pwr_ex.o build/stm32h7xx_hal_cortex.o build/stm32h7xx_hal.o build/stm32h7xx_hal_i2c.o build/stm32h7xx_hal_i2c_ex.o build/stm32h7xx_hal_exti.o build/stm32h7xx_hal_adc.o build/stm32h7xx_hal_adc_ex.o build/stm32h7xx_hal_fdcan.o build/stm32h7xx_hal_ospi.o build/stm32h7xx_hal_spi.o build/stm32h7xx_hal_spi_ex.o build/stm32h7xx_hal_tim.o build/stm32h7xx_hal_tim_ex.o build/stm32h7xx_hal_uart.o build/stm32h7xx_hal_uart_ex.o build/system_stm32h7xx.o build/syscalls.o build/sysmem.o build/croutine.o build/event_groups.o build/list.o build/queue.o build/stream_buffer.o build/tasks.o build/timers.o build/cmsis_os.o build/heap_4.o build/port.o build/usbd_core.o build/usbd_ctlreq.o build/usbd_ioreq.o build/usbd_cdc.o build/SEGGER_RTT_printf.o build/SEGGER_RTT.o build/bsp_dwt.o build/bsp_pwm.o build/bsp_gpio.o build/bsp_spi.o build/bsp_iic.o build/bsp_can.o build/bsp_usart.o build/bsp_log.o build/bsp_tools.o build/controller.o build/kalman_filter.o build/QuaternionEKF.o build/crc8.o build/crc16.o build/user_lib.o build/HC05.o build/bmi088.o build/BMI088driver.o build/BMI088Middleware.o build/ins_task.o build/master_process.o build/seasky_protocol.o build/dji_motor.o build/HT04.o build/LK9025.o build/dmmotor.o build/step_motor.o build/servo_motor.o build/motor_task.o build/oled.o build/crc_ref.o build/rm_referee.o build/referee_UI.o build/referee_task.o build/remote_control.o build/super_cap.o build/can_comm.o build/message_center.o build/daemon.o build/buzzer.o build/chassis.o build/rl_motion31.o build/rl_control.o build/rl_handoff.o build/recovery_actor.o build/rl_capture.o build/rl_shadow.o build/robot_cmd.o build/robot.o build/i2c.o build/legalgorithm.o build/power_calc.o build/vel_meas.o build/network.o build/network_data.o build/network_data_params.o build/app_x-cube-ai.o build/tjb_network.o build/tjb_network_data.o build/tjb_network_data_params.o build/lqr.o build/lqr_sjtu.o build/vmc_sjtu.o build/startup_stm32h723xx.o build/SEGGER_RTT_ASM_ARMv7M.o  -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -specs=nano.specs -TSTM32H723XG_FLASH.ld -LDrivers/CMSIS/DSP/Lib/GCC -LMiddlewares/ST/AI/Lib -Wl,--start-group -lstdc++ -lc -lm -lnosys -larm_cortexM7lfdp_math -l:NetworkRuntime1000_CM7_GCC.a -Wl,--end-group -Wl,-Map=build/Basic_Framework_MC02.map,--cref -Wl,--gc-sections,--print-memory-usage -o build/Basic_Framework_MC02.elf
+/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/bin/ld: warning: build/Basic_Framework_MC02.elf has a LOAD segment with RWX permissions
+Memory region         Used Size  Region Size  %age Used
+         DTCMRAM:       82592 B       128 KB     63.01%
+          RAM_D1:       59456 B       320 KB     18.14%
+          RAM_D2:           0 B        32 KB      0.00%
+          RAM_D3:           0 B        16 KB      0.00%
+         ITCMRAM:           0 B        64 KB      0.00%
+           FLASH:      640156 B         1 MB     61.05%
+/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin/arm-none-eabi-size build/Basic_Framework_MC02.elf
+   text	   data	    bss	    dec	    hex	filename
+ 634180	   5964	 136096	 776240	  bd830	build/Basic_Framework_MC02.elf
+/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin/arm-none-eabi-objcopy -O ihex build/Basic_Framework_MC02.elf build/Basic_Framework_MC02.hex
+/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin/arm-none-eabi-objcopy -O binary -S build/Basic_Framework_MC02.elf build/Basic_Framework_MC02.bin	

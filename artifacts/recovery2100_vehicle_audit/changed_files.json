@@ -1,0 +1,20 @@
+[
+  "Makefile",
+  "application/chassis/rl_capture.c",
+  "application/chassis/rl_control.c",
+  "application/chassis/rl_control.h",
+  "application/chassis/rl_shadow.c",
+  "artifacts/recovery2100_vehicle_audit/REPORT.md",
+  "artifacts/recovery2100_vehicle_audit/build.log",
+  "artifacts/recovery2100_vehicle_audit/flash_integrity.json",
+  "artifacts/recovery2100_vehicle_audit/golden.json",
+  "artifacts/recovery2100_vehicle_audit/host_tests.log",
+  "artifacts/recovery2100_vehicle_audit/python_tools.log",
+  "artifacts/recovery2100_vehicle_audit/regression_before.log",
+  "docs/RECOVERY2100_HANDOFF.md",
+  "firmware/recovery2100_motion015/manifest.json",
+  "firmware/recovery2100_motion015/recovery2100_motion015.bin",
+  "firmware/recovery2100_motion015/recovery2100_motion015.hex",
+  "tests/test_rl_capture.c",
+  "tests/test_rl_recovery_handoff.c"
+]

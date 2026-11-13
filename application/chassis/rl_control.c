@@ -182,8 +182,8 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
                             RLControlFrame *f)
 {
     f->control_epoch=s->epoch;f->fault=s->fault;f->owner=RL_OWNER_SAFE;
-    if(!enabled){RLControlReset(s);return 1;}
     if(s->fault)return -1;
+    if(!enabled)return execution_fault(s,f,RL_FAULT_MODE);
     if(!RLControlFeedbackFresh(x,now) || RLMotion31ValidateSnapshot(&x->motion))
         return execution_fault(s,f,RL_FAULT_INPUT);
     if(s->recovery_initialized && (uint32_t)(now-s->recovery_last_ms)!=1u)
