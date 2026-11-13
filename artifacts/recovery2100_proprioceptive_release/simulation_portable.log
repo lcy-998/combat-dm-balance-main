@@ -1,0 +1,71 @@
+........................................................................ [  3%]
+.......................................................sssssssssss...... [  7%]
+..........................sssss...........ss............................ [ 10%]
+........................................................................ [ 14%]
+........................................................................ [ 17%]
+........................................................................ [ 21%]
+...........s.....s...................................................... [ 24%]
+........................................................................ [ 28%]
+........................................................................ [ 31%]
+.sss......ss.s.............................................s.......s.... [ 35%]
+........................................................................ [ 38%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 49%]
+........................................................................ [ 52%]
+........................................................................ [ 56%]
+.........................................................ss.......s..... [ 59%]
+........................................................................ [ 63%]
+........................................................................ [ 66%]
+........................................................................ [ 70%]
+........................................................................ [ 74%]
+........................................................................ [ 77%]
+........................................................................ [ 81%]
+........................................................................ [ 84%]
+........................................................................ [ 88%]
+........................................................................ [ 91%]
+........................................................................ [ 95%]
+........................................................................ [ 98%]
+..........................                                               [100%]
+=============================== warnings summary ===============================
+tests/test_mcu_v2_export.py::test_onnx_actor_only_fixed_batch_and_numerics
+  /home/kellen/wheel_leg_handoff_ws/tests/test_mcu_v2_export.py:11: DeprecationWarning: You are using the legacy TorchScript-based ONNX export. Starting in PyTorch 2.9, the new torch.export-based ONNX exporter has become the default. Learn more about the new export logic: https://docs.pytorch.org/docs/stable/onnx_export.html. For exporting control flow: https://pytorch.org/tutorials/beginner/onnx/export_control_flow_model_to_onnx_tutorial.html
+    torch.onnx.export(model,x,path,input_names=['input'],output_names=['mean'],opset_version=17,dynamo=False)
+
+tests/test_mcu_v2_export.py::test_onnx_actor_only_fixed_batch_and_numerics
+tests/test_motion_distillation_pipeline.py::test_export_records_current_control_not_legacy_constants
+tests/test_public_migration.py::test_export_actual_onnx_reference_and_C_source_identity
+tests/test_recovery_mujoco_collection.py::test_recovery_physical_ONNX_is_valid_and_matches_multiple_batch_sizes
+  /home/kellen/anaconda3/envs/issaclab/lib/python3.12/site-packages/torch/onnx/_internal/torchscript_exporter/utils.py:218: DeprecationWarning: The feature will be removed. Please remove usage of this function
+    setup_onnx_logging(verbose) as log_ctx,
+
+tests/test_motion_distillation_pipeline.py::test_export_records_current_control_not_legacy_constants
+  /home/kellen/wheel_leg_handoff_ws/src/native_stand/students/motion_distillation_pipeline.py:327: DeprecationWarning: You are using the legacy TorchScript-based ONNX export. Starting in PyTorch 2.9, the new torch.export-based ONNX exporter has become the default. Learn more about the new export logic: https://docs.pytorch.org/docs/stable/onnx_export.html. For exporting control flow: https://pytorch.org/tutorials/beginner/onnx/export_control_flow_model_to_onnx_tutorial.html
+    torch.onnx.export(model,torch.zeros(1,31),str(output/'actor.onnx'),input_names=['observation'],output_names=['mean_action'],opset_version=17,dynamo=False)
+
+tests/test_motion_supported_scale_corrections.py::test_rejected_actor_restores_weights_and_adam_critic_advances_once
+  /home/kellen/wheel_leg_handoff_ws/src/native_stand/learning/ppo/guarded_step.py:61: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+    post_kl=float(measure_kl()),
+
+tests/test_public_migration.py::test_export_actual_onnx_reference_and_C_source_identity
+tests/test_recovery_mujoco_collection.py::test_recovery_physical_ONNX_is_valid_and_matches_multiple_batch_sizes
+  /home/kellen/wheel_leg_handoff_ws/src/native_stand/artifacts/deployment.py:155: DeprecationWarning: You are using the legacy TorchScript-based ONNX export. Starting in PyTorch 2.9, the new torch.export-based ONNX exporter has become the default. Learn more about the new export logic: https://docs.pytorch.org/docs/stable/onnx_export.html. For exporting control flow: https://pytorch.org/tutorials/beginner/onnx/export_control_flow_model_to_onnx_tutorial.html
+    torch.onnx.export(
+
+tests/test_public_migration.py::test_export_actual_onnx_reference_and_C_source_identity
+tests/test_recovery_mujoco_collection.py::test_recovery_physical_ONNX_is_valid_and_matches_multiple_batch_sizes
+  /home/kellen/wheel_leg_handoff_ws/src/native_stand/learning/ppo/networks.py:116: TracerWarning: Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means that the trace might not generalize to other inputs!
+    if width != self.input_dim:
+
+tests/test_recovery_bounded_mean_distribution.py::test_shared_model_strict_state_adam_and_jit_output
+tests/test_recovery_bounded_mean_distribution.py::test_shared_model_strict_state_adam_and_jit_output
+  /home/kellen/anaconda3/envs/issaclab/lib/python3.12/site-packages/torch/jit/_script.py:1480: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+tests/test_recovery_mujoco_collection.py::test_recovery_physical_ONNX_is_valid_and_matches_multiple_batch_sizes
+  /home/kellen/wheel_leg_handoff_ws/src/native_stand/learning/ppo/recovery_cubic.py:44: TracerWarning: Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means that the trace might not generalize to other inputs!
+    if not bool(torch.isfinite(out).all()):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2011 passed, 31 skipped, 14 warnings in 132.70s (0:02:12)

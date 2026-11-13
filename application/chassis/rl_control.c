@@ -1,4 +1,5 @@
 #include "rl_control.h"
+#include "rl_recovery_config.h"
 
 #include <math.h>
 #include <string.h>
@@ -118,6 +119,9 @@ void RLControlFillPrevious(const RLControlState *state, RLShadowSnapshot *s)
         s->motion.previous_target[5] = s->motion.joint_velocity_rad_s[5];
     }
     s->motion.previous_target_valid = 1u;
+    s->handoff_source=state->handoff_source;
+    s->handoff_requested=state->handoff.requested;
+    s->handoff_committed=state->handoff.committed;
     s->recovery_session=state->recovery_session;
     s->motion.recovery_mode=state->recovering;
     s->motion_probe=state->recovery_session && state->recovering && state->handoff.requested;
@@ -195,7 +199,31 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
     s->recovery_last_ms=now;
     RLHandoffSample quality=x->handoff;
     if(!quality.valid || (uint32_t)(now-quality.tick_ms)>20u){quality.valid=0;quality.tick_ms=now;}
-    if(s->recovering)(void)RLHandoffObserve(&s->handoff,&RL_HANDOFF_CONFIG,&quality);
+    if(s->recovering) {
+        const unsigned source=(x->handoff_posture_enabled && RL_RECOVERY_POSTURE_HANDOFF && !x->handoff.valid)?2u:1u;
+        if(s->handoff_source!=source){RLHandoffReset(&s->handoff);s->handoff_source=source;}
+        if(source==1u)
+            (void)RLHandoffObserve(&s->handoff,&RL_HANDOFF_CONFIG,&quality);
+        else {
+            RLHandoffConfig posture_config=RL_HANDOFF_CONFIG;
+            posture_config.dwell_ms=RL_RECOVERY_POSTURE_DWELL_MS;
+            double dcenter[4];float center[4];
+            if(RLMotion31SupportCenter(.34,dcenter))return execution_fault(s,f,RL_FAULT_INPUT);
+            for(unsigned i=0;i<4;i++)center[i]=(float)dcenter[i];
+            uint32_t oldest_age=(uint32_t)(now-x->imu_update_tick_ms);
+            for(unsigned i=0;i<6;i++) {
+                const uint32_t age=(uint32_t)(now-x->feedback_receive_tick_ms[i]);
+                if(age>oldest_age)oldest_age=age;
+            }
+            /* Dwell advances only when the oldest required received feedback
+               advances; the 1ms owner cannot manufacture new evidence. */
+            (void)RLHandoffObservePosture(&s->handoff,&posture_config,oldest_age<=20u ? now-oldest_age : now,
+                oldest_age<=20u,
+                x->motion.joint_position_rad,x->motion.joint_velocity_rad_s,
+                x->motion.gyro_model_rad_s,x->motion.gravity_model,center,
+                RL_RECOVERY_POSTURE_ERROR_RAD);
+        }
+    }
     if(command_usable(c,now) && c->control_epoch==s->epoch &&
        c->recovery_mode==s->recovering &&
        (int32_t)(c->snapshot_sequence-s->recovery_request_sequence)>0){

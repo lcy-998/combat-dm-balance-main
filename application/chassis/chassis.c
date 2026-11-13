@@ -33,6 +33,7 @@
 #include "chassis_can_link.h"
 #include "rl_shadow.h"
 #include "rl_control.h"
+#include "rl_recovery_config.h"
 #include "rl_capture.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -951,6 +952,7 @@ static RLShadowSnapshot CurrentRLSnapshot(int update_commands)
                         (rl_control_state.recovery_session || !chassis_status));
     if(rl_control_state.recovering)out.motion.command_vx_m_s=out.motion.command_yaw_rad_s=0.f;
     taskENTER_CRITICAL();out.handoff=rl_handoff_evidence;taskEXIT_CRITICAL();
+    out.handoff_posture_enabled=RL_RECOVERY_POSTURE_HANDOFF;
     out.rl_active=(out.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
                    rl_control_state.ready && !rl_control_state.fault);
     RLControlFillPrevious(&rl_control_state,&out);
@@ -1332,6 +1334,10 @@ void ChassisTask()
        the existing external emergency-stop/nonzero-force enable decision. */
     if(g_rl_recovery_request && chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE) {
         g_rl_recovery_request=0u;
+        (void)ChassisStartRLRecovery();
+    }
+    if(RL_RECOVERY_AUTO_START && chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE &&
+       !rl_control_state.recovery_session && !rl_control_state.active && !rl_control_state.fault) {
         (void)ChassisStartRLRecovery();
     }
     chassis_wz_cmd = chassis_cmd_recv.wz;

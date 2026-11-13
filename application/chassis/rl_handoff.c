@@ -55,3 +55,40 @@ int RLHandoffCanCommit(const RLHandoffState *s,const RLHandoffConfig *c,
     }
     return 1;
 }
+
+int RLHandoffObservePosture(RLHandoffState *s,const RLHandoffConfig *c,
+                            uint32_t tick,int valid,const float q[4],const float dq[6],
+                            const float gyro[3],const float gravity[3],
+                            const float center[4],float error)
+{
+    if(!s)return 0;
+    if(!valid_config(c)){s->dwelling=s->requested=0;return 0;}
+    if(s->committed)return 1;
+    if(s->observed && (int32_t)(tick-s->last_ms)<=0)return s->requested;
+    if(s->observed && (uint32_t)(tick-s->last_ms)>20u)s->dwelling=s->requested=0;
+    s->last_ms=tick;s->observed=1;
+    int good=valid && q && dq && gyro && gravity && center && isfinite(error) && error>0 && error<=.5f;
+    float gn=0,wn=0;
+    if(good){
+        for(unsigned i=0;i<3;i++){
+            if(!isfinite(gyro[i])||!isfinite(gravity[i]))good=0;
+            gn+=gravity[i]*gravity[i];wn+=gyro[i]*gyro[i];
+        }
+        /* Upright model gravity is[0,-1,0]; compare cone without Euler axes. */
+        if(!isfinite(gn)||!isfinite(wn)||fabsf(gn-1.f)>.02f ||
+           -gravity[1]<cosf(c->tilt_rad) || wn>c->angular_speed_rad_s*c->angular_speed_rad_s)good=0;
+        const unsigned legs[4]={0,1,3,4};
+        for(unsigned i=0;i<6;i++)if(!isfinite(dq[i]))good=0;
+        for(unsigned i=0;i<4;i++){
+            if(!isfinite(q[i])||!isfinite(center[i]) || fabsf(q[i]-center[i])>error ||
+               fabsf(dq[legs[i]])>c->leg_speed_rad_s)good=0;
+        }
+    }
+    if(!good){s->dwelling=s->requested=0;return 0;}
+    if(!s->dwelling){s->since_ms=tick;s->dwelling=1;}
+    if((uint32_t)(tick-s->since_ms)>=c->dwell_ms){
+        if(!s->requested)s->request_tick_ms=tick;
+        s->requested=1;
+    }
+    return s->requested;
+}

@@ -651,6 +651,65 @@ static void test_real_recovery_shadow_task(void)
 }
 #endif
 
+static void test_proprioceptive_readiness(void)
+{
+    RLHandoffState g={0};float q[4]={.24f,.20f,-.235f,.21f};
+    float dq[6]={0},gyro[3]={0},gravity[3]={0,-1,0},center[4];double dc[4];
+    CHECK(!RLMotion31SupportCenter(.34,dc));
+    for(unsigned i=0;i<4;i++)center[i]=(float)dc[i];
+    const uint32_t base=UINT32_MAX-99u;
+    for(unsigned t=0;t<=200;t++) {
+        const int ready=RLHandoffObservePosture(&g,&RL_HANDOFF_CONFIG,base+t,1,
+                                               q,dq,gyro,gravity,center,.5f);
+        CHECK(ready==(t==200));
+    }
+    CHECK(g.requested && !g.committed);
+    RLHandoffReset(&g);
+    for(unsigned i=0;i<1000;i++)
+        CHECK(!RLHandoffObservePosture(&g,&RL_HANDOFF_CONFIG,100,1,q,dq,gyro,gravity,center,.5f));
+    CHECK(!g.requested); /* Repeating one physical sample cannot manufacture dwell. */
+    for(unsigned variant=0;variant<7;variant++){
+        RLHandoffReset(&g);float bq[4],bv[6],bg[3],bgrav[3];
+        memcpy(bq,q,sizeof(q));memcpy(bv,dq,sizeof(dq));
+        memcpy(bg,gyro,sizeof(gyro));memcpy(bgrav,gravity,sizeof(gravity));
+        int valid=1;
+        if(variant==0)valid=0;
+        if(variant==1)bq[0]=center[0]+.51f;
+        if(variant==2)bv[0]=3.01f;
+        if(variant==3)bg[2]=1.01f;
+        if(variant==4)bgrav[1]=1;
+        if(variant==5)bq[0]=NAN;
+        if(variant==6)bgrav[2]=.5f;
+        for(unsigned t=0;t<400;t++)
+            CHECK(!RLHandoffObservePosture(&g,&RL_HANDOFF_CONFIG,1000+t,valid,
+                                           bq,bv,bg,bgrav,center,.5f));
+    }
+    /* Execute the real control route, then fresh Motion probe commits once. */
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+    RLShadowCommand c={0};
+    for(unsigned t=0;t<=130;t++){
+        const uint32_t now=1000+t;
+        if(t%10==0)c=packet(&s,now,t/10+1,NULL,t>=110);
+        RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
+        memcpy(x.motion.joint_position_rad,q,sizeof(q));
+        CHECK(!RLControlExecute(&s,now,1,&x,&c,&f));
+    }
+    CHECK(s.handoff_source==2 && s.handoff.committed && !s.recovering);
+    /* A controller tick is not a sensor update: oldest received timestamp wins. */
+    memset(&s,0,sizeof(s));CHECK(!RLControlStartRecovery(&s));
+    for(unsigned t=0;t<100;t++){
+        const uint32_t now=2000+t;
+        if(t%10==0)c=packet(&s,now,t/10+1,NULL,0);
+        RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
+        memcpy(x.motion.joint_position_rad,q,sizeof(q));
+        const uint32_t oldest=2000+(t/10)*10;
+        x.imu_update_tick_ms=oldest;
+        for(unsigned i=0;i<6;i++)x.feedback_receive_tick_ms[i]=oldest;
+        CHECK(!RLControlExecute(&s,now,1,&x,&c,&f));
+        CHECK(s.handoff.last_ms==oldest && !s.handoff.requested);
+    }
+}
+
 int main(void)
 {
     test_explicit_start_and_contracts();
@@ -664,6 +723,7 @@ int main(void)
     test_quality_rejections();
     test_unqualified_session_never_hands_off();
     test_handoff();
+    test_proprioceptive_readiness();
 #ifdef RL_RECOVERY_SHADOW_HOST
     test_real_recovery_shadow_task();
 #endif

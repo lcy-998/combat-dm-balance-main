@@ -180,6 +180,10 @@ static void publish_debug(const RLShadowSnapshot *sample)
         memset((void *)d->observation, 0, sizeof(d->observation));
     }
     if (sample != NULL) {
+        d->recovery_mode=sample->motion.recovery_mode;
+        d->handoff_source=sample->handoff_source;
+        d->handoff_requested=sample->handoff_requested;
+        d->handoff_committed=sample->handoff_committed;
         d->controller_owner=sample->controller_owner;
         d->control_epoch=sample->control_epoch;
         d->adopted_sequence=sample->adopted_sequence;

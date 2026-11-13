@@ -1,0 +1,3 @@
+  PUBLIC-REVIEW src/native_stand/cli.py: 核对公开组合/帮助/配置示例/当前文档；文档改动不是内容正确的证明
+  PUBLIC-REVIEW src/native_stand/simulation/dispatch.py: 核对公开组合/帮助/配置示例/当前文档；文档改动不是内容正确的证明
+架构检查通过：217 个正式源码文件，0 条基线例外。 增量脚本 1 个（基点 refactor-migration-v1），0 处需人工审阅。

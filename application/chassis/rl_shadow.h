@@ -29,6 +29,8 @@ typedef struct {
     float leg_length_m[2]; /* left, right; spring compensation input */
     float leg_spread_rad[2]; /* left, right; spring compensation input */
     uint8_t recovery_session, motion_probe;
+    uint8_t handoff_source, handoff_requested, handoff_committed;
+    uint8_t handoff_posture_enabled; /* explicit trial mode, no contact assertion */
     RLHandoffSample handoff; /* qualified external evidence; UNKNOWN by default */
     RLMotion31Snapshot motion;
 } RLShadowSnapshot;
@@ -84,6 +86,7 @@ typedef struct {
     uint32_t adopted_sequence;
     uint32_t inference_start_tick_ms, inference_end_tick_ms;
     uint32_t inference_deadline_miss_count;
+    uint32_t recovery_mode, handoff_source, handoff_requested, handoff_committed;
     uint32_t frame_end;
 } RLShadowDebug;
 

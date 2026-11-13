@@ -26,6 +26,8 @@ void RLCapturePush(const RLShadowSnapshot *feedback, const RLShadowCommand *comm
     RLCaptureRecord r={0};
     r.sequence=++g_rl_capture.records_written;
     r.frame_begin=r.sequence*2u;r.frame_end=r.frame_begin;
+    r.handoff_source=feedback->handoff_source;
+    r.handoff_requested=feedback->handoff_requested;r.handoff_committed=feedback->handoff_committed;
     r.tick_ms=control->tick_ms;r.owner=control->owner;r.fault=control->fault;
     r.control_epoch=control->control_epoch;r.adopted_sequence=control->adopted_sequence;
     r.adopted_tick_ms=control->adopted_tick_ms;r.previous_source=feedback->previous_source;

@@ -45,6 +45,7 @@ typedef struct {
     float recovery_pd[6], recovery_raw_pd[6];
     uint32_t recovery_target_sequence[32];
     RLHandoffState handoff;
+    uint8_t handoff_source; /* 0=none, 1=qualified support, 2=encoder/IMU posture */
 } RLControlState;
 typedef struct {
     uint8_t active;

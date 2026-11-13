@@ -29,6 +29,7 @@ class ChassisHeightBoundary(unittest.TestCase):
         macros='\n'.join(line for line in source.splitlines() if re.match(r'#define (?:LF|LB|RF|RB)_ENCODE_OFFSET\b|#define REDUCE_RATIO\b|#define LEG_LENGTH_(?:SPEED_M_S|STEP_M)\b',line))
         c='''
 #include "rl_control.h"
+#include "rl_recovery_config.h"
 #include <math.h>
 #include <string.h>
 #include <assert.h>

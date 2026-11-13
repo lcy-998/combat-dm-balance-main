@@ -27,4 +27,12 @@ int RLHandoffObserve(RLHandoffState *state, const RLHandoffConfig *config,
 int RLHandoffCanCommit(const RLHandoffState *state, const RLHandoffConfig *config,
                        uint32_t snapshot_tick_ms, const float adopted[6],
                        const float motion_requested[6]);
+/* Encoder/IMU readiness only: does NOT assert terrain height or wheel contact.
+   q is model leg order0,1,3,4. Gravity/gyro are model frame; dq is six channels.
+   Caller supplies current Motion center and tolerance; no normal force is invented. */
+int RLHandoffObservePosture(RLHandoffState *state,const RLHandoffConfig *config,
+                            uint32_t tick_ms,int feedback_valid,
+                            const float q[4],const float dq[6],const float gyro[3],
+                            const float gravity[3],const float center[4],
+                            float maximum_center_error_rad);
 #endif
