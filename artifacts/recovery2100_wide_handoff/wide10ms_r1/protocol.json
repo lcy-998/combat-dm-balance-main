@@ -1,0 +1,261 @@
+{
+  "version": "recovery_motion_handoff_v1",
+  "recovery": {
+    "path": "/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3/actor.pt",
+    "sha256": "660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d"
+  },
+  "recovery_spec": {
+    "kind": "recovery_physical",
+    "input_dim": 31,
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "output_dim": 6,
+    "input_contract": {
+      "version": "recovery_cubic_physical_v2",
+      "observation": {
+        "frame_dim": 22,
+        "actor_dim": 31,
+        "critic_dim": 909,
+        "leg_input_scale_rad": 1.5,
+        "wheel_input_scale_rad_s": 100.0
+      }
+    },
+    "output_contract": {
+      "action_version": "recovery_cubic_physical_Gaussian_v2",
+      "actor_dimensions": [
+        31,
+        256,
+        128,
+        64,
+        6
+      ],
+      "hidden_activation": "ELU(alpha=1)",
+      "mean_activation": "Tanh",
+      "center_rad": [
+        -0.13097405433654785,
+        -0.15117678046226501,
+        0.13097405433654785,
+        -0.15117678046226501
+      ],
+      "leg_lower_rad": [
+        -1.5,
+        -1.5,
+        -1.5,
+        -1.5
+      ],
+      "leg_upper_rad": [
+        1.5,
+        1.5,
+        1.5,
+        1.5
+      ],
+      "center_slope_rad": 0.15,
+      "wheel_scale_rad_s": 100.0,
+      "height_command_m": "per-cycle explicit command, not a fixed decoder center",
+      "height_change_within_episode": true,
+      "input_leg_scale_rad": 1.5,
+      "input_wheel_previous_scale_rad_s": 100.0,
+      "input_leg_dq_scale": 0.05,
+      "Actor_leg_dq_multiplier": 1.0,
+      "PD_D_retained": true,
+      "previous": "actual adopted physical target after protection",
+      "center_source": {
+        "path": "/home/kellen/wheel_leg_native_train/artifacts/2026_11_07__motion_C0_interface_large_ppo_handoff/large_output_contract.json",
+        "sha256": "b095ef1983991e3e12196b7cdf73fa7a1030e1b0c1af4a0e08c107c63bc74cd7"
+      },
+      "raw_action": "physical target Gaussian sample before explicit range/mechanical protection; log_prob of this original rad/rad_s sample",
+      "formula": "d=a_leg; R=upper-center if d>=0 else center-lower; q=center+.15*d+(R-.15)*d^3; wheel=100*a_wheel",
+      "derivative_warning": "center decoder slope is not the complete Actor feedback gain; exact physical relabel keeps old gain",
+      "mechanical_protection": "same named joint limits after physical decode; adopted target alone enters previous",
+      "parameters_must_not_be_guessed": [
+        "encoder zero delta",
+        "spring or extra compensation"
+      ],
+      "hardware_deployment_accepted": false,
+      "limits_not_changed": false,
+      "deterministic_source_version": "recovery_centered_cubic_v1",
+      "deterministic_source_sha256": "77ec4036b78e6fad962227457c5b9f070e863000d81175b8063da53e2a655338",
+      "sampling_distribution": {
+        "version": "physical_target_Gaussian_v2",
+        "fixed_std": [
+          0.02,
+          0.02,
+          2,
+          0.02,
+          0.02,
+          2
+        ],
+        "raw_units": [
+          "rad",
+          "rad",
+          "rad/s",
+          "rad",
+          "rad",
+          "rad/s"
+        ],
+        "second_mean_space_Gaussian": false,
+        "entropy_coefficient": 0
+      },
+      "critic_privileged_version": "recovery_standalone_height_causal909_v5",
+      "actor_only": true,
+      "old_Critic_Adam_log_std_resume": false,
+      "height_conditioning": "Actor absolute height slot; cubic center stays fixed at original .34 reference",
+      "motor_effort_limits_nm": [
+        40.0,
+        40.0,
+        4.8,
+        40.0,
+        40.0,
+        4.8
+      ],
+      "motor_limit_revision": "user unified wheel motor4.8Nm; leg40Nm; motor and external NET remain separate"
+    },
+    "activation": "ELU"
+  },
+  "motion": {
+    "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/firmware_motion015_contract_r1/actor.pt",
+    "sha256": "45a1f39b047cc8dfb7ca2198ff824958cb694876535ecfc752f1e29e121d3564"
+  },
+  "motion_spec": {
+    "kind": "tanh",
+    "input_dim": 31,
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "output_dim": 6,
+    "input_contract": {
+      "version": "motion31_supported015_handoff_v1",
+      "actor_dim": 31,
+      "layout_zero_based": {
+        "0:3": "CAD body angular velocity * .25",
+        "3:6": "CAD projected gravity",
+        "6:10": "model legs q / 1.5rad",
+        "10:16": "model six-channel dq * .05",
+        "16:20": "actual adopted leg targets / 1.5rad",
+        "20:22": "actual adopted wheel targets / 100rad_s",
+        "22:25": "vx/4, yaw_rate/4, height/.5; [0,0,.68]",
+        "25:28": "Motion/Recovery/Jump one-hot [1,0,0]",
+        "28:31": "jump NONE/... one-hot [1,0,0]"
+      },
+      "channel_order": "model left hip/active/wheel, right hip/active/wheel; no geometric swap",
+      "input_leg_scale_rad": 1.5,
+      "input_wheel_previous_scale_rad_s": 100.0,
+      "source": "RecoveryMuJoCoCollection.measured and frozen execution.report; replace only skill one-hot 25:28"
+    },
+    "output_contract": {
+      "action_version": "motion_multiheight_support_center_poly5_015_80_v1",
+      "leg_scale_rad": 0.15,
+      "wheel_scale_rad_s": 80.0,
+      "formula": "target legs=C0_poly5(height)+.15*mean, wheels=80*mean"
+    },
+    "activation": "ELU"
+  },
+  "source_run": {
+    "path": "/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/run.json",
+    "sha256": "d3d56d6a74c85d6a9e21661a0c0e41c5db24a25db01fff39fefae4abd654e4ce"
+  },
+  "gate_source": {
+    "path": "/home/kellen/combat-dm-balance-supported015-recovery2100/application/chassis/rl_handoff.c",
+    "sha256": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f"
+  },
+  "gate_header": {
+    "path": "/home/kellen/combat-dm-balance-supported015-recovery2100/application/chassis/rl_handoff.h",
+    "sha256": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5"
+  },
+  "seconds": 13.0,
+  "gate": {
+    "height_min_m": 0.3,
+    "height_max_m": 0.4,
+    "command_height_m": 0.34,
+    "height_error_m": 0.02,
+    "tilt_rad": 0.6,
+    "angular_speed_rad_s": 5.0,
+    "leg_speed_rad_s": 12.0,
+    "support_min_N": 2.0,
+    "maximum_leg_target_jump_rad": 0.4,
+    "maximum_wheel_target_jump_rad_s": 40.0
+  },
+  "variants": [
+    {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "development_00",
+      "seed": 914001,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 0.0,
+      "cohort": 0,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_01",
+      "seed": 914002,
+      "pose": "Swing",
+      "yaw_rad": 1.5707963267948966,
+      "DR_strength": 0.0,
+      "cohort": 1,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_02",
+      "seed": 914003,
+      "pose": "Swing",
+      "yaw_rad": -1.5707963267948966,
+      "DR_strength": 0.25,
+      "cohort": 2,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_03",
+      "seed": 914004,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 0.25,
+      "cohort": 3,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_04",
+      "seed": 914005,
+      "pose": "Swing",
+      "yaw_rad": 1.5707963267948966,
+      "DR_strength": 0.5,
+      "cohort": 4,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_05",
+      "seed": 914006,
+      "pose": "Swing",
+      "yaw_rad": -1.5707963267948966,
+      "DR_strength": 0.5,
+      "cohort": 5,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_06",
+      "seed": 914007,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 1.0,
+      "cohort": 6,
+      "contact_version": "original_XML_contact_reference"
+    }
+  ],
+  "limits": {
+    "integration_steps": 182000,
+    "wall_s": 900,
+    "storage_bytes": 1073741824
+  }
+}

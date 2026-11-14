@@ -6,7 +6,7 @@
 
 1. 上电后保持遥控器零力/急停安全模式，等待六电机与IMU反馈正常。
 2. 安全模式下程序自动arm Recovery；切换到原有非零力使能模式后，由Recovery起身，跳过原LQR复位/摆腿。
-3. 起身期间vx/yaw/height命令固定0/0/0.34。使用本体IMU与编码器判断准备条件，持续100 ms后只读探测Motion。
+3. 起身期间vx/yaw/height命令固定0/0/0.34。使用本体IMU与编码器判断准备条件，持续20 ms后只读探测Motion。
 4. Motion新鲜输出相对实际previous的腿目标跳变≤0.4 rad、轮目标跳变≤40 rad/s时自动接管。过程中不reset、不清previous或运输队列，不加混合插值、滤波或弹簧补偿。
 5. 接管后Motion响应原有摇杆速度、转向和腿高控制。同一会话不来回切换网络。
 6. 切回零力模式立即沿原有电机停止路径退出。反馈或策略失效则锁存归零，不在Swing中回退LQR；回安全模式后才能重新开始。
@@ -15,7 +15,8 @@
 
 - `RL_RECOVERY_AUTO_START=1`：安全→使能每次从Recovery开始。
 - `RL_RECOVERY_POSTURE_HANDOFF=1`：默认本体感知准备判据。
-- `RL_RECOVERY_POSTURE_DWELL_MS=100`：本体感知满足条件后尽早交给Motion；外部严格支撑门仍独立为200ms。
+- `RL_RECOVERY_POSTURE_DWELL_MS=20`：本体感知满足条件后尽早交给Motion；外部严格支撑门仍独立为200ms。
+- `RL_RECOVERY_POSTURE_TILT_RAD=0.35`（约20°）、`GYRO_RAD_S=3`、`LEG_SPEED_RAD_S=8`：扩大Motion接管范围。
 - `RL_RECOVERY_POSTURE_ERROR_RAD=0.50`：四腿实际位置相对Motion0.34m参考中心，各自允许偏差0.50 rad。该中心是输出参考，不是编码器偏置；不能改编码器零位来凑中心。
 - 若改`POSTURE_HANDOFF=0`，则必须由合格平台提供实际高度/双轮支撑证据，否则不会交接。
 
@@ -23,7 +24,7 @@
 
 使用真实六路电机CAN接收时间戳、IMU更新完成时间戳、四腿q/dq和IMU重力/角速度。反馈全六路及IMU须有效；控制新鲜度≤24 ms，准备判据年龄≤20 ms。dwell按最旧必需反馈的接收时间推进，重复同一反馈不能由1ms循环累积成200ms。
 
-条件：单位重力合法；重力方向距直立轴≤0.10 rad；角速度范数≤1 rad/s；四腿速度绝对值各≤3 rad/s；四腿位置距Motion参考中心各≤0.50 rad。连续100ms后仍需通过新鲜Motion输出/previous/epoch/物理目标跳变检查。
+条件：单位重力合法；重力方向距直立轴≤0.35 rad；角速度范数≤3 rad/s；四腿速度绝对值各≤8 rad/s；四腿位置距Motion参考中心各≤0.50 rad。连续20ms后仍需通过新鲜Motion输出/previous/epoch/物理目标跳变检查。
 
 这是`handoff_source=2`的姿态与构型准备条件，不是独立触地证明。悬空但姿态和构型满足时也可能接管。现有`F_n`含指令力矩，未拿它冒充双轮承重；没有给法向力填常数、没有使用外部定位或仿真高度。若平台提供有效真实高度/双轮支撑证据，使用`handoff_source=1`的原严格门；切换证据来源会清除未完成dwell。
 

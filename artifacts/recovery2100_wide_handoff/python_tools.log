@@ -1,0 +1,6 @@
+PASS chassis recovery, same-frame RL faults, inhibited reentry and subsequent position hold
+..s.sss.ss
+----------------------------------------------------------------------
+Ran 9 tests in 0.736s
+
+OK (skipped=6)

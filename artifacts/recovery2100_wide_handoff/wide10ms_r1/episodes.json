@@ -1,0 +1,403 @@
+[
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_00",
+      "seed": 914001,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 0.0,
+      "cohort": 0,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": 0.37,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 12.385,
+    "post_switch_hold10": true,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": true,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        20
+      ],
+      "target_delay_ms": [
+        5
+      ],
+      "wheel_left_ms": [
+        7
+      ],
+      "wheel_right_ms": [
+        11
+      ]
+    },
+    "fault": false,
+    "seconds": 13.0,
+    "first_target_jump_leg_rad": 0.17858611047267914,
+    "first_target_jump_wheel_rad_s": 11.635047912597656,
+    "after_switch_dual_support_fraction": 0.9994457640538401,
+    "last5s_abs_vx_mean": 0.21323542296886444,
+    "last5s_HP10_RMS": [
+      0.0019342529121786356,
+      0.0019525234820321202,
+      0.0024157383013516665,
+      0.002446560887619853
+    ],
+    "actual_integration_steps": 26000,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_00/trace.npz",
+      "sha256": "fc61e338e0f7629e387e95f802a64de40249d1a07d3a3258744a9da695d50b46"
+    }
+  },
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_01",
+      "seed": 914002,
+      "pose": "Swing",
+      "yaw_rad": 1.5707963267948966,
+      "DR_strength": 0.0,
+      "cohort": 1,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": 0.37,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 12.385,
+    "post_switch_hold10": true,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": true,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        20
+      ],
+      "target_delay_ms": [
+        5
+      ],
+      "wheel_left_ms": [
+        7
+      ],
+      "wheel_right_ms": [
+        11
+      ]
+    },
+    "fault": false,
+    "seconds": 13.0,
+    "first_target_jump_leg_rad": 0.17858611047267914,
+    "first_target_jump_wheel_rad_s": 11.635047912597656,
+    "after_switch_dual_support_fraction": 0.9994457640538401,
+    "last5s_abs_vx_mean": 0.21294471621513367,
+    "last5s_HP10_RMS": [
+      0.0019397265277802944,
+      0.001917240908369422,
+      0.002458113944157958,
+      0.0024543541949242353
+    ],
+    "actual_integration_steps": 26000,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_01/trace.npz",
+      "sha256": "337451fa77765a2cfb9f626cd258023ed936b96bb7e8e83ad08e4161bfb4ead7"
+    }
+  },
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_02",
+      "seed": 914003,
+      "pose": "Swing",
+      "yaw_rad": -1.5707963267948966,
+      "DR_strength": 0.25,
+      "cohort": 2,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": 0.41000000000000003,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 12.59,
+    "post_switch_hold10": true,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": true,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        20
+      ],
+      "target_delay_ms": [
+        8
+      ],
+      "wheel_left_ms": [
+        8
+      ],
+      "wheel_right_ms": [
+        11
+      ]
+    },
+    "fault": false,
+    "seconds": 13.0,
+    "first_target_jump_leg_rad": 0.22194138169288635,
+    "first_target_jump_wheel_rad_s": 3.7765140533447266,
+    "after_switch_dual_support_fraction": 1.0,
+    "last5s_abs_vx_mean": 0.18868304789066315,
+    "last5s_HP10_RMS": [
+      0.001419373438693583,
+      0.0012754882918670774,
+      0.0017324608052149415,
+      0.0016364435432478786
+    ],
+    "actual_integration_steps": 26000,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_02/trace.npz",
+      "sha256": "44caf07629c73dc0a3d6bd90d3b6ada88621c0dbf0abfb10455fd2d36bff4ecb"
+    }
+  },
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_03",
+      "seed": 914004,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 0.25,
+      "cohort": 3,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": 0.38,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 12.439,
+    "post_switch_hold10": true,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": true,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        20
+      ],
+      "target_delay_ms": [
+        4
+      ],
+      "wheel_left_ms": [
+        7
+      ],
+      "wheel_right_ms": [
+        10
+      ]
+    },
+    "fault": false,
+    "seconds": 13.0,
+    "first_target_jump_leg_rad": 0.3202548325061798,
+    "first_target_jump_wheel_rad_s": 5.868127822875977,
+    "after_switch_dual_support_fraction": 0.9999207606973058,
+    "last5s_abs_vx_mean": 0.1433829963207245,
+    "last5s_HP10_RMS": [
+      0.001515221199952066,
+      0.0014587340410798788,
+      0.0018618454923853278,
+      0.0017253316473215818
+    ],
+    "actual_integration_steps": 26000,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_03/trace.npz",
+      "sha256": "175cd14f5fbccaee86fef950e36bc7f322a279c72a60e841522a22742a66e0df"
+    }
+  },
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_04",
+      "seed": 914005,
+      "pose": "Swing",
+      "yaw_rad": 1.5707963267948966,
+      "DR_strength": 0.5,
+      "cohort": 4,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": null,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 0.0,
+    "post_switch_hold10": false,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": false,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        20
+      ],
+      "target_delay_ms": [
+        10
+      ],
+      "wheel_left_ms": [
+        7
+      ],
+      "wheel_right_ms": [
+        11
+      ]
+    },
+    "fault": true,
+    "seconds": 0.59,
+    "first_target_jump_leg_rad": 0.0,
+    "first_target_jump_wheel_rad_s": 0.0,
+    "after_switch_dual_support_fraction": null,
+    "last5s_abs_vx_mean": null,
+    "last5s_HP10_RMS": null,
+    "actual_integration_steps": 1180,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_04/trace.npz",
+      "sha256": "6c2374aec5958b7dfbeb001c299e17fd99c9b4918f79360943fe7c0c3a726b8d"
+    }
+  },
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_05",
+      "seed": 914006,
+      "pose": "Swing",
+      "yaw_rad": -1.5707963267948966,
+      "DR_strength": 0.5,
+      "cohort": 5,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": 0.39,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 12.359,
+    "post_switch_hold10": true,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": true,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        20
+      ],
+      "target_delay_ms": [
+        6
+      ],
+      "wheel_left_ms": [
+        6
+      ],
+      "wheel_right_ms": [
+        12
+      ]
+    },
+    "fault": false,
+    "seconds": 13.0,
+    "first_target_jump_leg_rad": 0.14783279597759247,
+    "first_target_jump_wheel_rad_s": 11.900285720825195,
+    "after_switch_dual_support_fraction": 0.9998413957176844,
+    "last5s_abs_vx_mean": 0.1256416141986847,
+    "last5s_HP10_RMS": [
+      0.0015491751255467534,
+      0.0014863604446873069,
+      0.0016511932481080294,
+      0.0015002884902060032
+    ],
+    "actual_integration_steps": 26000,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_05/trace.npz",
+      "sha256": "4870ab9c24f5ca374fb636afb9558bfb5862080ab5dd03718a974f8ec423f613"
+    }
+  },
+  {
+    "variant": {
+      "name": "wide10ms",
+      "kind": "posture",
+      "dwell_ms": 10,
+      "maximum_center_error_rad": 0.5
+    },
+    "case": {
+      "case_id": "development_06",
+      "seed": 914007,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 1.0,
+      "cohort": 6,
+      "contact_version": "original_XML_contact_reference"
+    },
+    "switch_s": 0.71,
+    "own_control": true,
+    "world_reset_at_switch": false,
+    "previous_cleared_at_switch": false,
+    "execution_queues_cleared_at_switch": false,
+    "post_switch_raw_hold_s": 12.256,
+    "post_switch_hold10": true,
+    "recovery_only_hold10": false,
+    "hold_window_controller": "motion",
+    "truncated": true,
+    "effective_delays_ms": {
+      "actor_age_ms": [
+        0
+      ],
+      "target_delay_ms": [
+        16
+      ],
+      "wheel_left_ms": [
+        7
+      ],
+      "wheel_right_ms": [
+        8
+      ]
+    },
+    "fault": false,
+    "seconds": 13.0,
+    "first_target_jump_leg_rad": 0.1536792814731598,
+    "first_target_jump_wheel_rad_s": 6.769045829772949,
+    "after_switch_dual_support_fraction": 1.0,
+    "last5s_abs_vx_mean": 0.3008224666118622,
+    "last5s_HP10_RMS": [
+      0.0020407717674970627,
+      0.0021354099735617638,
+      0.002722842385992408,
+      0.0027218288742005825
+    ],
+    "actual_integration_steps": 26000,
+    "trace": {
+      "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/wide10ms_r1/wide10ms__development_06/trace.npz",
+      "sha256": "bad0c2035010e1f57f89aa617dbc0e117faa0604b3336cc4be80a090ae8190f2"
+    }
+  }
+]

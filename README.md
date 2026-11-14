@@ -2,7 +2,7 @@
 
 **当前要试“Recovery起身→自动交给Motion”，请选择 [`feature/rl-supported015-recovery2100`](https://github.com/lcy-998/combat-dm-balance-main/tree/feature/rl-supported015-recovery2100)。**
 
-该分支以015 Motion为基础，包含Recovery2100小模型、31D256 Motion、本体感知100ms准备门、自动交接及C权重。功能代码审查修复提交为`208910e`，后续导航文档提交不改变固件；发布文件的SHA以manifest为准。
+该分支以015 Motion为基础，包含Recovery2100小模型、31D256 Motion、本体感知20ms准备门、自动交接及C权重。功能代码审查修复提交为`208910e`，后续导航文档提交不改变固件；发布文件的SHA以manifest为准。
 
 - [固件HEX/BIN、下载和操作](firmware/recovery2100_motion015/README.md)
 - [输入、两种decoder、时序、自动交接与故障退出](docs/RECOVERY2100_HANDOFF.md)

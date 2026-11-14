@@ -1,5 +1,6 @@
 /* Production control/decoder/gate, synthetic feedback only; no RTOS or motors. */
 #include "rl_control.h"
+#include "rl_recovery_config.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -717,7 +718,7 @@ static void test_proprioceptive_readiness(void)
     CHECK(s.handoff_source==2 && s.handoff.committed && !s.recovering);
     /* A controller tick is not a sensor update: oldest received timestamp wins. */
     memset(&s,0,sizeof(s));CHECK(!RLControlStartRecovery(&s));
-    for(unsigned t=0;t<100;t++){
+    for(unsigned t=0;t<RL_RECOVERY_POSTURE_DWELL_MS;t++){
         const uint32_t now=2000+t;
         if(t%10==0)c=packet(&s,now,t/10+1,NULL,0);
         RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
@@ -728,6 +729,24 @@ static void test_proprioceptive_readiness(void)
         CHECK(!RLControlExecute(&s,now,1,&x,&c,&f));
         CHECK(s.handoff.last_ms==oldest && !s.handoff.requested);
     }
+}
+
+static void test_broader_motion_readiness(void)
+{
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+    RLShadowCommand c={0};
+    for(unsigned t=0;t<=40;t++){
+        const uint32_t now=3000+t;
+        if(t%10==0)c=packet(&s,now,t/10+1,NULL,t>=30);
+        RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
+        /*20degree cone,3rad/s gyro,8rad/s dq region; old limits reject this. */
+        x.motion.gravity_model[1]=-cosf(.25f);x.motion.gravity_model[2]=sinf(.25f);
+        x.motion.gyro_model_rad_s[0]=2.f;
+        x.motion.joint_velocity_rad_s[0]=6.f;
+        CHECK(!RLControlExecute(&s,now,1,&x,&c,&f));
+        if(t<RL_RECOVERY_POSTURE_DWELL_MS)CHECK(!s.handoff.requested);
+    }
+    CHECK(s.handoff_source==2 && s.handoff.committed && !s.recovering);
 }
 
 int main(void)
@@ -745,6 +764,7 @@ int main(void)
     test_unqualified_session_never_hands_off();
     test_handoff();
     test_proprioceptive_readiness();
+    test_broader_motion_readiness();
 #ifdef RL_RECOVERY_SHADOW_HOST
     test_real_recovery_shadow_task();
 #endif

@@ -6,7 +6,7 @@
 
 | 用途标签 | 完整分支名 | 内容与选择建议 |
 |---|---|---|
-| **当前自动起身试验** | **`feature/rl-supported015-recovery2100`** | **Recovery2100起身→31D256 Motion015自动接管；本体准备100ms；含两套C权重和HEX/BIN。当前试验用这个。** |
+| **当前自动起身试验** | **`feature/rl-supported015-recovery2100`** | **Recovery2100起身→31D256 Motion015自动接管；本体准备20ms；含两套C权重和HEX/BIN。当前试验用这个。** |
 | Motion基线 | `feature/rl-motion31-supported015` | 单独015 Motion，31D256，站立/运动与256权重转换工具；不含本次2100自动接管集成。远端核对基点7f89e6d。 |
 | 旧Recovery | `feature/rl-tjb-recover` | 历史起身实现；不是2100集成版。不要因名字有recover就当作本次交付。 |
 | 历史Motion | `feature/rl-motion31-shadow` | 早期31D观测/网络接入；不是当前集成版。 |

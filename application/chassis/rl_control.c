@@ -207,6 +207,9 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
         else {
             RLHandoffConfig posture_config=RL_HANDOFF_CONFIG;
             posture_config.dwell_ms=RL_RECOVERY_POSTURE_DWELL_MS;
+            posture_config.tilt_rad=RL_RECOVERY_POSTURE_TILT_RAD;
+            posture_config.angular_speed_rad_s=RL_RECOVERY_POSTURE_GYRO_RAD_S;
+            posture_config.leg_speed_rad_s=RL_RECOVERY_POSTURE_LEG_SPEED_RAD_S;
             double dcenter[4];float center[4];
             if(RLMotion31SupportCenter(.34,dcenter))return execution_fault(s,f,RL_FAULT_INPUT);
             for(unsigned i=0;i<4;i++)center[i]=(float)dcenter[i];

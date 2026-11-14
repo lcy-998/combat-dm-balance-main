@@ -5,7 +5,7 @@
   "bin_load_address": "0x08000000",
   "compiler": "xPack ARM GCC14.2.1-1.1",
   "optimization": "-Og (no fast-math)",
-  "automatic_flow": "ZERO_FORCE arms -> existing enable -> Recovery2100 -> proprioceptive readiness100ms + fresh Motion target continuity -> 31D015 Motion",
+  "automatic_flow": "ZERO_FORCE arms -> enable -> Recovery2100 -> proprioceptive readiness20ms (tilt.35rad,gyro3rad/s,leg8rad/s) + fresh Motion target continuity ->31D015 Motion",
   "default_external_contact_dependency": false,
   "contact_proven": false,
   "limits": {
@@ -14,7 +14,7 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 640156,
+    "Flash_bytes": 640188,
     "DTCM_bytes": 82592,
     "RAM_D1_bytes": 59456
   },
@@ -34,13 +34,15 @@
       "conflicting mode retains SAFE session",
       "new session warms packet history while committed handoff preserves it",
       "capture at200Hz triggers onhandoff/fault and retains555ms post-event"
-    ]
+    ],
+    "wide20ms_cases": 7,
+    "wide20ms_handoff_hold10": 6
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "d9960b54d387bbb1bf0c61d99e4655a401daf1fb6a05cad509223364f97137ed",
-    "recovery2100_motion015.hex": "6b589316c0f6d74977f41da01f0bed06678864eb4a135a124e79c340f782ddc4"
+    "recovery2100_motion015.bin": "d7eacc97296309d5f1f93b2c4b910ba11c395dce5a45315283903523e990eee1",
+    "recovery2100_motion015.hex": "84be7e98ac16aa851881eb9d63425c5dbce9fd291f2c8d90c027abb755b1c41f"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -99,7 +101,7 @@
     "application/chassis/recovery2100/recovery_actor.h": "2fbb04d75b1a5ff682e19554e161b68bb7b58ea817ce99446a353683bb2a1e8c",
     "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
-    "application/chassis/rl_control.c": "8b52ea9d4a8ff2036733dcc3de7a5ab47541c26e220c2c94237d9f4f6af65e90",
+    "application/chassis/rl_control.c": "b96b838fafccae6a560b3a96cf5247ecc6aeead306bfa4fcb03a11ee9dcee572",
     "application/chassis/rl_control.h": "9c223a2d194f1770abe51a8a0eed8d3885565713d979bd16d763dbb4abb87d7c",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
@@ -137,14 +139,20 @@
     "modules/motor/servo_motor/servo_motor.md": "f3e6078b31124ab20ecb192e69b6b746f0097191c575128a08fba21dd7707254",
     "modules/motor/step_motor/step_motor.c": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "modules/motor/step_motor/step_motor.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/rl_recovery_config.h": "6d857c23298444960a7ff115ae6a289375b5f00dcd1b558e31fb7804fac76d90"
+    "application/chassis/rl_recovery_config.h": "5957879cd8b79d41fe43a3c4ed51636efcfe8cdffc18ccee3d5c2c62fd51c5f2"
   },
-  "default_proprioceptive_dwell_ms": 100,
+  "default_proprioceptive_dwell_ms": 20,
   "default_proprioceptive_leg_center_error_rad": 0.5,
-  "audit_revision": "vehicle_compatibility_audit_v1",
-  "supersedes_firmware_commit": "ffed642",
+  "audit_revision": "broader_motion_takeover20ms_v1",
+  "supersedes_firmware_commit": "208910e",
   "build_source_sha256": {
     "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
     "STM32H723XG_FLASH.ld": "43393d00f784a7d78b305f3fa5bee6175829eb3319bd48cd5898b448d18ca390"
+  },
+  "proprioceptive_thresholds": {
+    "tilt_rad": 0.35,
+    "gyro_rad_s": 3,
+    "leg_speed_rad_s": 8,
+    "leg_center_error_rad": 0.5
   }
 }
