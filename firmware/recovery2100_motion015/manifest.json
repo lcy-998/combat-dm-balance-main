@@ -5,7 +5,7 @@
   "bin_load_address": "0x08000000",
   "compiler": "xPack ARM GCC14.2.1-1.1",
   "optimization": "-Og (no fast-math)",
-  "automatic_flow": "ZERO_FORCE arms -> enable -> Recovery2100 -> proprioceptive readiness20ms (tilt.35rad,gyro3rad/s,leg8rad/s) + fresh Motion target continuity ->31D015 Motion",
+  "automatic_flow": "ZERO_FORCE arms -> enable -> legacy tjb_recover -> proprioceptive readiness20ms (tilt.35rad,gyro3rad/s,leg8rad/s) + fresh Motion target continuity ->31D015 Motion",
   "default_external_contact_dependency": false,
   "contact_proven": false,
   "limits": {
@@ -14,8 +14,8 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 499580,
-    "DTCM_bytes": 82592,
+    "Flash_bytes": 499772,
+    "DTCM_bytes": 82656,
     "RAM_D1_bytes": 59456
   },
   "validation": {
@@ -39,13 +39,32 @@
     "wide20ms_handoff_hold10": 6,
     "current_model_simulation_handoff_hold10": 0,
     "current_model_simulation_cases": 7,
-    "current_model_simulation_result": "FAILED7/7 beforehandoff,0.49-1.21s; not a successful rise firmware"
+    "current_model_simulation_result": "FAILED7/7 beforehandoff,0.49-1.21s; not a successful rise firmware",
+    "recheck_runs": [
+      "tjb_v4_recheck_motion_spring_fix_r1",
+      "motion015_v4_recheck_motion_spring_fix_r1"
+    ],
+    "motion_v4_standing_hold10_passed": 2,
+    "motion_v4_standing_cases": 2,
+    "host_motion_spring_checks": [
+      "delayed mode follows target",
+      "same015 formula",
+      "PD5ms hold",
+      "next PD geometry refresh",
+      "final saturation40Nm",
+      "invalid geometry SAFE zero"
+    ],
+    "tools_tests": {
+      "run": 9,
+      "skipped_missing_external_models": 6,
+      "failed": 0
+    }
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "d57f333b08d56f1597b475ea94bd50d9e673662e903b2ce163ddab7bebf2e692",
-    "recovery2100_motion015.hex": "86745ba24bccf583777e7ce76eeb49ae92763d7ad26549419bae16441c5d6bb8"
+    "recovery2100_motion015.bin": "554943724e160ae03f27025f2286d467ef4fa5cba63950bd40480a7b34f8f649",
+    "recovery2100_motion015.hex": "b382c5ef9eea83e72e9dcc2a06da4ac14f4fae640fb2b7a124531e9bf5d464aa"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -104,8 +123,8 @@
     "application/chassis/recovery2100/recovery_actor.h": "d47ac77533955b412d2d8bb8cdf0296cfd7f2465746c9ed5c43030b09384b0de",
     "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
-    "application/chassis/rl_control.c": "b96b838fafccae6a560b3a96cf5247ecc6aeead306bfa4fcb03a11ee9dcee572",
-    "application/chassis/rl_control.h": "9c223a2d194f1770abe51a8a0eed8d3885565713d979bd16d763dbb4abb87d7c",
+    "application/chassis/rl_control.c": "e0004e4cad0d4c40465756bb137efa78c5859ce7ee445055f52438ce96233df0",
+    "application/chassis/rl_control.h": "34ca5f9e55da0726aa6ec004fe12ac8861f3625b16fb10e8222a6e8fa24a2f3f",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
     "application/chassis/rl_motion31.c": "6b766175822c363639fab7e82519afd0f773935e3311bef2ae1b326ffa49446d",
@@ -142,11 +161,11 @@
     "modules/motor/servo_motor/servo_motor.md": "f3e6078b31124ab20ecb192e69b6b746f0097191c575128a08fba21dd7707254",
     "modules/motor/step_motor/step_motor.c": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "modules/motor/step_motor/step_motor.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/rl_recovery_config.h": "5957879cd8b79d41fe43a3c4ed51636efcfe8cdffc18ccee3d5c2c62fd51c5f2"
+    "application/chassis/rl_recovery_config.h": "79ae72cd38afe2885fcda050b90129b781190947df2bb618cd3ab0617c6713e3"
   },
   "default_proprioceptive_dwell_ms": 20,
   "default_proprioceptive_leg_center_error_rad": 0.5,
-  "audit_revision": "legacy_tjb_recover_current_controller_comparison",
+  "audit_revision": "legacy_tjb_recover_motion015_adopted_target_spring_fix",
   "supersedes_firmware_commit": "ddb5045",
   "build_source_sha256": {
     "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
@@ -159,5 +178,10 @@
     "leg_center_error_rad": 0.5
   },
   "active_recovery_model": "c94bb9f tjb_recover RL_10_19 31-128-64-32-6",
-  "active_recovery_decoder": "absolute_linear legs1.5mean,wheels100mean"
+  "active_recovery_decoder": "absolute_linear legs1.5mean,wheels100mean",
+  "spring_compensation": {
+    "Recovery": false,
+    "Motion": "ordinary015 RLControlCompensateSpring only after transported Motion target PD adoption; held5ms; final limit40Nm",
+    "simulation": "fullV4+NET without extra compensation; equivalent-system collection premise unverified"
+  }
 }

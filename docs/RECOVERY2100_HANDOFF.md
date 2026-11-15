@@ -9,7 +9,7 @@
 1. 上电后保持遥控器零力/急停安全模式，等待六电机与IMU反馈正常。
 2. 安全模式下程序自动arm Recovery；切换到原有非零力使能模式后，由Recovery起身，跳过原LQR复位/摆腿。
 3. 起身期间vx/yaw/height命令固定0/0/0.34。使用本体IMU与编码器判断准备条件，持续20 ms后只读探测Motion。
-4. Motion新鲜输出相对实际previous的腿目标跳变≤0.4 rad、轮目标跳变≤40 rad/s时自动接管。过程中不reset、不清previous或运输队列，不加混合插值、滤波或弹簧补偿。
+4. Motion新鲜输出相对实际previous的腿目标跳变≤0.4 rad、轮目标跳变≤40 rad/s时自动接管。过程中不reset、不清previous或运输队列，不加混合插值或滤波。Recovery阶段不加弹簧补偿；首个Motion物理目标实际经运输与PD采用后，启用普通015原有弹簧补偿。
 5. 接管后Motion响应原有摇杆速度、转向和腿高控制。同一会话不来回切换网络。
 6. 切回零力模式立即沿原有电机停止路径退出。反馈或策略失效则锁存归零，不在Swing中回退LQR；回安全模式后才能重新开始。
 
@@ -53,7 +53,7 @@ capture为v3，新增source/requested/committed及实际Actor输入tick。读取
 
 输入均31D，保留真实dq。输入腿/previous腿除1.5，previous轮速除100；previous只来自本地实际采用物理目标，首次采用前明记q/零轮速初始化proxy。影子推理不能写缓存，decoder各执行一次。模型left对应几何右，不交换数组。
 
-策略10ms。显式Recovery→Motion会话由电机发送前1ms入口拥有六通道输出；PD5ms，目标运输5ms，模型双轮力矩运输7/11ms。收到状态包名义20ms、启动暖填。PD40/2/0.2；腿40Nm、轮4.8Nm；保留015驱动原始轮电流限幅16384，实际电流/力矩比例未实测。此会话不加旧LQR弹簧补偿；真实机械弹簧及驱动配置仍需按本机平台核对。普通015传统入口保留，但默认自动Recovery会话使用上述明确合同。
+策略10ms。显式Recovery→Motion会话由电机发送前1ms入口拥有六通道输出；PD5ms，目标运输5ms，模型双轮力矩运输7/11ms。收到状态包名义20ms、启动暖填。PD40/2/0.2；腿40Nm、轮4.8Nm；保留015驱动原始轮电流限幅16384，实际电流/力矩比例未实测。此会话Recovery阶段无补偿；Motion目标实际采用后复用RLControlCompensateSpring，按PD5ms更新并保持，最终腿力矩限幅±40Nm。模式标记与物理目标一起进入5ms运输队列，避免逻辑交接先于实际采用而抢先补偿。真实机械弹簧及驱动配置仍需按本机平台核对。普通015传统入口保留，但默认自动Recovery会话使用上述明确合同。
 
 唯一教师2100 SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。本次没有新训练或混用其他Recovery教师。源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。
 
@@ -77,3 +77,11 @@ CPU原0158组与Recovery控制/真实shadow14情景通过；128条真实golden�
 本次修复模式冲突误释放会话、新会话复用旧FIFO和采集过早冻结三项bug，旧ffed642固件/ZIP被当前产物取代。15种真实shadow情景与9/9测试通过。新固件只能称可进入有保护的分步实车验证，尚无目标deadline/栈高水位及本车零位、方向、力矩标定实测证据。详细根因/定位/处理和边界见`artifacts/recovery2100_vehicle_audit/REPORT.md`。
 
 Recovery会话采集按200Hz，在接管/故障触发并保存约555ms后续；冻结后保留供读取，不随安全模式自动清除。需要新一轮采集时显式调用`RLCaptureArm(RL_CAPTURE_CAPACITY-17u)`。
+
+## Motion补偿修复与V4复测（2026-11-15）
+
+仅修改本集成分支；feature/rl-motion31-supported015作为只读参考，不提交到该分支。当前Recovery仍是旧tjb_recover，腿1.5×mean、轮100×mean；未换回2100。
+
+实机链：PD→015补偿→最终限矩→真实驱动器/弹簧。仿真链：原PD→完整V4+NET；不额外叠加015补偿。V4采集是否包含当时软件补偿尚缺开关记录，因此本次不是包含独立真实弹簧的完整固件物理验证。
+
+正式sim2sim复测：tjb_v4_recheck_motion_spring_fix_r1包含Recovery-only与20ms本体交接各7组，均0/7，全部0.49–1.21秒交接前失败；motion015_v4_recheck_motion_spring_fix_r1站立两组均通过，连续保持12.984/12.982秒。数据根：/home/kellen/wheel_leg_training_data/recovery_motion_handoff。补偿的软件行为由真实C主机消费者验证，不能将V4数值结果称为补偿实机认证。

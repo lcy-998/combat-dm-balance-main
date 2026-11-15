@@ -174,7 +174,8 @@ int RLControlStartRecovery(RLControlState *state)
     return 0;
 }
 
-/* Explicit Recovery session. Same PD and mappings as Motion, no spring term.
+/* Explicit Recovery session. Same PD and mappings as Motion. Recovery has no spring term;
+   adopted Motion targets use the ordinary015 compensation at the PD cadence.
    Called by the 1ms chassis owner: target transport5ms, PD5ms, wheels7/11ms.
    Fault returns zero commands to the caller, never falls back to LQR mid-Swing. */
 static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
@@ -251,6 +252,7 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
     const unsigned slot=now%32u;
     memcpy(s->recovery_targets[slot],s->recovery_request,sizeof(s->recovery_request));
     s->recovery_target_sequence[slot]=s->recovery_request_sequence;
+    s->recovery_target_motion[slot]=!s->recovering;
     if((!s->recovery_pd_valid && now%5u==0u) ||
        (s->recovery_pd_valid && (uint32_t)(now-s->adopted_tick_ms)>=5u)){
         memcpy(s->adopted_target,s->recovery_targets[(now-5u)%32u],sizeof(s->adopted_target));
@@ -261,6 +263,16 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
         s->recovery_pd[5]=clampf(s->recovery_pd[5],-4.8f,4.8f);
         s->adopted_sequence=s->recovery_target_sequence[(now-5u)%32u];
         s->adopted_tick_ms=now;s->recovery_pd_valid=1;
+        float motor[4];
+        if(RLMotion31MapPolicyLegTorqueToMotorOrder(s->recovery_pd,motor))
+            return execution_fault(s,f,RL_FAULT_PD);
+        memset(s->recovery_spring,0,sizeof(s->recovery_spring));
+        if(s->recovery_target_motion[(now-5u)%32u]) {
+            const float zero[4]={0};
+            if(RLControlCompensateSpring(zero,x->leg_length_m,x->leg_spread_rad,s->recovery_spring) ||
+               RLControlCompensateSpring(motor,x->leg_length_m,x->leg_spread_rad,s->recovery_motor))
+                return execution_fault(s,f,RL_FAULT_COMPENSATION);
+        } else memcpy(s->recovery_motor,motor,sizeof(motor));
     }
     s->recovery_wheels[slot][0]=s->recovery_pd[2];s->recovery_wheels[slot][1]=s->recovery_pd[5];
     memcpy(f->tau_pd_nm,s->recovery_raw_pd,sizeof(s->recovery_raw_pd));
@@ -269,8 +281,9 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
     f->tau_limited_nm[5]=s->recovery_wheels[(now-11u)%32u][1];
     if(!s->recovery_request_sequence)return 1;
     float wheel[2];
-    if(RLMotion31MapPolicyLegTorqueToMotorOrder(f->tau_limited_nm,f->final_motor_nm) ||
-       RLMotion31MapPolicyWheelTorqueToForwardOrder(f->tau_limited_nm,wheel))
+    memcpy(f->final_motor_nm,s->recovery_motor,sizeof(s->recovery_motor));
+    memcpy(f->spring_motor_nm,s->recovery_spring,sizeof(s->recovery_spring));
+    if(RLMotion31MapPolicyWheelTorqueToForwardOrder(f->tau_limited_nm,wheel))
         return execution_fault(s,f,RL_FAULT_PD);
     f->wheel_current_raw[0]=clampf(-wheel[0]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
     f->wheel_current_raw[1]=clampf(wheel[1]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);

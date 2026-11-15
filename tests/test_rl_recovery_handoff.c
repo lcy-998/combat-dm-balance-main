@@ -30,6 +30,8 @@ static RLShadowSnapshot feedback(const RLControlState *state, uint32_t now)
 {
     RLShadowSnapshot x={0};
     x.tick_ms=now; x.sequence=now+1u; x.chassis_ready=x.rl_active=1;
+    x.leg_length_m[0]=.28f; x.leg_length_m[1]=.31f;
+    x.leg_spread_rad[0]=.8f; x.leg_spread_rad[1]=-.6f;
     x.motion.gravity_model[1]=-1; x.motion.command_height_m=.34f;
     x.feedback_valid_mask=0x3f; x.imu_update_sequence=1;
     x.imu_update_tick_ms=now;
@@ -445,6 +447,7 @@ static void test_handoff(void)
     CHECK(!step(&s,301,&c,1,&f));
     CHECK(!s.recovering && s.handoff.committed && s.epoch==epoch+1u);
     CHECK(s.recovery_session && s.active && f.owner==RL_OWNER_RL);
+    for(unsigned j=0;j<4;j++)CHECK(f.spring_motor_nm[j]==0);
     CHECK(!memcmp(s.adopted_target,before.adopted_target,sizeof(s.adopted_target)));
     CHECK(s.adopted_sequence==before.adopted_sequence);
     CHECK(!memcmp(s.recovery_request,c.motion_preview.target,sizeof(s.recovery_request)));
@@ -463,13 +466,53 @@ static void test_handoff(void)
     for(uint32_t t=303;t<=309;t++){
         CHECK(!step(&s,t,NULL,1,&f));
         CHECK(s.adopted_sequence==before.adopted_sequence);
+        for(unsigned j=0;j<4;j++)CHECK(f.spring_motor_nm[j]==0);
     }
     CHECK(!step(&s,310,NULL,1,&f));
     CHECK(s.adopted_sequence==40);
     CHECK(!memcmp(s.adopted_target,c.motion_preview.target,sizeof(s.adopted_target)));
-    c=packet(&s,311,42,NULL,0);
-    CHECK(!step(&s,311,&c,1,&f));
+    float motor[4],expected[4],spring[4],zero[4]={0};
+    x=feedback(&s,310);
+    CHECK(!RLMotion31MapPolicyLegTorqueToMotorOrder(f.tau_limited_nm,motor));
+    CHECK(!RLControlCompensateSpring(motor,x.leg_length_m,x.leg_spread_rad,expected));
+    CHECK(!RLControlCompensateSpring(zero,x.leg_length_m,x.leg_spread_rad,spring));
+    for(unsigned j=0;j<4;j++){
+        CHECK(near(f.final_motor_nm[j],expected[j]));
+        CHECK(near(f.spring_motor_nm[j],spring[j]));
+        CHECK(fabsf(f.final_motor_nm[j])<=40);
+    }
+    /* Geometry changes between PD ticks cannot alter the held output. */
+    for(uint32_t t=311;t<=314;t++){
+        x=feedback(&s,t); x.leg_spread_rad[0]=1.2f;
+        CHECK(!RLControlExecute(&s,t,1,&x,NULL,&f));
+        for(unsigned j=0;j<4;j++)CHECK(near(f.final_motor_nm[j],expected[j]));
+    }
+    RLControlState invalid=s;
+    x=feedback(&invalid,315); x.leg_length_m[0]=NAN;
+    CHECK(RLControlExecute(&invalid,315,1,&x,NULL,&f)<0);
+    CHECK(invalid.fault==RL_FAULT_COMPENSATION && f.owner==RL_OWNER_SAFE && zero_output(&f));
+    c=packet(&s,315,42,NULL,0);
+    CHECK(!step(&s,315,&c,1,&f));
     CHECK(s.recovery_request_sequence==42 && !s.recovering && !s.fault);
+    /* Next PD uses current geometry and final saturation after compensation. */
+    RLControlState saturated=s;
+    for(uint32_t t=316;t<=320;t++){
+        x=feedback(&saturated,t);
+        x.leg_spread_rad[0]=1.2f;
+        for(unsigned j=0;j<4;j++)x.motion.joint_position_rad[j]=1.4f;
+        CHECK(!RLControlExecute(&saturated,t,1,&x,NULL,&f));
+    }
+    CHECK(!RLMotion31MapPolicyLegTorqueToMotorOrder(f.tau_limited_nm,motor));
+    CHECK(!RLControlCompensateSpring(motor,x.leg_length_m,x.leg_spread_rad,expected));
+    CHECK(!RLControlCompensateSpring(zero,x.leg_length_m,x.leg_spread_rad,spring));
+    unsigned clipped=0;
+    for(unsigned j=0;j<4;j++){
+        CHECK(near(f.final_motor_nm[j],expected[j]));
+        CHECK(near(f.spring_motor_nm[j],spring[j]));
+        CHECK(fabsf(f.final_motor_nm[j])<=40);
+        clipped+=fabsf(f.final_motor_nm[j])==40;
+    }
+    CHECK(clipped>0);
 }
 
 #ifdef RL_RECOVERY_SHADOW_HOST

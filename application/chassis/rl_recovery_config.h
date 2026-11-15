@@ -1,6 +1,6 @@
 #ifndef RL_RECOVERY_CONFIG_H
 #define RL_RECOVERY_CONFIG_H
-/* Test firmware: each safe->enabled cycle begins with Recovery2100. */
+/* Test firmware: each safe->enabled cycle begins with the active Recovery actor (currently legacy tjb_recover). */
 #define RL_RECOVERY_AUTO_START 1u
 /* 1=observable encoder/IMU readiness; 0=qualified height/dual-support API only.
    Posture readiness is not proof of terrain height or contact. */
