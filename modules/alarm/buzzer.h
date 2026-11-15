@@ -57,4 +57,6 @@ void BuzzerInit();
 void BuzzerTask();
 BuzzzerInstance *BuzzerRegister(Buzzer_config_s *config);
 void AlarmSetStatus(BuzzzerInstance *buzzer, AlarmState_e state);
+/* Queue one short handoff tone for the 10 ms buzzer task. */
+void BuzzerRequestHandoffBeep(void);
 #endif // !BUZZER_H

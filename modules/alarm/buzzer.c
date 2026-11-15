@@ -6,6 +6,9 @@
 static PWMInstance *buzzer;
 // static uint8_t idx;
 static BuzzzerInstance *buzzer_list[BUZZER_DEVICE_CNT] = {0};
+static volatile uint32_t handoff_beep_requests;
+static uint32_t handoff_beep_served;
+static uint8_t handoff_beep_ticks;
 
 /**
  * @brief 蜂鸣器初始化
@@ -44,22 +47,31 @@ void AlarmSetStatus(BuzzzerInstance *buzzer, AlarmState_e state)
     buzzer->alarm_state = state;
 }
 
+void BuzzerRequestHandoffBeep(void)
+{
+    ++handoff_beep_requests;
+}
+
 void BuzzerTask()
 {
     BuzzzerInstance *buzz;
+    uint8_t alarm_active = 0u;
     for (size_t i = 0; i < BUZZER_DEVICE_CNT; ++i)
     {
         buzz = buzzer_list[i];
+        if (buzz == NULL)
+            continue;
         if (buzz->alarm_level > ALARM_LEVEL_LOW)
         {
             continue;
         }
         if (buzz->alarm_state == ALARM_OFF)
         {
-            PWMSetDutyRatio(buzzer, 0);
+            continue;
         }
         else
         {
+            alarm_active = 1u;
             PWMSetDutyRatio(buzzer, buzz->loudness);
             switch (buzz->octave)
             {
@@ -89,5 +101,20 @@ void BuzzerTask()
             }
             break;
         }
+    }
+    if (handoff_beep_served != handoff_beep_requests)
+    {
+        handoff_beep_served = handoff_beep_requests;
+        handoff_beep_ticks = 10u; /* 100 ms at the daemon task's 10 ms cadence. */
+    }
+    if (handoff_beep_ticks && !alarm_active)
+    {
+        PWMSetPeriod(buzzer, 1.0f / SoFreq);
+        PWMSetDutyRatio(buzzer, 0.4f);
+        --handoff_beep_ticks;
+    }
+    else if (!alarm_active)
+    {
+        PWMSetDutyRatio(buzzer, 0);
     }
 }

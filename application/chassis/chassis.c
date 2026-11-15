@@ -35,6 +35,7 @@
 #include "rl_control.h"
 #include "rl_recovery_config.h"
 #include "rl_capture.h"
+#include "buzzer.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include <math.h>
@@ -974,8 +975,12 @@ void ChassisRLRecoveryTick(void)
         if(candidate){rl_consumed_command=*candidate;rl_command_consumed=1u;}
         const int enabled=chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE &&
                           !upstair_flag && !upstair_flag0 && !jumpingflag;
+        const uint8_t was_recovering=rl_control_state.recovering;
         const int executed=RLControlExecute(&rl_control_state,xTaskGetTickCount(),enabled,
                                            &current,candidate,&rl_control_frame)==0;
+        if(executed && was_recovering && !rl_control_state.recovering &&
+           rl_control_state.handoff.committed)
+            BuzzerRequestHandoffBeep();
         taskENTER_CRITICAL();
         DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
         for(unsigned i=0;i<4;i++) {
@@ -1334,6 +1339,21 @@ void outputTorque()
 }
 
 /* 机器人底盘控制核心任务 */
+static void ChassisPublishFeedback(void)
+{
+    chassis_feedback_data.standup_flag = rl_control_state.recovery_session ?
+        rl_control_state.recovering : (uint8_t)(chassis_status && !upstair_flag);
+#ifdef ONE_BOARD
+    PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
+#endif
+#ifdef CHASSIS_BOARD
+    Chassis_Upload_Data_CAN_s tx_data;
+    ChassisCanPackUpload(&tx_data, &chassis_feedback_data);
+    memcpy(chassis_can->tx_buff, &tx_data, sizeof(tx_data));
+    CANTransmit(chassis_can, 0.01);
+#endif
+}
+
 void ChassisTask()
 {
 #ifdef ONE_BOARD
@@ -1503,7 +1523,10 @@ void ChassisTask()
     setTargetData();
     rl_pd_snapshot=CurrentRLSnapshot(1);
     /* The 1ms owner alone writes commands/capture/policy snapshots in this session. */
-    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE)return;
+    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE) {
+        ChassisPublishFeedback();
+        return;
+    }
     legLengthCalc();
     vmcCalc();
     flyDetect();
@@ -1538,16 +1561,5 @@ void ChassisTask()
     memcpy(shadow.applied_wheel_current_raw,rl_control_frame.wheel_current_raw,sizeof(shadow.applied_wheel_current_raw));
     RLShadowPublish(&shadow);
 
-    chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
-#ifdef ONE_BOARD
-    PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
-#endif
-#ifdef CHASSIS_BOARD
-    Chassis_Upload_Data_CAN_s tx_data;
-
-    ChassisCanPackUpload(&tx_data, &chassis_feedback_data);
-    memcpy(chassis_can->tx_buff, &tx_data, sizeof(tx_data));
-
-    CANTransmit(chassis_can, 0.01);
-#endif // CHASSIS_BOARD
+    ChassisPublishFeedback();
 }
