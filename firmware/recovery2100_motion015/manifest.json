@@ -14,8 +14,8 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 499772,
-    "DTCM_bytes": 82656,
+    "Flash_bytes": 499708,
+    "DTCM_bytes": 82624,
     "RAM_D1_bytes": 59456
   },
   "validation": {
@@ -58,13 +58,23 @@
       "run": 9,
       "skipped_missing_external_models": 6,
       "failed": 0
-    }
+    },
+    "both_skills_spring_host_checks": [
+      "Recovery same015 formula at startup",
+      "5ms compensation hold and geometry refresh",
+      "handoff keeps held final torque and spring with no duplication",
+      "wheelPD/limits unchanged",
+      "actual previous and target FIFO unchanged",
+      "Recovery invalid geometry latches SAFE zero",
+      "Motion final saturation40Nm"
+    ],
+    "simulation_results_scope": "Historical original V4 policy runs only; no new physical simulation or hardware test for this firmware compensation change"
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "554943724e160ae03f27025f2286d467ef4fa5cba63950bd40480a7b34f8f649",
-    "recovery2100_motion015.hex": "b382c5ef9eea83e72e9dcc2a06da4ac14f4fae640fb2b7a124531e9bf5d464aa"
+    "recovery2100_motion015.bin": "f5d4afa5446067281a70f46609b86e86ae2f807e5ea1768bddf1ec58a2482775",
+    "recovery2100_motion015.hex": "3aea4cf36c684020c543979fd6858bad175a2c4e83a62a715dc75ed3f9a5fa82"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -123,8 +133,8 @@
     "application/chassis/recovery2100/recovery_actor.h": "d47ac77533955b412d2d8bb8cdf0296cfd7f2465746c9ed5c43030b09384b0de",
     "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
-    "application/chassis/rl_control.c": "e0004e4cad0d4c40465756bb137efa78c5859ce7ee445055f52438ce96233df0",
-    "application/chassis/rl_control.h": "34ca5f9e55da0726aa6ec004fe12ac8861f3625b16fb10e8222a6e8fa24a2f3f",
+    "application/chassis/rl_control.c": "8ddc085e37afb5016afe9c769c5e84bd5b1768c55fd385da32e5afadf7421e54",
+    "application/chassis/rl_control.h": "627352b92005e58c7166e4cd5855ab55d426402894f6fd47ff7b429fd2a3601f",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
     "application/chassis/rl_motion31.c": "6b766175822c363639fab7e82519afd0f773935e3311bef2ae1b326ffa49446d",
@@ -165,7 +175,7 @@
   },
   "default_proprioceptive_dwell_ms": 20,
   "default_proprioceptive_leg_center_error_rad": 0.5,
-  "audit_revision": "legacy_tjb_recover_motion015_adopted_target_spring_fix",
+  "audit_revision": "legacy_tjb_recover_motion015_shared_spring_both_skills",
   "supersedes_firmware_commit": "ddb5045",
   "build_source_sha256": {
     "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
@@ -180,8 +190,14 @@
   "active_recovery_model": "c94bb9f tjb_recover RL_10_19 31-128-64-32-6",
   "active_recovery_decoder": "absolute_linear legs1.5mean,wheels100mean",
   "spring_compensation": {
-    "Recovery": false,
-    "Motion": "ordinary015 RLControlCompensateSpring only after transported Motion target PD adoption; held5ms; final limit40Nm",
-    "simulation": "fullV4+NET without extra compensation; equivalent-system collection premise unverified"
+    "Recovery": true,
+    "Motion": true,
+    "formula": "ordinary015 RLControlCompensateSpring; only compensated PD result sent; zero-input call diagnostic only",
+    "cadence": "PD5ms updates and hold",
+    "handoff": "same compensation path; no toggle, no extra addition, no reset",
+    "final_leg_limit_Nm": 40,
+    "simulation": "unchanged completeV4+NET; no extra software compensation",
+    "basis": "user explicitly selected hardware compensation plus physical spring deployment; V4 equivalent-system premise remains unverified",
+    "hardware_validated": false
   }
 }

@@ -75,6 +75,24 @@ static int zero_output(const RLControlFrame *f)
     return f->wheel_current_raw[0]==0 && f->wheel_current_raw[1]==0;
 }
 
+/* Compare to the ordinary015 output, not PD+twice the diagnostic term. */
+static void check_spring(const RLShadowSnapshot *x,const RLControlFrame *f,int valid)
+{
+    if(!valid){
+        for(unsigned j=0;j<4;j++)CHECK(f->spring_motor_nm[j]==0 && f->final_motor_nm[j]==0);
+        return;
+    }
+    float motor[4],expected[4],spring[4],zero[4]={0};
+    CHECK(!RLMotion31MapPolicyLegTorqueToMotorOrder(f->tau_limited_nm,motor));
+    CHECK(!RLControlCompensateSpring(motor,x->leg_length_m,x->leg_spread_rad,expected));
+    CHECK(!RLControlCompensateSpring(zero,x->leg_length_m,x->leg_spread_rad,spring));
+    for(unsigned j=0;j<4;j++){
+        CHECK(near(f->spring_motor_nm[j],spring[j]));
+        CHECK(near(f->final_motor_nm[j],expected[j]));
+        CHECK(fabsf(f->final_motor_nm[j])<=40);
+    }
+}
+
 static void test_explicit_start_and_contracts(void)
 {
     RLControlState s={0};
@@ -247,7 +265,7 @@ static void schedule(uint32_t base)
         CHECK(near(f.tau_limited_nm[2],right) && near(f.tau_limited_nm[5],left));
         CHECK(fabsf(f.wheel_current_raw[0]-left*RL_MOTION31_WHEEL_CURRENT_PER_NM)<.001f);
         CHECK(fabsf(f.wheel_current_raw[1]+right*RL_MOTION31_WHEEL_CURRENT_PER_NM)<.001f);
-        for(unsigned j=0;j<4;j++)CHECK(f.spring_motor_nm[j]==0);
+        check_spring(&x,&f,pd_started);
     }
 }
 
@@ -263,11 +281,34 @@ static void test_wheel_session_cap(void)
         CHECK(near(f.tau_limited_nm[5],t>=116?-4.8f:0));
         CHECK(near(f.tau_pd_nm[2],t>=105?20:0));
         CHECK(near(f.tau_pd_nm[5],t>=105?-20:0));
-        for(unsigned j=0;j<4;j++)CHECK(f.spring_motor_nm[j]==0);
+        RLShadowSnapshot x=feedback(&s,t);check_spring(&x,&f,1);
     }
     CHECK(s.adopted_target[2]==100 && s.adopted_target[5]==-100);
     CHECK(fabsf(f.wheel_current_raw[0])<=RL_CONTROL_WHEEL_RAW_LIMIT);
     CHECK(fabsf(f.wheel_current_raw[1])<=RL_CONTROL_WHEEL_RAW_LIMIT);
+}
+
+static void test_recovery_spring_held_and_fault(void)
+{
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+    RLShadowCommand c=packet(&s,100,1,NULL,0);
+    CHECK(!step(&s,100,&c,0,&f));
+    RLShadowSnapshot x=feedback(&s,100);check_spring(&x,&f,1);
+    CHECK(s.recovering && fabsf(f.spring_motor_nm[0])>1.f);
+    float held[4];memcpy(held,f.final_motor_nm,sizeof(held));
+    for(uint32_t t=101;t<=104;t++){
+        x=feedback(&s,t);x.leg_spread_rad[0]=1.2f;
+        CHECK(!RLControlExecute(&s,t,1,&x,NULL,&f));
+        CHECK(!memcmp(f.final_motor_nm,held,sizeof(held)));
+    }
+    x=feedback(&s,105);x.leg_spread_rad[0]=1.2f;
+    CHECK(!RLControlExecute(&s,105,1,&x,NULL,&f));
+    check_spring(&x,&f,1);CHECK(!near(f.final_motor_nm[0],held[0]));
+    for(uint32_t t=106;t<=109;t++)CHECK(!step(&s,t,NULL,0,&f));
+    x=feedback(&s,110);x.leg_length_m[0]=NAN;
+    CHECK(RLControlExecute(&s,110,1,&x,NULL,&f)<0);
+    CHECK(s.fault==RL_FAULT_COMPENSATION && f.owner==RL_OWNER_SAFE && zero_output(&f));
+    CHECK(step(&s,111,NULL,0,&f)<0 && zero_output(&f));
 }
 
 static void test_faults_latch_zero(void)
@@ -447,7 +488,9 @@ static void test_handoff(void)
     CHECK(!step(&s,301,&c,1,&f));
     CHECK(!s.recovering && s.handoff.committed && s.epoch==epoch+1u);
     CHECK(s.recovery_session && s.active && f.owner==RL_OWNER_RL);
-    for(unsigned j=0;j<4;j++)CHECK(f.spring_motor_nm[j]==0);
+    check_spring(&x,&f,1);
+    CHECK(!memcmp(f.spring_motor_nm,before.recovery_spring,sizeof(f.spring_motor_nm)));
+    CHECK(!memcmp(f.final_motor_nm,before.recovery_motor,sizeof(f.final_motor_nm)));
     CHECK(!memcmp(s.adopted_target,before.adopted_target,sizeof(s.adopted_target)));
     CHECK(s.adopted_sequence==before.adopted_sequence);
     CHECK(!memcmp(s.recovery_request,c.motion_preview.target,sizeof(s.recovery_request)));
@@ -466,7 +509,7 @@ static void test_handoff(void)
     for(uint32_t t=303;t<=309;t++){
         CHECK(!step(&s,t,NULL,1,&f));
         CHECK(s.adopted_sequence==before.adopted_sequence);
-        for(unsigned j=0;j<4;j++)CHECK(f.spring_motor_nm[j]==0);
+        x=feedback(&s,t);check_spring(&x,&f,1);
     }
     CHECK(!step(&s,310,NULL,1,&f));
     CHECK(s.adopted_sequence==40);
@@ -801,6 +844,7 @@ int main(void)
     for(unsigned phase=0;phase<5;phase++)schedule(100u+phase);
     schedule(UINT32_MAX-19u);
     test_wheel_session_cap();
+    test_recovery_spring_held_and_fault();
     test_faults_latch_zero();
     test_quality_rejections();
     test_inhibited_session_keeps_safe_owner();

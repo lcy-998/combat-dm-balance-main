@@ -174,8 +174,8 @@ int RLControlStartRecovery(RLControlState *state)
     return 0;
 }
 
-/* Explicit Recovery session. Same PD and mappings as Motion. Recovery has no spring term;
-   adopted Motion targets use the ordinary015 compensation at the PD cadence.
+/* Explicit Recovery session. Both Recovery and Motion use ordinary015 spring
+   compensation once per PD update; mode handoff never toggles that term.
    Called by the 1ms chassis owner: target transport5ms, PD5ms, wheels7/11ms.
    Fault returns zero commands to the caller, never falls back to LQR mid-Swing. */
 static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
@@ -252,7 +252,6 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
     const unsigned slot=now%32u;
     memcpy(s->recovery_targets[slot],s->recovery_request,sizeof(s->recovery_request));
     s->recovery_target_sequence[slot]=s->recovery_request_sequence;
-    s->recovery_target_motion[slot]=!s->recovering;
     if((!s->recovery_pd_valid && now%5u==0u) ||
        (s->recovery_pd_valid && (uint32_t)(now-s->adopted_tick_ms)>=5u)){
         memcpy(s->adopted_target,s->recovery_targets[(now-5u)%32u],sizeof(s->adopted_target));
@@ -266,13 +265,12 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
         float motor[4];
         if(RLMotion31MapPolicyLegTorqueToMotorOrder(s->recovery_pd,motor))
             return execution_fault(s,f,RL_FAULT_PD);
-        memset(s->recovery_spring,0,sizeof(s->recovery_spring));
-        if(s->recovery_target_motion[(now-5u)%32u]) {
-            const float zero[4]={0};
-            if(RLControlCompensateSpring(zero,x->leg_length_m,x->leg_spread_rad,s->recovery_spring) ||
-               RLControlCompensateSpring(motor,x->leg_length_m,x->leg_spread_rad,s->recovery_motor))
-                return execution_fault(s,f,RL_FAULT_COMPENSATION);
-        } else memcpy(s->recovery_motor,motor,sizeof(motor));
+        /* First call is diagnostic only; only the second result is sent.
+           Both skills share this path: no second compensation at handoff. */
+        const float zero[4]={0};
+        if(RLControlCompensateSpring(zero,x->leg_length_m,x->leg_spread_rad,s->recovery_spring) ||
+           RLControlCompensateSpring(motor,x->leg_length_m,x->leg_spread_rad,s->recovery_motor))
+            return execution_fault(s,f,RL_FAULT_COMPENSATION);
     }
     s->recovery_wheels[slot][0]=s->recovery_pd[2];s->recovery_wheels[slot][1]=s->recovery_pd[5];
     memcpy(f->tau_pd_nm,s->recovery_raw_pd,sizeof(s->recovery_raw_pd));

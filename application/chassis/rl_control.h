@@ -44,7 +44,6 @@ typedef struct {
     float recovery_request[6], recovery_targets[32][6], recovery_wheels[32][2];
     float recovery_pd[6], recovery_raw_pd[6];
     uint32_t recovery_target_sequence[32];
-    uint8_t recovery_target_motion[32]; /* follows the transported physical target */
     float recovery_motor[4], recovery_spring[4]; /* held at the PD5ms cadence */
     RLHandoffState handoff;
     uint8_t handoff_source; /* 0=none, 1=qualified support, 2=encoder/IMU posture */
