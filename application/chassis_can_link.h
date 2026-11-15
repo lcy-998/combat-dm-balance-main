@@ -69,15 +69,15 @@ static void ChassisCanCtrlRxCallback(CANInstance *_instance)
     if (_instance->rx_len != sizeof(rx_data))
     {
         memset(ctx->ctrl_dst, 0, sizeof(*ctx->ctrl_dst));
+        return;
     }
-    else
+    memcpy(&rx_data, _instance->rx_buff, sizeof(rx_data));
+    if (rx_data.chassis_mode > CHASSIS_FOLLOW_GIMBAL_YAW)
     {
-        memcpy(&rx_data, _instance->rx_buff, sizeof(rx_data));
-        if (rx_data.chassis_mode > CHASSIS_FOLLOW_GIMBAL_YAW)
-            memset(ctx->ctrl_dst, 0, sizeof(*ctx->ctrl_dst));
-        else
-            ChassisCanUnpackCtrl(ctx->ctrl_dst, &rx_data);
+        memset(ctx->ctrl_dst, 0, sizeof(*ctx->ctrl_dst));
+        return;
     }
+    ChassisCanUnpackCtrl(ctx->ctrl_dst, &rx_data);
     ctx->last_rx_tick_ms = HAL_GetTick();
     ++ctx->rx_sequence;
 }

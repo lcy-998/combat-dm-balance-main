@@ -13,7 +13,7 @@ import update_xcube_ai_weights as converter
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT.parent / "2026_10_15-20_16__motion31_u1600_detailed" / "actor1104.onnx"
 GENERATED = ROOT / "X-CUBE-AI" / "App" / "tjb_network_data_params.c"
-NETWORK_MODEL = Path("D:/Combat/nzh_network/policy.onnx")
+NETWORK_MODEL = Path("D:/Combat/nzh_network/wheel_direct_teacher_plain_mlp.onnx")
 NETWORK_GENERATED = ROOT / "X-CUBE-AI" / "App" / "network_data_params.c"
 
 
@@ -21,7 +21,7 @@ class WeightConverterTests(unittest.TestCase):
     def test_matches_st_generated_bytes(self):
         for target, model_path, generated_path, count in (
             ("tjb_network", MODEL, GENERATED, 14630),
-            ("network", NETWORK_MODEL, NETWORK_GENERATED, 29550),
+            ("network", NETWORK_MODEL, NETWORK_GENERATED, 65574),
         ):
             with self.subTest(target=target):
                 if not model_path.is_file():

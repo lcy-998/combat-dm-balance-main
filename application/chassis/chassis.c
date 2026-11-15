@@ -1399,8 +1399,9 @@ void ChassisTask()
     rx_tick = chassis_ctrl_rx_ctx.last_rx_tick_ms;
     received_cmd = chassis_can_cmd;
     taskEXIT_CRITICAL();
-    if (ChassisCmdWatchdogFresh(&chassis_cmd_watchdog, rx_sequence, rx_tick,
-                                HAL_GetTick(), CHASSIS_CMD_TIMEOUT_MS))
+    if (ChassisCmdWatchdogAccept(&chassis_cmd_watchdog, rx_sequence, rx_tick,
+                                 HAL_GetTick(), CHASSIS_CMD_TIMEOUT_MS,
+                                 received_cmd.chassis_mode == CHASSIS_ZERO_FORCE))
         chassis_cmd_recv = received_cmd;
     else
         memset(&chassis_cmd_recv, 0, sizeof(chassis_cmd_recv));

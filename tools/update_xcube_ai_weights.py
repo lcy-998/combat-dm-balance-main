@@ -3,7 +3,7 @@
 
 Usage:
   python tools/update_xcube_ai_weights.py --target tjb_network path/to/actor.onnx
-  python tools/update_xcube_ai_weights.py --target network path/to/policy.onnx
+  python tools/update_xcube_ai_weights.py --target network path/to/wheel_direct_teacher_plain_mlp.onnx
 
 Only the learned FP32 initializers may change for the selected target.
 """
@@ -31,10 +31,10 @@ TARGETS = {
         "weight_bytes": 58520,
     },
     "network": {
-        "dims": [(160, 25), (152, 160), (6, 152)],
+        "dims": [(256, 25), (224, 256), (6, 224)],
         "ops": ["Gemm", "Relu", "Gemm", "Relu", "Gemm"],
         "input": 25,
-        "weight_bytes": 118200,
+        "weight_bytes": 262296,
     },
 }
 
