@@ -5,7 +5,7 @@
   "bin_load_address": "0x08000000",
   "compiler": "xPack ARM GCC14.2.1-1.1",
   "optimization": "-Og (no fast-math)",
-  "automatic_flow": "ZERO_FORCE arms -> enable -> legacy tjb_recover -> proprioceptive readiness20ms (tilt.35rad,gyro3rad/s,leg8rad/s) + fresh Motion target continuity ->31D015 Motion",
+  "automatic_flow": "ZERO_FORCE arms -> enable -> Recovery2100 distilled256 -> proprioceptive readiness20ms (tilt.35rad,gyro3rad/s,leg8rad/s) + fresh Motion target continuity ->31D015 Motion",
   "default_external_contact_dependency": false,
   "contact_proven": false,
   "limits": {
@@ -14,7 +14,7 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 499708,
+    "Flash_bytes": 640316,
     "DTCM_bytes": 82624,
     "RAM_D1_bytes": 59456
   },
@@ -37,23 +37,14 @@
     ],
     "wide20ms_cases": 7,
     "wide20ms_handoff_hold10": 6,
-    "current_model_simulation_handoff_hold10": 0,
+    "current_model_simulation_handoff_hold10": 6,
     "current_model_simulation_cases": 7,
-    "current_model_simulation_result": "FAILED7/7 beforehandoff,0.49-1.21s; not a successful rise firmware",
     "recheck_runs": [
-      "tjb_v4_recheck_motion_spring_fix_r1",
-      "motion015_v4_recheck_motion_spring_fix_r1"
+      "wide20ms_r1",
+      "firmware_motion015_swing7_r4"
     ],
     "motion_v4_standing_hold10_passed": 2,
     "motion_v4_standing_cases": 2,
-    "host_motion_spring_checks": [
-      "delayed mode follows target",
-      "same015 formula",
-      "PD5ms hold",
-      "next PD geometry refresh",
-      "final saturation40Nm",
-      "invalid geometry SAFE zero"
-    ],
     "tools_tests": {
       "run": 9,
       "skipped_missing_external_models": 6,
@@ -68,13 +59,37 @@
       "Recovery invalid geometry latches SAFE zero",
       "Motion final saturation40Nm"
     ],
-    "simulation_results_scope": "Historical original V4 policy runs only; no new physical simulation or hardware test for this firmware compensation change"
+    "simulation_results_scope": "Historical fullV4 policy results for identical restored actor and cubic decoder; no extra compensation in simulation. No new hardware test.",
+    "legacy_tjb_simulation": {
+      "cases": 7,
+      "passed": 0,
+      "result": "FAILED7/7 beforehandoff,0.49-1.21s; not a successful rise firmware"
+    },
+    "current_model_simulation_result": "Historical fullV4 wide20ms_r1:6/7, switch.38-.72s, hold12.256-12.580s; not a new hardware/compensation test",
+    "recovery_golden128": {
+      "rows": 128,
+      "mean_max_abs": 4.293397068977356e-07,
+      "physical_max_abs": 2.288818359375e-05,
+      "single_decoder": "PASS bitwise Physical==Mean+Decode",
+      "actor_pt_sha256": "660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d",
+      "golden_sha256": "538afe8dddd86b7c904393f256eaf8282b97fa7b06ea568c32938f24ea0be7fa",
+      "restored_from_commit": "ddb5045",
+      "teacher_sha256": "5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9"
+    },
+    "historical_40e1b8b_motion_only_checks": [
+      "delayed mode follows target",
+      "same015 formula",
+      "PD5ms hold",
+      "next PD geometry refresh",
+      "final saturation40Nm",
+      "invalid geometry SAFE zero"
+    ]
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "f5d4afa5446067281a70f46609b86e86ae2f807e5ea1768bddf1ec58a2482775",
-    "recovery2100_motion015.hex": "3aea4cf36c684020c543979fd6858bad175a2c4e83a62a715dc75ed3f9a5fa82"
+    "recovery2100_motion015.bin": "dbc4344ca30723ce2c9e72946e18b51235b870392e57cfc5a3debbfc48d71418",
+    "recovery2100_motion015.hex": "1355718d5b56ae53da58325ad15f0df46ba6ce4e180455d52c25689c6bef0a75"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -129,15 +144,15 @@
     "application/chassis/chassis.h": "b665f63c7b1fbbd133429ae54a548a807b21ed1e4cc477119fc467e0dca04a4a",
     "application/chassis/chassis.md": "de01441e22265573d4c6e89db1a2615537918f24b5764e98aaa724f65ea4d212",
     "application/chassis/mecanum.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/recovery2100/recovery_actor.c": "f457cf2f0648cd93a1046eb19d3c96509f0e1ab33dfaf6239a8bd6e084b78d46",
-    "application/chassis/recovery2100/recovery_actor.h": "d47ac77533955b412d2d8bb8cdf0296cfd7f2465746c9ed5c43030b09384b0de",
+    "application/chassis/recovery2100/recovery_actor.c": "22851bd06a827a3016bcf551745a2afaa21f137642a2c6d32750ea9410f13b06",
+    "application/chassis/recovery2100/recovery_actor.h": "2fbb04d75b1a5ff682e19554e161b68bb7b58ea817ce99446a353683bb2a1e8c",
     "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
     "application/chassis/rl_control.c": "8ddc085e37afb5016afe9c769c5e84bd5b1768c55fd385da32e5afadf7421e54",
     "application/chassis/rl_control.h": "627352b92005e58c7166e4cd5855ab55d426402894f6fd47ff7b429fd2a3601f",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
-    "application/chassis/rl_motion31.c": "6b766175822c363639fab7e82519afd0f773935e3311bef2ae1b326ffa49446d",
+    "application/chassis/rl_motion31.c": "65bc903a659dbf1df3b509319fd62d61a7076ec72ef4b907a68f34071370f1fa",
     "application/chassis/rl_motion31.h": "701b6ab0a9013284f8ab9c2742dd018ae9ae7fe622efe77cf982a14515762581",
     "application/chassis/rl_shadow.c": "d3dc13ed5bfaf2f481f516ee87583eb80f487f31ce2569568bccbc3a1225fdfc",
     "application/chassis/rl_shadow.h": "6949ea9e7c5ba1b8ae110d472d8470d6c598ddd4207f3722f1494e5ed2e38edb",
@@ -171,12 +186,12 @@
     "modules/motor/servo_motor/servo_motor.md": "f3e6078b31124ab20ecb192e69b6b746f0097191c575128a08fba21dd7707254",
     "modules/motor/step_motor/step_motor.c": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "modules/motor/step_motor/step_motor.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/rl_recovery_config.h": "79ae72cd38afe2885fcda050b90129b781190947df2bb618cd3ab0617c6713e3"
+    "application/chassis/rl_recovery_config.h": "b9bf0490610f72d780f40d73f10aad68a8aec77ad7b084f58ca0986f6c4f332e"
   },
   "default_proprioceptive_dwell_ms": 20,
   "default_proprioceptive_leg_center_error_rad": 0.5,
-  "audit_revision": "legacy_tjb_recover_motion015_shared_spring_both_skills",
-  "supersedes_firmware_commit": "ddb5045",
+  "audit_revision": "restored_recovery2100_cubic_motion015_both_skills_spring",
+  "supersedes_firmware_commit": "e2591e9",
   "build_source_sha256": {
     "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
     "STM32H723XG_FLASH.ld": "43393d00f784a7d78b305f3fa5bee6175829eb3319bd48cd5898b448d18ca390"
@@ -187,8 +202,8 @@
     "leg_speed_rad_s": 8,
     "leg_center_error_rad": 0.5
   },
-  "active_recovery_model": "c94bb9f tjb_recover RL_10_19 31-128-64-32-6",
-  "active_recovery_decoder": "absolute_linear legs1.5mean,wheels100mean",
+  "active_recovery_model": "Recovery2100 distilled 31-256-128-64-6 ELU/Tanh; C restored byte-identical from ddb5045",
+  "active_recovery_decoder": "q=center+.15*mean+(reach-.15)*mean^3; wheels100*mean; exactly once",
   "spring_compensation": {
     "Recovery": true,
     "Motion": true,
@@ -199,5 +214,17 @@
     "simulation": "unchanged completeV4+NET; no extra software compensation",
     "basis": "user explicitly selected hardware compensation plus physical spring deployment; V4 equivalent-system premise remains unverified",
     "hardware_validated": false
+  },
+  "recovery_identity": {
+    "rows": 128,
+    "mean_max_abs": 4.293397068977356e-07,
+    "physical_max_abs": 2.288818359375e-05,
+    "single_decoder": "PASS bitwise Physical==Mean+Decode",
+    "actor_pt_sha256": "660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d",
+    "golden_sha256": "538afe8dddd86b7c904393f256eaf8282b97fa7b06ea568c32938f24ea0be7fa",
+    "restored_from_commit": "ddb5045",
+    "teacher_sha256": "5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9",
+    "FP32_parameters": 49734,
+    "weight_bytes": 198936
   }
 }

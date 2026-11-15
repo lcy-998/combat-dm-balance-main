@@ -1,8 +1,8 @@
-> **当前网络替换试验版：** Recovery已改为旧`tjb_recover`（c94bb9f，31→128→64→32→6），腿`1.5×mean`、轮`100×mean`。015 Motion和当前控制配置不变。仿真7组全部交接前失败，不是此前2100成功版；先前2100版可用`ddb5045`。详见[替换报告](../artifacts/tjb_recover_replacement/REPORT.md)。历史路径名不代表当前网络身份。
+> **当前2100恢复版：** Recovery已从旧tjb换回2100蒸馏小模型（31→256→128→64→6），使用固定中心三次绝对腿目标、轮100×mean。Recovery与Motion实机两阶段均保留015弹簧补偿。旧tjb替换及0/7结果仅为历史对照。
 
 # Recovery2100起身 → 31D 015 Motion自动接管
 
-本分支为STM32H723实机试验版本。当前Recovery为旧tjb_recover的31→128→64→32→6独立C网络；015 Motion为31→256→128→64→6的X-CUBE-AI网络，两套权重均在仓库内。此前2100蒸馏小模型为31→256→128→64→6，成功版回退点ddb5045；当前没有装载它。
+本分支为STM32H723实机试验版本。当前Recovery为2100蒸馏小模型的31→256→128→64→6独立C网络；015 Motion为31→256→128→64→6的X-CUBE-AI网络。Recovery权重从ddb5045逐字节恢复，保留之后的安全修复和两阶段弹簧补偿。
 
 ## 仿真与实机补偿口径
 
@@ -60,10 +60,10 @@ capture为v3，新增source/requested/committed及实际Actor输入tick。读取
 
 ## 模型与执行合同
 
-| 项目 | 当前旧tjb Recovery | 015 Motion |
+| 项目 | 当前2100蒸馏Recovery | 015 Motion |
 |---|---|---|
 | 网络 | `recovery2100/recovery_actor.c`，确定性ELU/Tanh | 015原X-CUBE-AI `tjb_network` |
-| 腿目标 | 1.5×mean绝对目标；仅历史2100使用固定中心三次公式 | C0五次高度中心+0.15×mean |
+| 腿目标 | 固定中心三次绝对目标，±1.5rad包络 | C0五次高度中心+0.15×mean |
 | 轮目标 | 100×mean rad/s | 80×mean rad/s |
 | skill25–27 | 0,1,0 | 1,0,0 |
 
@@ -71,7 +71,7 @@ capture为v3，新增source/requested/committed及实际Actor输入tick。读取
 
 策略10ms。显式Recovery→Motion会话由电机发送前1ms入口拥有六通道输出；PD5ms，目标运输5ms，模型双轮力矩运输7/11ms。收到状态包名义20ms、启动暖填。PD40/2/0.2；腿40Nm、轮4.8Nm；保留015驱动原始轮电流限幅16384，实际电流/力矩比例未实测。此会话Recovery与Motion阶段均复用RLControlCompensateSpring，按PD5ms读取实际腿长/夹角更新并保持，最终腿力矩限幅±40Nm。两阶段共用同一输出路径，删除已无用途的仅Motion补偿模式标记；交接不重复叠加补偿。真实机械弹簧及驱动配置仍需按本机平台核对。普通015传统入口保留，但默认自动Recovery会话使用上述明确合同。
 
-历史2100蒸馏的唯一教师SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。当前旧tjb替换不是该教师的蒸馏模型；没有新训练。历史2100源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。
+2100蒸馏的唯一教师SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。当前恢复的是该教师的蒸馏小模型，非大教师原网络；没有新训练。源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。
 
 ## 构建与交付
 
@@ -88,7 +88,7 @@ CPU原0158组与Recovery控制/真实shadow14情景通过；128条真实golden�
 
 ## 实车前兼容审查更新
 
-两套权重均为C，Recovery是独立const float推理核，Motion为ST打包ai_u64推理，格式不同但不依赖ONNX运行。ST格式的`tjb_recover*`未参与当前活动构建，但其旧128网络权重已经提取到独立C核并作为当前Recovery；recovery2100目录名不代表当前权重身份。
+两套权重均为C，Recovery是独立const float推理核，Motion为ST打包ai_u64推理，格式不同但不依赖ONNX运行。旧128的tjb_recover网络不再作为当前Recovery；recovery2100目录内已恢复ddb5045的2100蒸馏C权重。
 
 本次修复模式冲突误释放会话、新会话复用旧FIFO和采集过早冻结三项bug，旧ffed642固件/ZIP被当前产物取代。15种真实shadow情景与9/9测试通过。新固件只能称可进入有保护的分步实车验证，尚无目标deadline/栈高水位及本车零位、方向、力矩标定实测证据。详细根因/定位/处理和边界见`artifacts/recovery2100_vehicle_audit/REPORT.md`。
 
@@ -108,4 +108,14 @@ Recovery会话采集按200Hz，在接管/故障触发并保存约555ms后续；�
 
 Recovery尚未产生有效策略请求时沿原SAFE路径保持零输出；反馈/几何失效锁零。交接时补偿不切换、不重复、不清缓存。实际C消费者核对Recovery补偿公式/5ms保持与刷新、两阶段最终限矩、交接帧无额外项、无效几何锁零，原时序/previous/故障测试保持通过。
 
-当前仍装载旧tjb_recover，不自动换回2100；先前V4下旧tjb0/7、2100小模型6/7是原仿真记录，不是本次实机补偿效果。仿真路径未修改，因此没有以额外叠加补偿重新做V4试验。未刷机，未驱动真实电机。
+该补偿提交e2591e9当时仍装载旧tjb_recover；后续按用户要求恢复2100，见下节。先前V4下旧tjb0/7、2100小模型6/7是原仿真记录，不是本次实机补偿效果。仿真路径未修改，因此没有以额外叠加补偿重新做V4试验。未刷机，未驱动真实电机。
+
+## 恢复2100蒸馏小模型（2026-11-15）
+
+从ddb5045仅恢复RecoveryActor C/H及Recovery三次decoder，未回退整个分支。保留e2591e9的Recovery/Motion两阶段015补偿、当前FIFO/previous/epoch、安全锁零及20ms本体交接门。
+
+腿目标公式：d=mean；R=d>=0时upper-center，否则center-lower；q=center+0.15*d+(R-0.15)*d³。中心[-0.1309740543,-0.1511767805,0.1309740543,-0.1511767805]rad，边界±1.5rad，轮100*mean rad/s。Motion仍C0poly5(height)+0.15*mean、轮80*mean。
+
+部署actor.pt SHA256为660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d；128真实状态C golden最大误差mean4.2934e-7、物理目标2.2888e-5，Physical与Mean后Decode逐位一致，decoder只执行一次。主机9/9套通过（含真实shadow15情景、两阶段补偿和非端点三次解码）；工具3通过/6外部原模型缺失跳过，ARM构建通过Flash640316B、DTCM82624B、RAM_D159456B。
+
+2100独立控制/20ms交接既有V4记录均6/7，使用同一部署Actor；此轮未新跑仿真，未将额外补偿叠入V4。新固件实机能力、MCUdeadline与栈高水位仍未验证，未刷机。权重、补偿、decoder、SHA及二进制见当前manifest；真实golden证据在数据根recovery_motion_handoff/restore2100_both_spring_evidence。

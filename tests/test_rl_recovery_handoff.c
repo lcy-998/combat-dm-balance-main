@@ -125,6 +125,17 @@ static void test_explicit_start_and_contracts(void)
         CHECK(near(recovery.target[legs[j]],ends[j]));
         CHECK(near(motion.target[legs[j]],centers[j]+.15f*a[legs[j]]));
     }
+    /* Non-endpoint and zero probes distinguish cubic from linear1.5*mean. */
+    const float midmean[6]={.5f,-.5f,.1f,.25f,-.25f,-.1f};
+    float cubic[6];CHECK(!RLMotion31DecodeRecoveryMean(midmean,cubic));
+    for(unsigned j=0;j<4;j++){
+        const float d=midmean[legs[j]];
+        const float reach=d>=0?1.5f-centers[j]:centers[j]+1.5f;
+        CHECK(near(cubic[legs[j]],centers[j]+.15f*d+(reach-.15f)*d*d*d));
+        CHECK(fabsf(cubic[legs[j]]-1.5f*d)>.01f);
+    }
+    const float zeromean[6]={0};CHECK(!RLMotion31DecodeRecoveryMean(zeromean,cubic));
+    for(unsigned j=0;j<4;j++)CHECK(near(cubic[legs[j]],centers[j]));
     CHECK(recovery.target[2]==25 && recovery.target[5]==-25);
     CHECK(motion.target[2]==20 && motion.target[5]==-20);
     float target[6],bad[6]={0}; bad[5]=NAN;

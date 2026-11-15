@@ -1,4 +1,4 @@
-> **当前网络替换试验版：** Recovery已改为旧`tjb_recover`（c94bb9f，31→128→64→32→6），腿`1.5×mean`、轮`100×mean`。015 Motion和当前控制配置不变。仿真7组全部交接前失败，不是此前2100成功版；先前2100版可用`ddb5045`。详见[替换报告](../../artifacts/tjb_recover_replacement/REPORT.md)。历史路径名不代表当前网络身份。
+> **当前2100恢复版：** Recovery为2100蒸馏小模型（31→256→128→64→6），固定中心三次腿目标、轮100×mean；Motion保持015网络。两阶段实机均启用原015补偿，交接不重复添加。
 
 # Recovery2100 + 31D015 Motion试验固件
 
@@ -11,4 +11,4 @@
 
 观察`g_rl_shadow_debug.recovery_mode`由1变0、`handoff_committed=1`确认交接。默认`handoff_source=2`是姿态/构型准备条件，不是触地证明。不得通过写假接触或改编码器零位强行触发。
 
-本次未由agent刷机或驱动电机；真实MCU推理耗时/任务栈高水位尚待目标记录。实机Recovery与Motion两阶段共用普通015原有弹簧补偿，交接不切换补偿开关、不重复叠加，按PD5ms更新并保持，最终±40Nm限幅。仿真采用完整V4，不额外叠加补偿。当前旧tjb_recover复测仍0/7，不能据此包宣称稳定起身。完整接口、操作和测试边界见[接入说明](../../docs/RECOVERY2100_HANDOFF.md)。SHA与构建占用见manifest.json。
+本次未由agent刷机或驱动电机；真实MCU推理耗时/任务栈高水位尚待目标记录。实机Recovery与Motion两阶段共用普通015原有弹簧补偿，交接不切换补偿开关、不重复叠加，按PD5ms更新并保持，最终±40Nm限幅。仿真采用完整V4，不额外叠加补偿。此前同一2100部署模型V4下独立控制/交接均6/7；不是本固件新增实机验证，未承诺任意倒地稳定起身。完整接口、操作和测试边界见[接入说明](../../docs/RECOVERY2100_HANDOFF.md)。SHA与构建占用见manifest.json。

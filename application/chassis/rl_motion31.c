@@ -193,17 +193,19 @@ int RLMotion31SupportCenter(double h,double out[4])
     return 0;
 }
 
-/* c94bb9f tjb_recover: Tanh mean is an absolute linear target contract.
-   Deliberately different from2100 cubic and015 Motion center residual. */
 int RLMotion31DecodeRecoveryMean(const float mean[6], float target[6])
 {
+    static const float center[4]={-0.13097405433654785f,-0.15117678046226501f,
+                                  0.13097405433654785f,-0.15117678046226501f};
+    const unsigned legs[4]={0,1,3,4};
     if(!mean||!target||!finite_array(mean,6))return -1;
-    for(unsigned i=0;i<6;i++){
-        if(fabsf(mean[i])>1.000001f)return -1;
-        const float a=fminf(fmaxf(mean[i],-1.f),1.f);
-        target[i]=(i==2||i==5)?100.f*a:1.5f*a;
+    for(unsigned i=0;i<6;i++)if(fabsf(mean[i])>1.000001f)return -1;
+    target[2]=100.f*mean[2];target[5]=100.f*mean[5];
+    for(unsigned j=0;j<4;j++){
+        float a=mean[legs[j]],reach=a>=0?1.5f-center[j]:center[j]+1.5f;
+        target[legs[j]]=center[j]+.15f*a+(reach-.15f)*a*a*a;
     }
-    return 0;
+    return finite_array(target,6)?0:-1;
 }
 
 int RLMotion31DecodeOutput(const float action[RL_MOTION31_ACTION_SIZE],
