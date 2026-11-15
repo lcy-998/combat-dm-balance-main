@@ -14,7 +14,7 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 640188,
+    "Flash_bytes": 499580,
     "DTCM_bytes": 82592,
     "RAM_D1_bytes": 59456
   },
@@ -36,13 +36,16 @@
       "capture at200Hz triggers onhandoff/fault and retains555ms post-event"
     ],
     "wide20ms_cases": 7,
-    "wide20ms_handoff_hold10": 6
+    "wide20ms_handoff_hold10": 6,
+    "current_model_simulation_handoff_hold10": 0,
+    "current_model_simulation_cases": 7,
+    "current_model_simulation_result": "FAILED7/7 beforehandoff,0.49-1.21s; not a successful rise firmware"
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "d7eacc97296309d5f1f93b2c4b910ba11c395dce5a45315283903523e990eee1",
-    "recovery2100_motion015.hex": "84be7e98ac16aa851881eb9d63425c5dbce9fd291f2c8d90c027abb755b1c41f"
+    "recovery2100_motion015.bin": "d57f333b08d56f1597b475ea94bd50d9e673662e903b2ce163ddab7bebf2e692",
+    "recovery2100_motion015.hex": "86745ba24bccf583777e7ce76eeb49ae92763d7ad26549419bae16441c5d6bb8"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -97,15 +100,15 @@
     "application/chassis/chassis.h": "b665f63c7b1fbbd133429ae54a548a807b21ed1e4cc477119fc467e0dca04a4a",
     "application/chassis/chassis.md": "de01441e22265573d4c6e89db1a2615537918f24b5764e98aaa724f65ea4d212",
     "application/chassis/mecanum.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/recovery2100/recovery_actor.c": "22851bd06a827a3016bcf551745a2afaa21f137642a2c6d32750ea9410f13b06",
-    "application/chassis/recovery2100/recovery_actor.h": "2fbb04d75b1a5ff682e19554e161b68bb7b58ea817ce99446a353683bb2a1e8c",
+    "application/chassis/recovery2100/recovery_actor.c": "f457cf2f0648cd93a1046eb19d3c96509f0e1ab33dfaf6239a8bd6e084b78d46",
+    "application/chassis/recovery2100/recovery_actor.h": "d47ac77533955b412d2d8bb8cdf0296cfd7f2465746c9ed5c43030b09384b0de",
     "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
     "application/chassis/rl_control.c": "b96b838fafccae6a560b3a96cf5247ecc6aeead306bfa4fcb03a11ee9dcee572",
     "application/chassis/rl_control.h": "9c223a2d194f1770abe51a8a0eed8d3885565713d979bd16d763dbb4abb87d7c",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
-    "application/chassis/rl_motion31.c": "65bc903a659dbf1df3b509319fd62d61a7076ec72ef4b907a68f34071370f1fa",
+    "application/chassis/rl_motion31.c": "6b766175822c363639fab7e82519afd0f773935e3311bef2ae1b326ffa49446d",
     "application/chassis/rl_motion31.h": "701b6ab0a9013284f8ab9c2742dd018ae9ae7fe622efe77cf982a14515762581",
     "application/chassis/rl_shadow.c": "d3dc13ed5bfaf2f481f516ee87583eb80f487f31ce2569568bccbc3a1225fdfc",
     "application/chassis/rl_shadow.h": "6949ea9e7c5ba1b8ae110d472d8470d6c598ddd4207f3722f1494e5ed2e38edb",
@@ -143,8 +146,8 @@
   },
   "default_proprioceptive_dwell_ms": 20,
   "default_proprioceptive_leg_center_error_rad": 0.5,
-  "audit_revision": "broader_motion_takeover20ms_v1",
-  "supersedes_firmware_commit": "208910e",
+  "audit_revision": "legacy_tjb_recover_current_controller_comparison",
+  "supersedes_firmware_commit": "ddb5045",
   "build_source_sha256": {
     "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
     "STM32H723XG_FLASH.ld": "43393d00f784a7d78b305f3fa5bee6175829eb3319bd48cd5898b448d18ca390"
@@ -154,5 +157,7 @@
     "gyro_rad_s": 3,
     "leg_speed_rad_s": 8,
     "leg_center_error_rad": 0.5
-  }
+  },
+  "active_recovery_model": "c94bb9f tjb_recover RL_10_19 31-128-64-32-6",
+  "active_recovery_decoder": "absolute_linear legs1.5mean,wheels100mean"
 }

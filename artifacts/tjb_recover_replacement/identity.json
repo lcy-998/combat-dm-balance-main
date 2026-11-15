@@ -1,0 +1,33 @@
+{
+  "model": {
+    "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/tjb_recover_replacement/tjb_recover_actor.pt",
+    "sha256": "22158116384adbfbf5fbf05db20f9ffe9dea5eec8b7b728fdc899e0e3733fbc8"
+  },
+  "spec": {
+    "kind": "tanh",
+    "input_dim": 31,
+    "hidden_dims": [
+      128,
+      64,
+      32
+    ],
+    "output_dim": 6,
+    "input_contract": {
+      "version": "tjb_recover31_legacy_v1"
+    },
+    "output_contract": {
+      "action_version": "firmware_absolute_linear150_100_v1",
+      "leg_scale_rad": 1.5,
+      "wheel_scale_rad_s": 100.0,
+      "formula": "physical legs=1.5*mean,wheels=100*mean"
+    },
+    "activation": "ELU"
+  },
+  "source_commit": "c94bb9f",
+  "sources": {
+    "tjb_recover.c": "c2a3ddfbcf977e5703835478d7d036659fb9c0de2632bc463cee4abeb9e31e69",
+    "tjb_recover.h": "ba1b3cb0d48e8c6f1390313858815f8a12e89bd963c94e238177e74ee958d0fa",
+    "tjb_recover_data_params.c": "24072772363a2c3b5c48ca647b5da272dea4a796faa38fc1b784542cde0983be",
+    "tjb_recover_generate_report.txt": "25646b4142039488e19827e64943f0f18e48364f4e5a9f56400215de11c247d4"
+  }
+}

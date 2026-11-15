@@ -1,0 +1,174 @@
+{
+  "version": "recovery_motion_handoff_v1",
+  "recovery": {
+    "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/tjb_recover_replacement/tjb_recover_actor.pt",
+    "sha256": "22158116384adbfbf5fbf05db20f9ffe9dea5eec8b7b728fdc899e0e3733fbc8"
+  },
+  "recovery_spec": {
+    "kind": "tanh",
+    "input_dim": 31,
+    "hidden_dims": [
+      128,
+      64,
+      32
+    ],
+    "output_dim": 6,
+    "input_contract": {
+      "version": "tjb_recover31_legacy_v1"
+    },
+    "output_contract": {
+      "action_version": "firmware_absolute_linear150_100_v1",
+      "leg_scale_rad": 1.5,
+      "wheel_scale_rad_s": 100.0,
+      "formula": "physical legs=1.5*mean,wheels=100*mean"
+    },
+    "activation": "ELU"
+  },
+  "motion": {
+    "path": "/home/kellen/wheel_leg_training_data/recovery_motion_handoff/firmware_motion015_contract_r1/actor.pt",
+    "sha256": "45a1f39b047cc8dfb7ca2198ff824958cb694876535ecfc752f1e29e121d3564"
+  },
+  "motion_spec": {
+    "kind": "tanh",
+    "input_dim": 31,
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "output_dim": 6,
+    "input_contract": {
+      "version": "motion31_supported015_handoff_v1",
+      "actor_dim": 31,
+      "layout_zero_based": {
+        "0:3": "CAD body angular velocity * .25",
+        "3:6": "CAD projected gravity",
+        "6:10": "model legs q / 1.5rad",
+        "10:16": "model six-channel dq * .05",
+        "16:20": "actual adopted leg targets / 1.5rad",
+        "20:22": "actual adopted wheel targets / 100rad_s",
+        "22:25": "vx/4, yaw_rate/4, height/.5; [0,0,.68]",
+        "25:28": "Motion/Recovery/Jump one-hot [1,0,0]",
+        "28:31": "jump NONE/... one-hot [1,0,0]"
+      },
+      "channel_order": "model left hip/active/wheel, right hip/active/wheel; no geometric swap",
+      "input_leg_scale_rad": 1.5,
+      "input_wheel_previous_scale_rad_s": 100.0,
+      "source": "RecoveryMuJoCoCollection.measured and frozen execution.report; replace only skill one-hot 25:28"
+    },
+    "output_contract": {
+      "action_version": "motion_multiheight_support_center_poly5_015_80_v1",
+      "leg_scale_rad": 0.15,
+      "wheel_scale_rad_s": 80.0,
+      "formula": "target legs=C0_poly5(height)+.15*mean, wheels=80*mean"
+    },
+    "activation": "ELU"
+  },
+  "source_run": {
+    "path": "/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/run.json",
+    "sha256": "d3d56d6a74c85d6a9e21661a0c0e41c5db24a25db01fff39fefae4abd654e4ce"
+  },
+  "gate_source": {
+    "path": "/home/kellen/combat-dm-balance-supported015-recovery2100/application/chassis/rl_handoff.c",
+    "sha256": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f"
+  },
+  "gate_header": {
+    "path": "/home/kellen/combat-dm-balance-supported015-recovery2100/application/chassis/rl_handoff.h",
+    "sha256": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5"
+  },
+  "seconds": 13.0,
+  "gate": {
+    "height_min_m": 0.3,
+    "height_max_m": 0.4,
+    "command_height_m": 0.34,
+    "height_error_m": 0.02,
+    "tilt_rad": 0.35,
+    "angular_speed_rad_s": 3.0,
+    "leg_speed_rad_s": 8.0,
+    "support_min_N": 2.0,
+    "maximum_leg_target_jump_rad": 0.4,
+    "maximum_wheel_target_jump_rad_s": 40.0
+  },
+  "variants": [
+    {
+      "name": "tjb_recover_only",
+      "kind": "recovery_only"
+    },
+    {
+      "name": "tjb_recover_motion",
+      "kind": "posture",
+      "dwell_ms": 20,
+      "maximum_center_error_rad": 0.5
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "development_00",
+      "seed": 914001,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 0.0,
+      "cohort": 0,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_01",
+      "seed": 914002,
+      "pose": "Swing",
+      "yaw_rad": 1.5707963267948966,
+      "DR_strength": 0.0,
+      "cohort": 1,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_02",
+      "seed": 914003,
+      "pose": "Swing",
+      "yaw_rad": -1.5707963267948966,
+      "DR_strength": 0.25,
+      "cohort": 2,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_03",
+      "seed": 914004,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 0.25,
+      "cohort": 3,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_04",
+      "seed": 914005,
+      "pose": "Swing",
+      "yaw_rad": 1.5707963267948966,
+      "DR_strength": 0.5,
+      "cohort": 4,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_05",
+      "seed": 914006,
+      "pose": "Swing",
+      "yaw_rad": -1.5707963267948966,
+      "DR_strength": 0.5,
+      "cohort": 5,
+      "contact_version": "original_XML_contact_reference"
+    },
+    {
+      "case_id": "development_06",
+      "seed": 914007,
+      "pose": "Swing",
+      "yaw_rad": 0.0,
+      "DR_strength": 1.0,
+      "cohort": 6,
+      "contact_version": "original_XML_contact_reference"
+    }
+  ],
+  "limits": {
+    "integration_steps": 364000,
+    "wall_s": 900,
+    "storage_bytes": 1073741824
+  }
+}

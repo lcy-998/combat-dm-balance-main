@@ -1,3 +1,5 @@
+> **当前网络替换试验版：** Recovery已改为旧`tjb_recover`（c94bb9f，31→128→64→32→6），腿`1.5×mean`、轮`100×mean`。015 Motion和当前控制配置不变。仿真7组全部交接前失败，不是此前2100成功版；先前2100版可用`ddb5045`。详见[替换报告](../../artifacts/tjb_recover_replacement/REPORT.md)。历史路径名不代表当前网络身份。
+
 # Recovery2100 + 31D015 Motion试验固件
 
 对应分支`feature/rl-supported015-recovery2100`。两套模型、解码和自动交接控制代码均完整包含在仓库。
