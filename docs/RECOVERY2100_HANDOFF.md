@@ -2,7 +2,23 @@
 
 # Recovery2100起身 → 31D 015 Motion自动接管
 
-本分支为STM32H723实机试验版本，基于015远端`7f89e6d`及Recovery2100小模型。两套31→256→128→64→6网络均在本仓，不需要从训练机另取权重。015生成网络保持原样。
+本分支为STM32H723实机试验版本。当前Recovery为旧tjb_recover的31→128→64→32→6独立C网络；015 Motion为31→256→128→64→6的X-CUBE-AI网络，两套权重均在仓库内。此前2100蒸馏小模型为31→256→128→64→6，成功版回退点ddb5045；当前没有装载它。
+
+## 仿真与实机补偿口径
+
+“软件层面不需要补偿”不准确：电控补偿本身就是软件。应按执行路径区分：
+
+| 路径 | 当前做法 | 证据与边界 |
+|---|---|---|
+| 完整V4训练/评估/sim2sim | 不额外调用软件弹簧补偿 | 保留原V4+NET；“不额外加”不表示已证明V4不含补偿作用 |
+| 015普通Motion实机 | 保留原RLControlCompensateSpring | 不修改feature/rl-motion31-supported015参考分支 |
+| 本集成会话实机Motion | Motion目标经运输并由PD实际采用后，启用同一015补偿 | 40e1b8b已修复；5ms更新/保持，最终腿限矩40Nm |
+| 本集成会话实机Recovery | 当前未启用软件弹簧补偿 | 这是代码现状，不是已证明“不需要”；2100及旧tjb在本集成实机上的补偿合同仍待确认 |
+| 旧tjb原生c94bb9f实机 | 原生代码在Recovery输出时加补偿 | 不能把它与本集成代码现状或V4仿真配置混为一谈 |
+
+若V4确实拟合了“软件补偿＋电机＋真实弹簧”的整体响应，则仿真不额外加补偿、实机保留对应补偿，两者可以一致。但当前缺少V4采集时补偿开关的确证，不能宣称所有模型/高度/力矩工况已认证等效。完整V4仿真成功不能证明实机Recovery应关闭补偿；实机Motion补偿修复也没有自动补齐Recovery部署合同。
+
+验证完整电控（含补偿）需要独立物理弹簧、相应电机响应并重新核对V4/NET残差，不能直接将软件补偿叠加到原整套V4后当作实机验证。当前未因此修改Recovery代码或固件。
 
 ## 本次默认流程
 
@@ -44,10 +60,10 @@ capture为v3，新增source/requested/committed及实际Actor输入tick。读取
 
 ## 模型与执行合同
 
-| 项目 | Recovery2100 | 015 Motion |
+| 项目 | 当前旧tjb Recovery | 015 Motion |
 |---|---|---|
 | 网络 | `recovery2100/recovery_actor.c`，确定性ELU/Tanh | 015原X-CUBE-AI `tjb_network` |
-| 腿目标 | 固定中心三次绝对目标，±1.5rad包络 | C0五次高度中心+0.15×mean |
+| 腿目标 | 1.5×mean绝对目标；仅历史2100使用固定中心三次公式 | C0五次高度中心+0.15×mean |
 | 轮目标 | 100×mean rad/s | 80×mean rad/s |
 | skill25–27 | 0,1,0 | 1,0,0 |
 
@@ -55,7 +71,7 @@ capture为v3，新增source/requested/committed及实际Actor输入tick。读取
 
 策略10ms。显式Recovery→Motion会话由电机发送前1ms入口拥有六通道输出；PD5ms，目标运输5ms，模型双轮力矩运输7/11ms。收到状态包名义20ms、启动暖填。PD40/2/0.2；腿40Nm、轮4.8Nm；保留015驱动原始轮电流限幅16384，实际电流/力矩比例未实测。此会话Recovery阶段无补偿；Motion目标实际采用后复用RLControlCompensateSpring，按PD5ms更新并保持，最终腿力矩限幅±40Nm。模式标记与物理目标一起进入5ms运输队列，避免逻辑交接先于实际采用而抢先补偿。真实机械弹簧及驱动配置仍需按本机平台核对。普通015传统入口保留，但默认自动Recovery会话使用上述明确合同。
 
-唯一教师2100 SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。本次没有新训练或混用其他Recovery教师。源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。
+历史2100蒸馏的唯一教师SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。当前旧tjb替换不是该教师的蒸馏模型；没有新训练。历史2100源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。
 
 ## 构建与交付
 
@@ -72,7 +88,7 @@ CPU原0158组与Recovery控制/真实shadow14情景通过；128条真实golden�
 
 ## 实车前兼容审查更新
 
-两套权重均为C，Recovery是独立const float推理核，Motion为ST打包ai_u64推理，格式不同但不依赖ONNX运行。旧128的`tjb_recover*`已从活动Makefile移除，不能用它代替2100。
+两套权重均为C，Recovery是独立const float推理核，Motion为ST打包ai_u64推理，格式不同但不依赖ONNX运行。ST格式的`tjb_recover*`未参与当前活动构建，但其旧128网络权重已经提取到独立C核并作为当前Recovery；recovery2100目录名不代表当前权重身份。
 
 本次修复模式冲突误释放会话、新会话复用旧FIFO和采集过早冻结三项bug，旧ffed642固件/ZIP被当前产物取代。15种真实shadow情景与9/9测试通过。新固件只能称可进入有保护的分步实车验证，尚无目标deadline/栈高水位及本车零位、方向、力矩标定实测证据。详细根因/定位/处理和边界见`artifacts/recovery2100_vehicle_audit/REPORT.md`。
 
@@ -82,6 +98,6 @@ Recovery会话采集按200Hz，在接管/故障触发并保存约555ms后续；�
 
 仅修改本集成分支；feature/rl-motion31-supported015作为只读参考，不提交到该分支。当前Recovery仍是旧tjb_recover，腿1.5×mean、轮100×mean；未换回2100。
 
-实机链：PD→015补偿→最终限矩→真实驱动器/弹簧。仿真链：原PD→完整V4+NET；不额外叠加015补偿。V4采集是否包含当时软件补偿尚缺开关记录，因此本次不是包含独立真实弹簧的完整固件物理验证。
+实机Motion链（含普通015及集成接管后）：PD→015补偿→最终限矩→真实驱动器/弹簧。当前集成实机Recovery未调用补偿，是否应启用仍待确认。仿真链：原PD→完整V4+NET；不额外叠加015补偿。V4采集是否包含当时软件补偿尚缺开关记录，因此本次不是包含独立真实弹簧的完整固件物理验证。
 
 正式sim2sim复测：tjb_v4_recheck_motion_spring_fix_r1包含Recovery-only与20ms本体交接各7组，均0/7，全部0.49–1.21秒交接前失败；motion015_v4_recheck_motion_spring_fix_r1站立两组均通过，连续保持12.984/12.982秒。数据根：/home/kellen/wheel_leg_training_data/recovery_motion_handoff。补偿的软件行为由真实C主机消费者验证，不能将V4数值结果称为补偿实机认证。
