@@ -42,6 +42,9 @@
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
+static Chassis_Ctrl_Cmd_s chassis_can_cmd;
+static uint8_t chassis_can_rearm_required = 1u;
+#define CHASSIS_CAN_TIMEOUT_MS 100u
 #endif
 #include "vel_meas.h"
 /* 根据robot_def.h中的macro自动计算的参数 */
@@ -346,7 +349,7 @@ void ChassisInit()
         .can_module_callback = ChassisCanCtrlRxCallback,
         .id = &chassis_ctrl_rx_ctx,
     };
-    chassis_ctrl_rx_ctx.ctrl_dst = &chassis_cmd_recv;
+    chassis_ctrl_rx_ctx.ctrl_dst = &chassis_can_cmd;
     chassis_can = CANRegister(&can_config);
     CANSetDLC(chassis_can, sizeof(Chassis_Upload_Data_CAN_s));
     referee_data = UITaskInit(&huart1, &ui_data); // 裁判系统初始化,会同时初始化UI
@@ -985,6 +988,13 @@ void ChassisRLRecoveryTick(void)
         motor_l->motor_controller.current_feedforward_ptr=&lwi;
         motor_r->motor_controller.current_feedforward_ptr=&rwi;
         taskEXIT_CRITICAL();
+        current.pd_tick_ms=rl_control_frame.adopted_tick_ms;
+        if(executed) {
+            memcpy(current.applied_leg_torque_motor_nm,rl_control_frame.final_motor_nm,
+                   sizeof(current.applied_leg_torque_motor_nm));
+            memcpy(current.applied_wheel_current_raw,rl_control_frame.wheel_current_raw,
+                   sizeof(current.applied_wheel_current_raw));
+        }
         RLCapturePush(&current,candidate,&rl_control_frame);
         RLControlFillPrevious(&rl_control_state,&current);
         current.rl_active=current.chassis_ready && rl_control_state.ready && !rl_control_state.fault;
@@ -1328,6 +1338,35 @@ void ChassisTask()
 {
 #ifdef ONE_BOARD
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
+#endif
+#ifdef CHASSIS_BOARD
+    Chassis_Ctrl_Cmd_s can_cmd;
+    uint32_t last_rx_tick_ms;
+    uint8_t received;
+    taskENTER_CRITICAL();
+    can_cmd = chassis_can_cmd;
+    last_rx_tick_ms = chassis_ctrl_rx_ctx.last_rx_tick_ms;
+    received = chassis_ctrl_rx_ctx.received;
+    taskEXIT_CRITICAL();
+
+    if (!received || (uint32_t)(HAL_GetTick() - last_rx_tick_ms) >= CHASSIS_CAN_TIMEOUT_MS)
+    {
+        chassis_can_rearm_required = 1u;
+        memset(&chassis_cmd_recv, 0, sizeof(chassis_cmd_recv));
+        chassis_cmd_recv.chassis_mode = CHASSIS_ZERO_FORCE;
+    }
+    else if (chassis_can_rearm_required)
+    {
+        // A fresh zero-force command must be observed before motion is enabled again.
+        if (can_cmd.chassis_mode == CHASSIS_ZERO_FORCE)
+            chassis_can_rearm_required = 0u;
+        memset(&chassis_cmd_recv, 0, sizeof(chassis_cmd_recv));
+        chassis_cmd_recv.chassis_mode = CHASSIS_ZERO_FORCE;
+    }
+    else
+    {
+        chassis_cmd_recv = can_cmd;
+    }
 #endif
 
     /* A request only arms Recovery while outputs are stopped. It never overrides

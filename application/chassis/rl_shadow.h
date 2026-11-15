@@ -78,8 +78,8 @@ typedef struct {
     float rl_target_theta_r_rad; /* physical right, same zero/sign as LQR theta_r */
     float lqr_leg_torque_nm[4]; /* existing motor order: lf, lb, rf, rb */
     float lqr_wheel_torque_nm[2]; /* forward-positive: left, right */
-    float rl_leg_torque_nm[4]; /* calculated preview, spring-compensated and clamped; lf, lb, rf, rb */
-    float rl_wheel_torque_nm[2]; /* calculated preview after current limit; forward-positive L/R */
+    float rl_leg_torque_nm[4]; /* ordinary015 preview or Recovery session local command; spring-compensated, clamped; lf/lb/rf/rb */
+    float rl_wheel_torque_nm[2]; /* ordinary015 preview or Recovery session local command; forward-positive L/R */
     uint8_t controller_owner;
     uint8_t previous_source;
     uint32_t control_epoch;
