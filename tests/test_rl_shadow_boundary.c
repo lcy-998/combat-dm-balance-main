@@ -76,12 +76,12 @@ int main(int argc,char **argv)
     if(!scenario){
         assert(inferences==3 && published.valid);
         assert(published.previous_source==RL_PREVIOUS_ADOPTED && published.previous_sequence==99);
-        assert(fabsf(published.preview.target[0]-(-0.13097405433655f+.12f))<1e-6f);
+        assert(fabsf(published.preview.target[0]-(-0.11784643339532f+.40f))<1e-6f);
         assert(published.preview.target[2]==64);
     }else assert(!inferences && !published.valid);
     assert(g_rl_shadow_debug.controller_owner==(!scenario?RL_OWNER_RL:RL_OWNER_LQR));
     assert(g_rl_shadow_debug.publish_seq==g_rl_shadow_debug.frame_end);
     assert(!(g_rl_shadow_debug.publish_seq&1));
-    puts("PASS supported015 real task: adopted cache, real dq and invalid/inactive boundaries");
+    puts("PASS supported050 real task: adopted cache, real dq and invalid/inactive boundaries");
     return 0;
 }

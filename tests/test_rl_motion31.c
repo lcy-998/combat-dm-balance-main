@@ -275,17 +275,17 @@ int main(void)
     const float action[RL_MOTION31_ACTION_SIZE] = {-1.0f, -0.5f, 0.25f, 0.5f, 1.0f, -0.25f};
     float target[RL_MOTION31_ACTION_SIZE];
     assert(RLMotion31DecodeOutput(action, .34f, target) == 0);
-    near(target[0], -0.13097405433655f-.15f);
-    near(target[1], -0.15117678046227f-.075f);
+    near(target[0], -0.11784643339532f-.50f);
+    near(target[1], -0.15540548569121f-.25f);
     near(target[2], 20.0f);
-    near(target[3], 0.13097405433655f+.075f);
-    near(target[4], -0.15117678046227f+.15f);
+    near(target[3], 0.11784643339532f+.25f);
+    near(target[4], -0.15540548569121f+.50f);
     near(target[5], -20.0f);
 
     const float out_of_range[RL_MOTION31_ACTION_SIZE] = {2.0f, -2.0f, 2.0f, 0.0f, 0.0f, 0.0f};
     assert(RLMotion31DecodeOutput(out_of_range, .34f, target) == 0);
-    near(target[0], -0.13097405433655f+.15f);
-    near(target[1], -0.15117678046227f-.15f);
+    near(target[0], -0.11784643339532f+.50f);
+    near(target[1], -0.15540548569121f-.50f);
     near(target[2], 80.0f);
 
     float hardware_joint_target[4];

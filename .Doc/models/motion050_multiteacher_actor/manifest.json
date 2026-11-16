@@ -1,0 +1,140 @@
+{
+  "version": "motion050_multiteacher_firmware_v1",
+  "base_branch": "feature/rl-motion31-supported015",
+  "base_commit": "7f89e6d50e5060c23fc03fd78e9211dcd1c8823b",
+  "branch": "feature/rl-motion31-supported050-multiteacher",
+  "actor": {
+    "path": "/home/kellen/wheel_leg_training_data/motion_multiteacher050_iterative_20261116/export_candidate_v1/actor.pt",
+    "sha256": "c21d66a2cd9af0b6d7452bc8dc4c32c3f13cc83d50173cfb14bfdab79546c87d"
+  },
+  "source_onnx": {
+    "path": "/home/kellen/wheel_leg_training_data/motion_multiteacher050_iterative_20261116/export_candidate_v1_multiheight_golden_v1/actor_single.onnx",
+    "sha256": "90cd0095e170d5689576f72707273c5c473dee519dcd90fac578ce42d6d081f4"
+  },
+  "network": {
+    "dimensions": [
+      31,
+      256,
+      128,
+      64,
+      6
+    ],
+    "hidden_activation": "ELU(alpha=1)",
+    "output_activation": "Tanh",
+    "parameters": 49734,
+    "weight_bytes": 198936
+  },
+  "firmware_weights": {
+    "path": "X-CUBE-AI/App/tjb_network_data_params.c",
+    "blob_sha256": "9f999d30bc41ca302ef49b3da3a94a74c08acf073657b82e5527c9024142b5cf"
+  },
+  "output_contract": {
+    "version": "motion_multiheight020_support_center_050_80_v1",
+    "leg_halfwidth_rad": 0.5,
+    "wheel_halfwidth_rad_s": 80,
+    "height_command_range_m": [
+      0.2,
+      0.4
+    ],
+    "center_formula": {
+      "version": "flat_two_link_geometry_v1",
+      "hip_above_root_m": 2.4e-05,
+      "wheel_radius_m": 0.06,
+      "equivalent_upper_m": 0.21,
+      "equivalent_lower_m": 0.25,
+      "hip_zero_deg": 47.1033888,
+      "active_zero_deg": 47.1080837,
+      "clearance_m": 0.0
+    },
+    "support_offset_table": {
+      "height_m": [
+        0.2,
+        0.22,
+        0.24,
+        0.26,
+        0.28,
+        0.3,
+        0.32,
+        0.34,
+        0.36,
+        0.38,
+        0.4
+      ],
+      "offset_rad": [
+        [
+          -0.020571343873936665,
+          -0.05702757119884094
+        ],
+        [
+          -0.11081284820703796,
+          -0.1555440107178515
+        ],
+        [
+          -0.3491564187176722,
+          -0.37790762516905463
+        ],
+        [
+          -0.348948829817821,
+          -0.37771180030381957
+        ],
+        [
+          -0.34882198437598766,
+          -0.37759639082806856
+        ],
+        [
+          -0.3487552522000352,
+          -0.37754057053821566
+        ],
+        [
+          -0.3435389986364944,
+          -0.3728135666205402
+        ],
+        [
+          -0.3310294178646732,
+          -0.36850653305619374
+        ],
+        [
+          -0.37905064299573055,
+          -0.392152213326292
+        ],
+        [
+          -0.3467577911753633,
+          -0.34899861273727373
+        ],
+        [
+          -0.4210038034297835,
+          -0.4434557257496142
+        ]
+      ]
+    },
+    "source_path": "/home/kellen/wheel_leg_training_data/motion_multiteacher050_iterative_20261116/deployment_interface_v1/output_contract.json",
+    "source_sha256": "c1dbfab4720845a3584a621a70aae6dc52b9331dd9cec70a7842fdc277809612"
+  },
+  "input": {
+    "dimensions": 31,
+    "leg_q_and_previous_scale_rad": 1.5,
+    "wheel_previous_scale_rad_s": 100,
+    "real_dq_scale": 0.05,
+    "previous": "actual adopted physical targets; shadow cannot write"
+  },
+  "execution": {
+    "policy_period_ms": 10,
+    "PD_period_ms": 5,
+    "leg_Kp": 40,
+    "leg_Kd": 2,
+    "wheel_Kv": 0.2,
+    "leg_limit_Nm": 40,
+    "wheel_limit_Nm": 4.8,
+    "wheel_raw_limit": 16384,
+    "added_observation_or_transport_delay_ms": 0,
+    "spring_compensation": "original015 exactly once",
+    "controller": "original015 Motion/LQR lifecycle"
+  },
+  "golden_fixture": {
+    "path": "tests/data/motion050_golden.json",
+    "sha256": "d605ed040ba0351a40c75b52cbf59ee210fc4b568113c30ee987bfa188ae59a3",
+    "real_states": 16
+  },
+  "capability": "ACCEPTED_LIMITED_MUJOCO",
+  "hardware": "NOT_RUN"
+}

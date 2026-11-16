@@ -27,14 +27,14 @@ static void test_height_zero_and_axis_roundtrip(void)
     const float offset[4]={1.640323924f,-2.643448303f,
         1.092286447f-.618772388f+pi/2+.03721809f,
         1.313378777f-1.5654273f+pi/2-.0021917f};
-    for(unsigned k=0;k<=100;++k) {
-        float h=.30f+.001f*(float)k;
+    for(unsigned k=0;k<=200;++k) {
+        float h=.20f+.001f*(float)k;
         const float action[6]={-.7f,.4f,.5f,.6f,-.3f,-.2f};
         float target[6],hardware[4],wheel[2],torque[6],limited[6];
         double center[4];
         assert(!RLMotion31SupportCenter(h,center));
         assert(!RLMotion31DecodeOutput(action,h,target));
-        for(unsigned i=0;i<4;++i)near(target[legs[i]],(float)center[i]+.15f*action[legs[i]]);
+        for(unsigned i=0;i<4;++i)near(target[legs[i]],(float)center[i]+.50f*action[legs[i]]);
         assert(!RLMotion31MapPolicyTargets(target,hardware,wheel));
         float raw[4];
         for(unsigned i=0;i<4;++i)raw[i]=(i<2)?offset[i]-hardware[i]:hardware[i]-offset[i];
@@ -78,13 +78,13 @@ static void test_height_zero_and_axis_roundtrip(void)
         }
     }
     double center[4];assert(RLMotion31SupportCenter(NAN,center)<0);
-    assert(RLMotion31SupportCenter(.29,center)<0);assert(RLMotion31SupportCenter(.41,center)<0);
+    assert(RLMotion31SupportCenter(.19,center)<0);assert(RLMotion31SupportCenter(.41,center)<0);
     assert(RLMotion31SupportCenter(.34,NULL)<0);
 }
 
 static void test_outside_contract_height_command_is_rejected(void)
 {
-    const float invalid_heights[]={.29f,.41f,-1.0f,NAN,INFINITY};
+    const float invalid_heights[]={.19f,.41f,-1.0f,NAN,INFINITY};
     for(unsigned h=0;h<5;++h) {
         RLControlState state={.ramp_completed=1,.timing=1,.ready=1,.epoch=7};
         RLShadowSnapshot s=sample(&state);RLShadowCommand c={0};
@@ -123,6 +123,6 @@ int main(void)
 {
     test_height_zero_and_axis_roundtrip();
     test_outside_contract_height_command_is_rejected();
-    puts("PASS C0 center: height/encoder roundtrip, PD zero and motor damping, physical previous, height-domain adoption guard");
+    puts("PASS u2200 table center: height/encoder roundtrip, PD zero and motor damping, physical previous, height-domain adoption guard");
     return 0;
 }

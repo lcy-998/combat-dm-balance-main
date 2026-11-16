@@ -1,0 +1,78 @@
+{
+  "version": "motion050_firmware_host_verification_v1",
+  "base_commit": "7f89e6d50e5060c23fc03fd78e9211dcd1c8823b",
+  "actor_sha256": "c21d66a2cd9af0b6d7452bc8dc4c32c3f13cc83d50173cfb14bfdab79546c87d",
+  "host_C_tests": {
+    "groups_passed": 8,
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/host_tests.log"
+  },
+  "python_tools": {
+    "tests_run": 14,
+    "passed": 12,
+    "skipped": 2,
+    "skip_reason": "unavailable original 25D network ONNX; current Motion tests all executed",
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/tools_tests.log"
+  },
+  "golden": {
+    "committed_real_states": 16,
+    "full_real_states_checked": 128,
+    "mean_max_abs_error": 2.384185791015625e-07,
+    "decoder_max_abs_error": 0.0,
+    "PD_max_abs_error_Nm": 0.0,
+    "limited_max_abs_error_Nm": 0.0,
+    "encoder_max_abs_error": 0.0,
+    "center_height_samples": 401,
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/golden_128.log"
+  },
+  "production_diff": {
+    "changed_files": [
+      "X-CUBE-AI/App/tjb_network_data_params.c",
+      "application/chassis/rl_motion31.c",
+      "application/chassis/rl_motion31.h"
+    ],
+    "other_production_files_identical_to015": 232,
+    "weight_template_outside_array_unchanged": true,
+    "runtime_Source_SHA256": {
+      "X-CUBE-AI/App/tjb_network_data_params.c": "2a8b6c4700933c54a16236aab96591185448735bcd71a56e6f4c474f9a9d73a6",
+      "application/chassis/rl_motion31.c": "23e430d9f575b45afa01482b42702d05e5d5c2e83027fa7855a7e08e3d854d25",
+      "application/chassis/rl_motion31.h": "40d28079797266a4cda4d703737b79734ff7e36aece33e22a187a855fce8395f"
+    }
+  },
+  "ARM_build": {
+    "status": "PASS",
+    "compiler": "xpack-arm-none-eabi-gcc-14.2.1-1.1",
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/build_linux.log",
+    "linux_overrides": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/linux_build_plan.json",
+    "FLASH_used_bytes": 434716,
+    "DTCMRAM_used_bytes": 129536,
+    "DTCMRAM_region_bytes": 131072,
+    "ELF_weight_address": "0x80372c0",
+    "ELF_weight_blob_sha256": "9f999d30bc41ca302ef49b3da3a94a74c08acf073657b82e5527c9024142b5cf",
+    "warnings": "inherited unused/redefined PI and RWX segment warnings; see build log"
+  },
+  "firmware": {
+    "bin": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/firmware/motion050_c21d66a2_015.bin",
+      "bytes": 434716,
+      "sha256": "06cadc638ad9673acaf1dcbb70fc3f1b006a673ca5a939e679dbe44719f185ca"
+    },
+    "hex": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/firmware/motion050_c21d66a2_015.hex",
+      "bytes": 1222768,
+      "sha256": "333ec98843cac20cd16ff4c037150f569a95d7bacb7a5e110f1415ee23b53c7c"
+    },
+    "elf": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/firmware/motion050_c21d66a2_015.elf",
+      "bytes": 2054028,
+      "sha256": "068fd35ebc02869463f1807cf1bc81cba858038752d113c71f5d7a28c12a5afc"
+    },
+    "map": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_c21d66a2_20261116/firmware/motion050_c21d66a2_015.map",
+      "bytes": 1158310,
+      "sha256": "6a579859665ad9d2b5f76b8a233eef5b2a093b24079ae35a5d0375931905819a"
+    }
+  },
+  "board_inference_timing": "NOT_RUN",
+  "hardware_closed_loop": "NOT_RUN",
+  "flashed": false
+}

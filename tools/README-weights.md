@@ -1,5 +1,9 @@
 # 更新 X-CUBE-AI 固件权重
 
+当前分支的Motion为050多Teacher最佳学生，来源与decoder见
+[Motion050部署说明](../.Doc/models/motion050_multiteacher_actor/README.md)。
+本分支已使用同一转换工具替换C权重；测试使用真实状态golden核对050中心与0.50rad输出。
+
 本脚本从 ONNX 选择性更新 `tjb_network` 或 `network` 的权重数组，无需运行 CubeMX。只修改选中目标的 `X-CUBE-AI/App/<目标>_data_params.c`；推理代码和接口保持不变。
 
 ## 前提

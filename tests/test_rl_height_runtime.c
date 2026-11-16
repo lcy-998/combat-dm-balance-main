@@ -43,14 +43,14 @@ static void pd_matches_absolute(const RLShadowSnapshot *s,const RLControlFrame *
 static void test_each_height_standing_or_motion_uses_matching_center_and_input(void)
 {
     const unsigned legs[4]={0,1,3,4};
-    for(unsigned j=0;j<=100;++j) {
-        float h=.30f+.001f*j;
+    for(unsigned j=0;j<=200;++j) {
+        float h=.20f+.001f*j;
         RLControlState state={.ramp_completed=1,.timing=1,.ready=1,.epoch=7};
         state.height.initialized=1;state.height.command_m=h;
         RLShadowSnapshot s=feedback(&state,100);RLShadowCommand c=query(&state,&s,1);RLControlFrame frame;
         near(c.preview.observation[24],2*h);near(c.preview.observation[22],.3f);near(c.preview.observation[23],.1f);
         double center[4];assert(!RLMotion31SupportCenter(h,center));
-        for(unsigned i=0;i<4;++i)near(c.preview.target[legs[i]],(float)center[i]+.15f*c.action[legs[i]]);
+        for(unsigned i=0;i<4;++i)near(c.preview.target[legs[i]],(float)center[i]+.50f*c.action[legs[i]]);
         assert(!RLControlExecute(&state,100,1,&s,&c,&frame));pd_matches_absolute(&s,&frame);
         near(state.adopted_height_m,h);RLControlFillPrevious(&state,&s);
         for(unsigned i=0;i<6;++i)near(s.motion.previous_target[i],state.adopted_target[i]);
@@ -100,14 +100,14 @@ static void test_full_domain_direct_requests_no_dwell_or_slew_and_reset(void)
     RLShadowSnapshot s=feedback(&state,100);RLControlFrame frame;RLShadowCommand c=query(&state,&s,1);
     assert(!RLControlExecute(&state,100,1,&s,&c,&frame));
     float actual[6];memcpy(actual,state.adopted_target,sizeof(actual));
-    const float requests[]={.30f,.40f,.32f,.38f,.36f,.34f};
+    const float requests[]={.20f,.40f,.32f,.38f,.36f,.34f};
     for(unsigned i=0;i<sizeof(requests)/sizeof(requests[0]);++i) {
         /* Same tick immediate changes accepted without confirmation timers. */
         assert(!RLControlSetCommandHeight(&state,requests[i]));
         near(RLControlCommandHeight(&state),requests[i]);
         assert(!memcmp(actual,state.adopted_target,sizeof(actual)));
     }
-    assert(RLControlSetCommandHeight(&state,.29f)<0);
+    assert(RLControlSetCommandHeight(&state,.19f)<0);
     assert(RLControlSetCommandHeight(&state,.41f)<0);
     assert(RLControlSetCommandHeight(&state,NAN)<0);
     assert(RLControlSetCommandHeight(NULL,.34f)<0);
@@ -121,6 +121,6 @@ int main(void)
     test_each_height_standing_or_motion_uses_matching_center_and_input();
     test_dynamic_height_during_motion_preserves_previous_and_delayed_target_identity();
     test_full_domain_direct_requests_no_dwell_or_slew_and_reset();
-    puts("PASS runtime height: full .30-.40m, motion allowed, original packet center, actual previous and absolute PD, no dwell/slew gate");
+    puts("PASS runtime height: full .20-.40m, motion allowed, original packet center, actual previous and absolute PD, no dwell/slew gate");
     return 0;
 }

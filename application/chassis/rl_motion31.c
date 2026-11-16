@@ -177,16 +177,33 @@ int RLMotion31ValidateSnapshot(const RLMotion31Snapshot *s)
     return fabsf(norm2-1.0f) <= 0.02f ? 0 : -1;
 }
 
-/* Global C0 quintic fit. Source six anchors are offline fitting evidence,
-   not a runtime lookup table. x=(command_height-.35)/.05. */
+/* Frozen Motion050/u2200 center: same geometry, linear support offsets.
+   Source: .Doc/models/motion050_multiteacher_actor/manifest.json.
+   Keep this output reference separate from encoder zeros and input scaling. */
 int RLMotion31SupportCenter(double h,double out[4])
 {
-    if(out==NULL || !isfinite(h) || h<.30-1e-7 || h>.40+1e-7) return -1;
-    const double x=(h-.35)/.05;
+    static const double heights[11]={.20,.22,.24,.26,.28,.30,.32,.34,.36,.38,.40};
+    static const double offsets[11][2]={
+        {-0.020571343873936665, -0.057027571198840943},
+        {-0.11081284820703796, -0.15554401071785151},
+        {-0.34915641871767222, -0.37790762516905463},
+        {-0.34894882981782099, -0.37771180030381957},
+        {-0.34882198437598766, -0.37759639082806856},
+        {-0.34875525220003523, -0.37754057053821566},
+        {-0.3435389986364944, -0.37281356662054022},
+        {-0.33102941786467321, -0.36850653305619374},
+        {-0.37905064299573055, -0.39215221332629202},
+        {-0.34675779117536332, -0.34899861273727373},
+        {-0.4210038034297835, -0.44345572574961423}
+    };
+    if(out==NULL || !isfinite(h) || h<.20-1e-7 || h>.40+1e-7) return -1;
+    unsigned i=1u;
+    while(i<10u && h>=heights[i]) ++i;
+    const double ratio=(h-heights[i-1u])/(heights[i]-heights[i-1u]);
+    const double bh=offsets[i-1u][0]+ratio*(offsets[i][0]-offsets[i-1u][0]);
+    const double ba=offsets[i-1u][1]+ratio*(offsets[i][1]-offsets[i-1u][1]);
     const double L=h+.000024-.060;
     const double beta=acos((L*L+.21*.21-.25*.25)/(2*L*.21));
-    const double bh=(((((-0.04464695144541761*x+(-0.0094959546615917666))*x+(0.070546704606128441))*x+(0.012914498339764401))*x+(-0.022292895866604146))*x+(-0.34856693858410187));
-    const double ba=(((((0.016045303181803701*x+(0.0061990859752017189))*x+(-0.026839290520086146))*x+(-0.0084307569262746084))*x+(0.027428468197591423))*x+(-0.3586744187278344));
     const double hip=beta-47.1033888*(3.14159265358979323846/180.)+bh;
     const double active=beta-47.1080837*(3.14159265358979323846/180.)+ba;
     out[0]=hip;out[1]=active;out[2]=-hip;out[3]=active;
@@ -252,7 +269,7 @@ int RLMotion31ComputePdTorque(const RLMotion31Snapshot *s,
                            - 2.0f * s->joint_velocity_rad_s[i];
         }
         if (!isfinite(requested[i])) return -1;
-        const float limit = (i == 2u || i == 5u) ? 5.5f : 40.0f;
+        const float limit = (i == 2u || i == 5u) ? RL_MOTION31_WHEEL_TORQUE_LIMIT_NM : 40.0f;
         limited[i] = fminf(fmaxf(requested[i], -limit), limit);
     }
     return finite_array(limited, RL_MOTION31_ACTION_SIZE) ? 0 : -1;

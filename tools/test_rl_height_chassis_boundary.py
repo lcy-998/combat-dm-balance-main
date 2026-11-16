@@ -26,7 +26,7 @@ def function(source,name):
 class ChassisHeightBoundary(unittest.TestCase):
     def test_actual_snapshot_and_external_height_api_keep_axes_previous_and_motion(self):
         source=(ROOT/'application/chassis/chassis.c').read_text()
-        macros='\n'.join(line for line in source.splitlines() if re.match(r'#define (?:LF|LB|RF|RB)_ENCODE_OFFSET\b|#define REDUCE_RATIO\b',line))
+        macros='\n'.join(line for line in source.splitlines() if re.match(r'#define (?:LF|LB|RF|RB)_ENCODE_OFFSET\b|#define REDUCE_RATIO\b|#define LEG_LENGTH_(?:STEP_M|SPEED_M_S)\b',line))
         c='''
 #include "rl_control.h"
 #include <math.h>
@@ -84,8 +84,13 @@ int main(void){
   assert(b.motion.command_height_m==.30f);
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
   chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot();
-  assert(fabsf(b.motion.command_height_m-(.30f+.002f*.03f))<1e-7f);
+  assert(fabsf(b.motion.command_height_m-(.30f+.048f*.005f))<1e-7f);
   assert(b.motion.command_vx_m_s==1.2f && b.motion.command_yaw_rad_s==.4f);
+  chassis_cmd_recv.changeL=0;
+  assert(!ChassisSetRLHeight(.20f));b=CurrentRLSnapshot();
+  assert(b.motion.command_height_m==.20f);
+  assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
+  assert(ChassisSetRLHeight(.19f)<0);
   assert(ChassisSetRLHeight(.41f)<0);assert(ChassisSetRLHeight(NAN)<0);
   return 0;
 }
