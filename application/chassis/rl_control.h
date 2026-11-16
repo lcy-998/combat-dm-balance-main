@@ -39,12 +39,7 @@ typedef struct {
     float adopted_target[6]; /* local PD adoption, not a claim of remote driver acceptance */
     float adopted_height_m; /* identity of the actually adopted Actor request */
     RLControlHeightState height;
-    uint8_t recovery_session, recovering, recovery_initialized, recovery_pd_valid;
-    uint32_t recovery_last_ms, recovery_output_ms, recovery_request_sequence;
-    float recovery_request[6], recovery_targets[32][6], recovery_wheels[32][2];
-    float recovery_pd[6], recovery_raw_pd[6];
-    uint32_t recovery_target_sequence[32];
-    float recovery_motor[4], recovery_spring[4]; /* held at the PD5ms cadence */
+    uint8_t recovery_session, recovering; /* lifecycle metadata, not a second executor */
     RLHandoffState handoff;
     uint8_t handoff_source; /* 0=none, 1=qualified support, 2=encoder/IMU posture */
 } RLControlState;
@@ -71,10 +66,9 @@ float RLControlLegRampStep(RLControlState *state, uint32_t now_tick,
 RLControlDecision RLControlStep(RLControlState *state,
                                 uint32_t now_tick, int normal_lqr,
                                 const RLShadowCommand *command);
-/* Ordinary015: called by200Hz owner; state commits after all outputs validate.
-   Recovery session: called by1kHz motor owner, PD200Hz. Permission=false is a
-   conflicting mode and latches SAFE ownership; only explicit ZERO_FORCE reset
-   may clear the session. Errors never release Recovery to the legacy LQR. */
+/* One015 executor, called by the5ms chassis owner for both skills. Latest
+   feedback/target, shared PD/compensation/output; no synthetic transport queues.
+   Session errors latch SAFE until explicit safe reset, never LQR mid-rise. */
 int RLControlExecute(RLControlState *state,
                      uint32_t now_ms, int normal_lqr,
                      const RLShadowSnapshot *current, const RLShadowCommand *command,

@@ -14,82 +14,55 @@
     "wheel_raw_driver_limit": 16384
   },
   "memory": {
-    "Flash_bytes": 640316,
-    "DTCM_bytes": 82624,
+    "Flash_bytes": 639136,
+    "DTCM_bytes": 81024,
     "RAM_D1_bytes": 59456
   },
   "validation": {
     "host_suites": 9,
     "host_suites_passed": 9,
+    "Actor_PD_schedules": 1200,
     "real_shadow_scenarios": 15,
-    "portable_passed": 2011,
-    "portable_skipped": 31,
-    "simulation_cases": 7,
-    "simulation_handoff_and_hold10_passed": 6,
-    "shared_pre_handoff_failure": 1,
-    "proprioceptive_100ms_cases": 7,
-    "proprioceptive_100ms_handoff_hold10": 6,
-    "fast_simulation_run": "posture100ms_r1",
-    "reviewed_lifecycle_bug_fixes": [
-      "conflicting mode retains SAFE session",
-      "new session warms packet history while committed handoff preserves it",
-      "capture at200Hz triggers onhandoff/fault and retains555ms post-event"
-    ],
-    "wide20ms_cases": 7,
-    "wide20ms_handoff_hold10": 6,
-    "current_model_simulation_handoff_hold10": 6,
-    "current_model_simulation_cases": 7,
-    "recheck_runs": [
-      "wide20ms_r1",
-      "firmware_motion015_swing7_r4"
-    ],
-    "motion_v4_standing_hold10_passed": 2,
-    "motion_v4_standing_cases": 2,
-    "tools_tests": {
+    "tools": {
       "run": 9,
-      "skipped_missing_external_models": 6,
+      "passed": 3,
+      "skipped_external_models": 6,
       "failed": 0
     },
-    "both_skills_spring_host_checks": [
-      "Recovery same015 formula at startup",
-      "5ms compensation hold and geometry refresh",
-      "handoff keeps held final torque and spring with no duplication",
-      "wheelPD/limits unchanged",
-      "actual previous and target FIFO unchanged",
-      "Recovery invalid geometry latches SAFE zero",
-      "Motion final saturation40Nm"
-    ],
-    "simulation_results_scope": "Historical fullV4 policy results for identical restored actor and cubic decoder; no extra compensation in simulation. No new hardware test.",
-    "legacy_tjb_simulation": {
-      "cases": 7,
-      "passed": 0,
-      "result": "FAILED7/7 beforehandoff,0.49-1.21s; not a successful rise firmware"
+    "reference015_equivalence": {
+      "reference": "7f89e6d",
+      "reference_only_adjustment": "wheel PD cap5.5->4.8Nm per user; no other change",
+      "cases": 1000,
+      "values_per_case": 46,
+      "max_abs_error": 0.0,
+      "comparison": "bitwise equal original015 vs new session Motion: adopted target, rawPD, limitedPD, spring, motor, wheel; next tick changed q/dq/geometry without new target",
+      "network_unchanged": true
     },
-    "current_model_simulation_result": "Historical fullV4 wide20ms_r1:6/7, switch.38-.72s, hold12.256-12.580s; not a new hardware/compensation test",
-    "recovery_golden128": {
+    "golden128": {
       "rows": 128,
       "mean_max_abs": 4.293397068977356e-07,
       "physical_max_abs": 2.288818359375e-05,
-      "single_decoder": "PASS bitwise Physical==Mean+Decode",
-      "actor_pt_sha256": "660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d",
-      "golden_sha256": "538afe8dddd86b7c904393f256eaf8282b97fa7b06ea568c32938f24ea0be7fa",
-      "restored_from_commit": "ddb5045",
-      "teacher_sha256": "5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9"
+      "exactly_once_decoder": true,
+      "golden_sha256": "538afe8dddd86b7c904393f256eaf8282b97fa7b06ea568c32938f24ea0be7fa"
     },
-    "historical_40e1b8b_motion_only_checks": [
-      "delayed mode follows target",
-      "same015 formula",
-      "PD5ms hold",
-      "next PD geometry refresh",
-      "final saturation40Nm",
-      "invalid geometry SAFE zero"
-    ]
+    "ruff_version": "0.8.4",
+    "ruff_modified_python_tools": "PASS",
+    "ARM_build": "PASS with pre-existing project warnings",
+    "physical_simulation_this_revision": "NOT_RUN",
+    "hardware": "NOT_RUN",
+    "historical_V4_policy_result": {
+      "run": "wide20ms_r1",
+      "cases": 7,
+      "passed": 6,
+      "same_actor": true,
+      "scope": "older frozen simulated timing; not validation of new real execution path"
+    }
   },
   "on_target_runtime": "NOT_RUN",
   "flashed_by_agent": false,
   "binary_sha256": {
-    "recovery2100_motion015.bin": "dbc4344ca30723ce2c9e72946e18b51235b870392e57cfc5a3debbfc48d71418",
-    "recovery2100_motion015.hex": "1355718d5b56ae53da58325ad15f0df46ba6ce4e180455d52c25689c6bef0a75"
+    "recovery2100_motion015.bin": "306d1e61fc1a29bf04a98387d99b12bbff02dbe8eafa343170069c9b42517615",
+    "recovery2100_motion015.hex": "58576e19334be853de2efa930ab941eedde81c875561cd55800e0531cbc65638"
   },
   "source_sha256": {
     "Core/Inc/FreeRTOSConfig.h": "b5f8ce3811585db72ef25a52b9d4f6f863b9855e7c0531e14ac00a47d49adb58",
@@ -123,6 +96,13 @@
     "Core/Src/system_stm32h7xx.c": "d664f6062704dce39255b35a8660a9f7691d555fdd3dedaf8c0ddb11afe1430a",
     "Core/Src/tim.c": "a8b1f19cb9e4c0e3a6f243d2ec495b1a2dabf9589dfeea09f349e9d4f22ec136",
     "Core/Src/usart.c": "25f8a5cf264046e4c8c7c5434be2bb707ec7ca52f029bda35121ff614e51be67",
+    "X-CUBE-AI/App/tjb_network.c": "8d4963cd56c9e35ec10d66ee8a2402c892fa291395cdab09a59744e7076ebeb2",
+    "X-CUBE-AI/App/tjb_network.h": "767ff31a73ce6f6473ddce53b6be83109c5038bab8c2d2a223f50924eaded3db",
+    "X-CUBE-AI/App/tjb_network_config.h": "f6ce4b1f36ff3c2c4503c09896a9880b38a6def98cd08017b57f602bf8105a41",
+    "X-CUBE-AI/App/tjb_network_data.c": "e8cc8dc57b0f8a7442b44f207ddade32068fea22237e940676c6d5f82b8251ca",
+    "X-CUBE-AI/App/tjb_network_data.h": "d54ff1ee8e8808fda05bfb5536d449263c28cd02d8f270a11c0a0e92ec51a71b",
+    "X-CUBE-AI/App/tjb_network_data_params.c": "5bbc94af2e85134975c3de7fa620631aaa241662106c8e0f166abdb2e3a25ca9",
+    "X-CUBE-AI/App/tjb_network_data_params.h": "e8cd40f2b41ea3349da51a176a5968abbd3af94b308c7b26430da0151b9cb7aa",
     "application/application.md": "4184157d1889c34d2702ceee8d723bcc3d963793432443e88600f46276b72b8d",
     "application/balance/LQR.h": "a6c5481d15c944a839f4574669ea072be2851d39f4c536f1bb0a32eab2e561a9",
     "application/balance/leg_const.hpp": "5804a220ee8e82aa3b06a40f3e40e1b6e901de52c99510db3881f440fcb1c3e2",
@@ -140,32 +120,35 @@
     "application/balance/vmc_sjtu.cpp": "2ba8b9f1c11474319142ba8e9f85821474e42df2d0d98da3b2f48a9e311193cf",
     "application/balance/vmc_sjtu.hpp": "4c99cc230115a80cf63828a1bf5ee5db1ed7e3655ec65bb7b87aae0d5dbdee15",
     "application/chassis/balance.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/chassis.c": "cc76d02dd06806362810a7945560953d80711b7d0d61b3143faab9adba212fdd",
-    "application/chassis/chassis.h": "b665f63c7b1fbbd133429ae54a548a807b21ed1e4cc477119fc467e0dca04a4a",
+    "application/chassis/chassis.c": "aa17d404c75938a1d6ba600678830246bd1786e8c0da7c2637530f33b1bd7b63",
+    "application/chassis/chassis.h": "430b4052b0767642314fcf3f21d1e384eb4eb09c8d3e4e3d16cbf867ae9e10d0",
     "application/chassis/chassis.md": "de01441e22265573d4c6e89db1a2615537918f24b5764e98aaa724f65ea4d212",
     "application/chassis/mecanum.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "application/chassis/recovery2100/recovery_actor.c": "22851bd06a827a3016bcf551745a2afaa21f137642a2c6d32750ea9410f13b06",
     "application/chassis/recovery2100/recovery_actor.h": "2fbb04d75b1a5ff682e19554e161b68bb7b58ea817ce99446a353683bb2a1e8c",
     "application/chassis/rl_capture.c": "51a7a6c57fe8562f8c6cb46548fe0865b2ab5b7372555779323d3ce0f79e0dbd",
     "application/chassis/rl_capture.h": "bdd7e41207c523c90d641bc4a08bc87966f23bbb862b1d60bcc54e248eb9c0b3",
-    "application/chassis/rl_control.c": "8ddc085e37afb5016afe9c769c5e84bd5b1768c55fd385da32e5afadf7421e54",
-    "application/chassis/rl_control.h": "627352b92005e58c7166e4cd5855ab55d426402894f6fd47ff7b429fd2a3601f",
+    "application/chassis/rl_control.c": "e03705a3627e1a485f0281b9c2c4b493fed6a81dc9a43479d456d92fcb789860",
+    "application/chassis/rl_control.h": "d357e299cdc80d169f76b883aa54af4f9ade93882fc76af7278d4ff8bca3bb75",
     "application/chassis/rl_handoff.c": "82ffce278db7d17007491cd05a3ddaa4ea2ae964a632477957ea74a11691e02f",
     "application/chassis/rl_handoff.h": "718f7b19907026d419c9c4637ecddd6596e70c0defb3fa3976de6699f5b39fd5",
-    "application/chassis/rl_motion31.c": "65bc903a659dbf1df3b509319fd62d61a7076ec72ef4b907a68f34071370f1fa",
+    "application/chassis/rl_motion31.c": "b7a016608a628e1c242b1c4268dd71a228f27a77013d08e403f096d0c2d60fe2",
     "application/chassis/rl_motion31.h": "701b6ab0a9013284f8ab9c2742dd018ae9ae7fe622efe77cf982a14515762581",
-    "application/chassis/rl_shadow.c": "d3dc13ed5bfaf2f481f516ee87583eb80f487f31ce2569568bccbc3a1225fdfc",
-    "application/chassis/rl_shadow.h": "6949ea9e7c5ba1b8ae110d472d8470d6c598ddd4207f3722f1494e5ed2e38edb",
+    "application/chassis/rl_recovery_config.h": "b9bf0490610f72d780f40d73f10aad68a8aec77ad7b084f58ca0986f6c4f332e",
+    "application/chassis/rl_shadow.c": "a411491559dbb7c0203fe58753d58183e9b09086bd89ee959d6bc3c6887b07c9",
+    "application/chassis/rl_shadow.h": "1d48f134217943078dd506e16c703bf9df71ac932c2648ac63652d4966d60596",
     "application/chassis/steering.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis_can_link.h": "7d3d9cbb3a64be77c8100452849478dfde04d5ea234a9edc8cd48eeda5c7fb26",
+    "application/chassis_can_link.h": "bab1e3088d3c685832c4542f1408cf14467665cb8b5e9160dd024e9928501971",
     "application/cmd/robot_cmd.c": "8221c21a2a42e56dcd2c237d28acd699263f82fd09188e130ba756394e31b106",
     "application/cmd/robot_cmd.h": "c075c071cbfd53e7d997e9a26bebf2dc2fa234fc95686ec9645f5c0e44488f58",
     "application/cmd/robot_cmd.md": "cdffce1d637a938de531cfbdf9c210b9539e73474778d458ab68124e3c47c514",
     "application/robot.c": "d89a145bffe2703b9f9b4e0ec08e4332c64fefeef07c0a80628750b86ecf1183",
     "application/robot.h": "f13c88cbdbcdf279e99d03314b01526db4453cd9b41f731d8dded3ce09feba83",
     "application/robot_def.h": "44b404cd6e04e36c0c85ddd3e725ee0afcfed2d87abfde1f854d1f18c7290df0",
-    "application/robot_task.h": "dfa22b5fb7544f372acc6c16ffb8070b49d9078df082e0080ae3bc64e8608c7f",
+    "application/robot_task.h": "0934f2ef0a2ae977ce575f85955caaf75c5cd4e394f71b8ea7b6ad4bfc11358a",
     "application/syl.md": "65468ff120b00727098696bd8f563dfce029277ac8adcda618d9312356204e48",
+    "modules/alarm/buzzer.c": "6247b43100908897051b43d2eac4e092a5a28779594dee1d474d4c339b098cbf",
+    "modules/alarm/buzzer.h": "48e38cd58c71ef7b7a8b1fe46ec19a6a7fcbc4452552d12c3376b55f7da51636",
     "modules/motor/DJImotor/dji_motor.c": "b0562c2d99e89c83b7cf63fbe0cb07536c0705aa25000573156e6c796451284a",
     "modules/motor/DJImotor/dji_motor.h": "829fad901fb197fab97404632334e1a0cd154dd58864130b31161ea1589f446c",
     "modules/motor/DJImotor/dji_motor.md": "6cc2a130c92213316fb5cc6afd681843a5883d4ca41b115790e731c75b9f581a",
@@ -185,13 +168,12 @@
     "modules/motor/servo_motor/servo_motor.h": "5c65d83d0e186fad21b2fc8ff5a3ddf32ca30580ef2f56c8af9d545de58bfd2c",
     "modules/motor/servo_motor/servo_motor.md": "f3e6078b31124ab20ecb192e69b6b746f0097191c575128a08fba21dd7707254",
     "modules/motor/step_motor/step_motor.c": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "modules/motor/step_motor/step_motor.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "application/chassis/rl_recovery_config.h": "b9bf0490610f72d780f40d73f10aad68a8aec77ad7b084f58ca0986f6c4f332e"
+    "modules/motor/step_motor/step_motor.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "default_proprioceptive_dwell_ms": 20,
   "default_proprioceptive_leg_center_error_rad": 0.5,
-  "audit_revision": "restored_recovery2100_cubic_motion015_both_skills_spring",
-  "supersedes_firmware_commit": "e2591e9",
+  "audit_revision": "shared015_executor_latest_feedback_no_artificial_delay",
+  "supersedes_firmware_commit": "53d4031",
   "build_source_sha256": {
     "Makefile": "a55ecf7af409bc2612511295842f6a0b139c6cc0ca2025d6345a13cb239406b5",
     "STM32H723XG_FLASH.ld": "43393d00f784a7d78b305f3fa5bee6175829eb3319bd48cd5898b448d18ca390"
@@ -208,7 +190,7 @@
     "Recovery": true,
     "Motion": true,
     "formula": "ordinary015 RLControlCompensateSpring; only compensated PD result sent; zero-input call diagnostic only",
-    "cadence": "PD5ms updates and hold",
+    "cadence": "ordinary015 PD5ms uses latest valid q/dq and measured leg geometry; single compensated output per tick",
     "handoff": "same compensation path; no toggle, no extra addition, no reset",
     "final_leg_limit_Nm": 40,
     "simulation": "unchanged completeV4+NET; no extra software compensation",
@@ -226,5 +208,39 @@
     "teacher_sha256": "5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9",
     "FP32_parameters": 49734,
     "weight_bytes": 198936
+  },
+  "reviewed_source_base": "c5c8efe278297764a4e08417a8bdb017fc5d8ae2",
+  "motion_reference_commit": "7f89e6d50e5060c23fc03fd78e9211dcd1c8823b",
+  "execution": {
+    "owner": "ordinary015 ChassisTask5ms for both skills",
+    "actor_period_ms": 10,
+    "PD_period_ms": 5,
+    "dedicated_recovery_executor": false,
+    "dedicated_1ms_recovery_callback": false,
+    "actor_extra_history_ms": 0,
+    "target_extra_transport_ms": 0,
+    "wheel_extra_transport_ms": [
+      0,
+      0
+    ],
+    "feedback": "latest available valid snapshot; actual receipt times retained",
+    "targets": "adopt latest valid causal command on normal control tick",
+    "PD_leg": [
+      40,
+      2
+    ],
+    "PD_wheel_Kv": 0.2,
+    "leg_limit_Nm": 40,
+    "wheel_limit_Nm": 4.8,
+    "wheel_raw_limit": 16384,
+    "recovery_commands": [
+      0,
+      0,
+      0.34
+    ],
+    "motion_commands": "original015 after handoff; no height request accumulation during rise",
+    "previous": "actual adopted target; original015 q/dq INIT_PROXY before first adoption",
+    "motor_task_schedule": "byte-identical original015 robot_task.h; natural device delays remain",
+    "safety": "retained CAN100ms timeout/rearm, session SAFE latch, readiness and candidate continuity"
   }
 }

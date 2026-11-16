@@ -14,11 +14,15 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def function(source,name):
     match=re.search(r'(?:static\s+)?(?:RLShadowSnapshot|int)\s+'+re.escape(name)+r'\([^)]*\)\s*\{',source)
-    if match is None:raise ValueError('Missing public boundary '+name)
-    pos=match.end();depth=1
+    if match is None:
+        raise ValueError('Missing public boundary '+name)
+    pos=match.end()
+    depth=1
     while depth:
-        if source[pos]=='{':depth+=1
-        if source[pos]=='}':depth-=1
+        if source[pos]=='{':
+            depth+=1
+        if source[pos]=='}':
+            depth-=1
         pos+=1
     return source[match.start():pos]
 
@@ -72,7 +76,7 @@ int main(void){
   imu.update_tick_ms=100;imu.update_sequence=1;chassis_cmd_recv.chassis_mode=1;
   rl_control_state.active=1;rl_control_state.ready=1;rl_control_state.adopted_sequence=99;
   memcpy(rl_control_state.adopted_target,prev,sizeof(prev));
-  assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot(1);
+  assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot();
   assert(a.motion.command_height_m==.40f);
   assert(a.motion.command_vx_m_s==1.2f && a.motion.command_yaw_rad_s==.4f);
   assert(a.previous_source==RL_PREVIOUS_ADOPTED && a.adopted_sequence==99);
@@ -82,22 +86,38 @@ int main(void){
   assert(a.motion.joint_velocity_rad_s[1]==.4f);
   assert(a.motion.joint_velocity_rad_s[3]==-.4f);
   assert(a.motion.joint_velocity_rad_s[4]==-.4f);
-  assert(!ChassisSetRLHeight(.30f));RLShadowSnapshot b=CurrentRLSnapshot(1);
+  assert(!ChassisSetRLHeight(.30f));RLShadowSnapshot b=CurrentRLSnapshot();
   assert(b.motion.command_height_m==.30f);
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
-  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot(1);
+  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot();
   assert(fabsf(b.motion.command_height_m-(.30f+.048f*.005f))<1e-7f);
   assert(b.motion.command_vx_m_s==1.2f && b.motion.command_yaw_rad_s==.4f);
+  /* Rise hardcodes commands and never banks height lever/API requests. */
+  rl_control_state.recovery_session=rl_control_state.recovering=1;
+  assert(!ChassisSetRLHeight(.39f));chassis_cmd_recv.changeL=-1;
+  for(unsigned i=0;i<50;i++){
+    b=CurrentRLSnapshot();assert(b.motion.command_height_m==.34f);
+    assert(b.motion.command_vx_m_s==0 && b.motion.command_yaw_rad_s==0);
+    assert(rl_height_request_m==.34f);
+    assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
+  }
+  rl_control_state.recovering=0;chassis_cmd_recv.changeL=0;
+  b=CurrentRLSnapshot();assert(b.motion.command_height_m==.34f);
+  assert(b.motion.command_vx_m_s==1.2f && b.motion.command_yaw_rad_s==.4f);
+  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot();
+  assert(fabsf(b.motion.command_height_m-(.34f+.048f*.005f))<1e-7f);
   assert(ChassisSetRLHeight(.41f)<0);assert(ChassisSetRLHeight(NAN)<0);
   return 0;
 }
 '''
         with tempfile.TemporaryDirectory() as tmp:
-            path=Path(tmp)/'actual_snapshot.c';path.write_text(c)
+            path=Path(tmp)/'actual_snapshot.c'
+            path.write_text(c)
             subprocess.run([os.getenv('CC','cc'),'-std=gnu11','-O2','-Wall','-Wextra','-Werror',
                 '-I'+str(ROOT/'application/chassis'),str(path),str(ROOT/'application/chassis/rl_motion31.c'),
                 str(ROOT/'application/chassis/rl_control.c'),str(ROOT/'application/chassis/rl_handoff.c'),'-lm','-o',str(Path(tmp)/'snapshot')],check=True)
             subprocess.run([str(Path(tmp)/'snapshot')],check=True)
 
 
-if __name__=='__main__':unittest.main()
+if __name__=='__main__':
+    unittest.main()

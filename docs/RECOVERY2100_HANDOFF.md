@@ -1,121 +1,87 @@
-> **当前2100恢复版：** Recovery已从旧tjb换回2100蒸馏小模型（31→256→128→64→6），使用固定中心三次绝对腿目标、轮100×mean。Recovery与Motion实机两阶段均保留015弹簧补偿。旧tjb替换及0/7结果仅为历史对照。
+# Recovery2100起身与015 Motion共用实机执行链
 
-# Recovery2100起身 → 31D 015 Motion自动接管
+更新：2026-11-16。本分支`feature/rl-supported015-recovery2100`以远端015 `7f89e6d`为参照。当前Recovery为2100蒸馏小模型，Motion为原015网络；两套均为31→256→128→64→6、ELU/Tanh、C权重。本版删除独立`recovery_execute`和实机人为延迟，保留两阶段015弹簧补偿。
 
-本分支为STM32H723实机试验版本。当前Recovery为2100蒸馏小模型的31→256→128→64→6独立C网络；015 Motion为31→256→128→64→6的X-CUBE-AI网络。Recovery权重从ddb5045逐字节恢复，保留之后的安全修复和两阶段弹簧补偿。
+## 当前执行定义
 
-## 仿真与实机补偿口径
+```text
+5ms ChassisTask
+  → CurrentRLSnapshot：最新已收到且有效的六电机/IMU反馈
+  → 10ms RLShadowTask：最新快照→Recovery或Motion网络→对应decoder
+  → RLControlExecute：最新有效目标立即采用→最新反馈PD→015补偿→最终限矩
+  → ChassisCommitControl：六通道一次本地提交
+  → 原015电机任务：按正常发送路径输出
+```
 
-“软件层面不需要补偿”不准确：电控补偿本身就是软件。应按执行路径区分：
+策略输出在下一个正常5ms控制更新采用，不额外等待。电机/CAN通信、任务调度及硬件响应仍有自然时延，不称实机零延迟。没有刻意添加Actor20ms、目标5ms或轮力矩7/11ms队列，也没有用旧帧替代最新有效帧。
 
-| 路径 | 当前做法 | 证据与边界 |
+Recovery和Motion共用原015的目标采用、因果previous校验、PD、补偿、限矩与硬件提交。`recovery_session`仅标记一次自动起身生命周期及SAFE故障归属，不选择另一套执行器。`observe_handoff`只观察准备条件，不计算PD、不输出力矩。1ms专用`ChassisRLRecoveryTick`已删除，`application/robot_task.h`与015基点逐字节相同。
+
+## 起身命令与交接
+
+1. 保持原零力／急停模式，等待六路电机及IMU有效。安全模式下自动arm，不主动开启硬件。
+2. 原非零力使能后由Recovery起身，跳过传统LQR起身与原Motion启动等待。
+3. Recovery阶段硬编码vx=0 m/s、yaw=0 rad/s、height=0.34 m。升降拨杆和高度API不会积累待执行高度请求；内部高度请求在起身期间保持0.34 m。
+4. 本体准备条件连续满足20ms后，使用同一最新快照只读推理Motion。候选必须与实际previous因果一致、epoch正确、足够新鲜且物理目标连续。
+5. Motion候选在同一个控制更新经过PD／补偿／限矩全部成功后，提交模型切换、目标与epoch。补偿不切换、不重复；不清零previous，不插值、不排队。
+6. 交接后恢复原015的速度、转向和升降命令处理。交接候选使用起身时0/0/0.34命令；后续快照按正常命令更新。每次起身到Motion只切换一次，不自动切回Recovery。
+7. 交接提交时请求提示音；底盘`standup_flag`按recovering状态回传。捕获记录在当前控制tick标记交接，便于判断震荡在切换前还是后。
+
+## 两种输出合同
+
+| 项目 | Recovery2100蒸馏小模型 | 015 Motion |
 |---|---|---|
-| 完整V4训练/评估/sim2sim | 不额外调用软件弹簧补偿 | 保留原V4+NET；“不额外加”不表示已证明V4不含补偿作用 |
-| 015普通Motion实机 | 保留原RLControlCompensateSpring | 不修改feature/rl-motion31-supported015参考分支 |
-| 本集成会话实机Motion | 与Recovery共用同一015补偿 | 5ms更新/保持，最终腿限矩40Nm；交接不重复叠加 |
-| 本集成会话实机Recovery | 已按用户部署方案启用同一015补偿 | 与Motion共用输出路径；实际硬件效果仍待验证 |
-| 旧tjb原生c94bb9f实机 | 原生代码在Recovery输出时加补偿 | 不能把它与本集成代码现状或V4仿真配置混为一谈 |
-
-若V4确实拟合了“软件补偿＋电机＋真实弹簧”的整体响应，则仿真不额外加补偿、实机保留对应补偿，两者可以一致。但当前缺少V4采集时补偿开关的确证，不能宣称所有模型/高度/力矩工况已认证等效。完整V4仿真成功不能证明实机Recovery应关闭补偿；当前已按用户明确部署方案让Recovery与Motion共用原015补偿，但这不等于V4采集假设已获证实。
-
-验证完整电控（含补偿）需要独立物理弹簧、相应电机响应并重新核对V4/NET残差，不能直接将软件补偿叠加到原整套V4后当作实机验证。本轮落实的是实机软件部署方案，未修改V4仿真路径。
-
-## 本次默认流程
-
-1. 上电后保持遥控器零力/急停安全模式，等待六电机与IMU反馈正常。
-2. 安全模式下程序自动arm Recovery；切换到原有非零力使能模式后，由Recovery起身，跳过原LQR复位/摆腿。
-3. 起身期间vx/yaw/height命令固定0/0/0.34。使用本体IMU与编码器判断准备条件，持续20 ms后只读探测Motion。
-4. Motion新鲜输出相对实际previous的腿目标跳变≤0.4 rad、轮目标跳变≤40 rad/s时自动接管。过程中不reset、不清previous或运输队列，不加混合插值或滤波。Recovery与Motion两阶段均复用普通015原有弹簧补偿；交接不切换补偿开关、不额外叠加补偿。
-5. 接管后Motion响应原有摇杆速度、转向和腿高控制。同一会话不来回切换网络。
-6. 切回零力模式立即沿原有电机停止路径退出。反馈或策略失效则锁存归零，不在Swing中回退LQR；回安全模式后才能重新开始。
-
-配置入口：`application/chassis/rl_recovery_config.h`。
-
-- `RL_RECOVERY_AUTO_START=1`：安全→使能每次从Recovery开始。
-- `RL_RECOVERY_POSTURE_HANDOFF=1`：默认本体感知准备判据。
-- `RL_RECOVERY_POSTURE_DWELL_MS=20`：本体感知满足条件后尽早交给Motion；外部严格支撑门仍独立为200ms。
-- `RL_RECOVERY_POSTURE_TILT_RAD=0.35`（约20°）、`GYRO_RAD_S=3`、`LEG_SPEED_RAD_S=8`：扩大Motion接管范围。
-- `RL_RECOVERY_POSTURE_ERROR_RAD=0.50`：四腿实际位置相对Motion0.34m参考中心，各自允许偏差0.50 rad。该中心是输出参考，不是编码器偏置；不能改编码器零位来凑中心。
-- 若改`POSTURE_HANDOFF=0`，则必须由合格平台提供实际高度/双轮支撑证据，否则不会交接。
-
-## 本体感知自动交接
-
-使用真实六路电机CAN接收时间戳、IMU更新完成时间戳、四腿q/dq和IMU重力/角速度。反馈全六路及IMU须有效；控制新鲜度≤24 ms，准备判据年龄≤20 ms。dwell按最旧必需反馈的接收时间推进，重复同一反馈不能由1ms循环累积成200ms。
-
-条件：单位重力合法；重力方向距直立轴≤0.35 rad；角速度范数≤3 rad/s；四腿速度绝对值各≤8 rad/s；四腿位置距Motion参考中心各≤0.50 rad。连续20ms后仍需通过新鲜Motion输出/previous/epoch/物理目标跳变检查。
-
-这是`handoff_source=2`的姿态与构型准备条件，不是独立触地证明。悬空但姿态和构型满足时也可能接管。现有`F_n`含指令力矩，未拿它冒充双轮承重；没有给法向力填常数、没有使用外部定位或仿真高度。若平台提供有效真实高度/双轮支撑证据，使用`handoff_source=1`的原严格门；切换证据来源会清除未完成dwell。
-
-调试观察 `g_rl_shadow_debug`：
-
-| 字段 | 含义 |
-|---|---|
-| `recovery_mode` | 1=Recovery，0=Motion |
-| `handoff_source` | 1=合格支撑证据；2=本体姿态/构型准备 |
-| `handoff_requested` / `handoff_committed` | 请求只读Motion探测 / 已提交交接 |
-| `failure` / `inference_deadline_miss_count` | 推理失败原因 / 超10ms推理次数 |
-| `publish_seq` / `frame_end` | 两者相等且偶数时读取一致快照 |
-
-capture为v3，新增source/requested/committed及实际Actor输入tick。读取器按`schema_version/record_bytes`识别，不按旧固定长度解释。
-
-## 模型与执行合同
-
-| 项目 | 当前2100蒸馏Recovery | 015 Motion |
-|---|---|---|
-| 网络 | `recovery2100/recovery_actor.c`，确定性ELU/Tanh | 015原X-CUBE-AI `tjb_network` |
-| 腿目标 | 固定中心三次绝对目标，±1.5rad包络 | C0五次高度中心+0.15×mean |
-| 轮目标 | 100×mean rad/s | 80×mean rad/s |
+| C权重 | `application/chassis/recovery2100/recovery_actor.c` | 原X-CUBE-AI `tjb_network`，与015基点逐字节相同 |
+| 腿目标 | 固定中心三次绝对目标，边界±1.5 rad | C0五次高度中心＋0.15×mean |
+| 轮速目标 | 100×mean rad/s | 80×mean rad/s |
 | skill25–27 | 0,1,0 | 1,0,0 |
+| 起身／运行命令 | 0/0/0.34固定 | 原015正常命令 |
 
-输入均31D，保留真实dq。输入腿/previous腿除1.5，previous轮速除100；previous只来自本地实际采用物理目标，首次采用前明记q/零轮速初始化proxy。影子推理不能写缓存，decoder各执行一次。模型left对应几何右，不交换数组。
+Recovery腿公式：`d=mean; R=d>=0 ? upper-center : center-lower; q=center+0.15*d+(R-0.15)*d^3`。
+中心为`[-0.1309740543,-0.1511767805,+0.1309740543,-0.1511767805]`rad。不能使用线性1.5×mean，也不能使用Motion残差decoder；每个目标只解码一次。
 
-策略10ms。显式Recovery→Motion会话由电机发送前1ms入口拥有六通道输出；PD5ms，目标运输5ms，模型双轮力矩运输7/11ms。收到状态包名义20ms、启动暖填。PD40/2/0.2；腿40Nm、轮4.8Nm；保留015驱动原始轮电流限幅16384，实际电流/力矩比例未实测。此会话Recovery与Motion阶段均复用RLControlCompensateSpring，按PD5ms读取实际腿长/夹角更新并保持，最终腿力矩限幅±40Nm。两阶段共用同一输出路径，删除已无用途的仅Motion补偿模式标记；交接不重复叠加补偿。真实机械弹簧及驱动配置仍需按本机平台核对。普通015传统入口保留，但默认自动Recovery会话使用上述明确合同。
+输入均31D，保留真实dq：腿q与previous腿除1.5 rad，previous轮除100 rad/s，dq乘0.05。输入尺度不随输出变化。previous仅记录本地实际采用的物理目标；首次采用前使用与015相同的q/dq初始化代理并明确标记INIT_PROXY，影子推理不更新执行缓存。模型left对应几何右，不交换网络数组。
 
-2100蒸馏的唯一教师SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。当前恢复的是该教师的蒸馏小模型，非大教师原网络；没有新训练。源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。
+教师SHA256：`5aec83df5644ae1b96f4ed012be41d41cb15c4729bbc7b632af347912d3d12a9`。
+部署Actor SHA256：`660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d`。
+源部署包：`/home/kellen/wheel_leg_training_data/2026_11_13__recovery2100_mujoco_rise_r2/deployment_v3`。恢复的是蒸馏小模型，不是直接运行大教师；本轮没有训练。
 
-## 构建与交付
+## PD、补偿与安全
+
+- 腿PD40/2、轮速Kv0.2。**公共PD层明确腿±40 Nm、轮±4.8 Nm**，预览与实际执行一致。015参考分支仍保持原样；本集成分支按用户要求将其5.5 Nm轮PD上限改为4.8 Nm。
+- 两阶段同一`RLControlCompensateSpring`：PD限幅→motor顺序映射→加一次015补偿→最终腿±40 Nm。零输入函数调用只取得诊断项，最终输出不再加诊断项。
+- 保留原始轮电流限幅16384及方向转换；源码Nm／电流换算不冒称已做轴端力矩实测。
+- 最新反馈和策略仍检查新鲜度≤24ms、六轴有效、IMU有效、有限值与对应decoder。异常后会话锁SAFE六通道归零，不在起身中回退LQR；需显式零力复位。该安全归属是保留的生命周期差异，不是第二套PD执行器。
+- 保留远端CAN100ms超时归零与恢复后先接收零力再使能的保护；与015基点的差异单独说明，不悄悄移除。
+- 正常任务栈／堆的集成容量和采集RAM保留；未改变IMU采集、电机标定、遥控映射或Motion权重。
+
+本体门使用最新电机q/dq、IMU重力与角速度及真实接收时间戳。距直立轴≤0.35rad、gyro范数≤3rad/s、四腿速度≤8rad/s、四腿距Motion0.34m中心≤0.50rad，持续20ms；目标跳变腿≤0.4rad、轮≤40rad/s。dwell按最旧必要反馈时间推进，重复同一反馈不能累积。该门不是触地证明，不使用假法向力或仿真高度。配置在`application/chassis/rl_recovery_config.h`，阈值未收紧。
+
+## 仿真与实机分工
+
+Isaac／MuJoCo训练与评估可以按冻结spec增加观测和执行延迟，模拟真实系统不确定性；实机不把这些仿真队列再执行一遍。完整V4＋NET仿真不额外添加015补偿；实机保留原软件补偿及真实弹簧。两者的完整系统等效仍需采集版本与原CSV绑定，不由本次软件修改证明。
+
+历史完整V4记录中，同一2100小模型独立控制及20ms本体交接均6/7；旧tjb比较版0/7。那些实验使用其当时冻结执行合同，**不代表本版最新反馈实机路径已做新的闭环验证**。历史报告及原始数据保留，不改写其失败和能力记录。
+
+## 验证与交付
+
+正式实机调用链在上方；不再保留并行Recovery PD实现。针对性验证包括：
+
+- 原015 `7f89e6d`仅把轮PD限矩5.5改4.8后，与新会话Motion1000组输入、每组46个采用目标／PD／补偿／最终输出值逐位一致；第二个控制tick无新目标、改变q/dq与补偿几何仍一致。
+- 三类路径（普通015、Recovery、接管后Motion）共1200组Actor／PD相位、推理耗时、owner先后顺序和uint32回绕；9/9主机套件含15类真实RLShadowTask路由／最新输入／耗时／错误情景。
+- 真实`CurrentRLSnapshot`测试起身固定0/0/0.34、拒绝积累高度请求、交接后恢复命令；真实底盘输出选择与共享提交测试首个目标同tick生效、双轮即时输出、交接提示一次和失效锁零。
+- 2100权重及decoder保持原有128帧真实golden身份；非端点／中心探针区分三次与线性解码。
+
+运行方式：
 
 ```sh
 sh tests/run_rl_host_tests.sh
+PYTHONDONTWRITEBYTECODE=1 /home/kellen/anaconda3/envs/issaclab/bin/python -m unittest discover -s tools -p 'test_*.py'
 make -j12 SHELL=/bin/sh \
   GCC_PATH=/home/kellen/.local/opt/xpack-arm-none-eabi-gcc-14.2.1-1.1/bin \
   OPT='-Og -fstack-usage'
 ```
 
-可烧写hex/bin与SHA在`firmware/recovery2100_motion015/`，bin加载地址`0x08000000`；源码构建仍生成`build/Basic_Framework_MC02.*`。本次未连接设备或刷机。栈与实时期限目前有静态构建和计数器，尚无目标MCU高水位/推理时限实测。
+HEX／BIN及源码SHA见`firmware/recovery2100_motion015/manifest.json`，bin加载地址0x08000000。旧53d4031固件不含后来CAN／反馈／提示音源码变更，不能冒称最新；本轮重新构建全部最新源码。
 
-CPU原0158组与Recovery控制/真实shadow14情景通过；128条真实golden误差mean4.29e-7、物理目标2.29e-5。闭环本体判据结果与失败边界见`docs/SIMULATION_RESULTS.md`和release验证收据。能力范围是已测合法Swing，不是任意倒地方向的实机成功认证。
-
-## 实车前兼容审查更新
-
-两套权重均为C，Recovery是独立const float推理核，Motion为ST打包ai_u64推理，格式不同但不依赖ONNX运行。旧128的tjb_recover网络不再作为当前Recovery；recovery2100目录内已恢复ddb5045的2100蒸馏C权重。
-
-本次修复模式冲突误释放会话、新会话复用旧FIFO和采集过早冻结三项bug，旧ffed642固件/ZIP被当前产物取代。15种真实shadow情景与9/9测试通过。新固件只能称可进入有保护的分步实车验证，尚无目标deadline/栈高水位及本车零位、方向、力矩标定实测证据。详细根因/定位/处理和边界见`artifacts/recovery2100_vehicle_audit/REPORT.md`。
-
-Recovery会话采集按200Hz，在接管/故障触发并保存约555ms后续；冻结后保留供读取，不随安全模式自动清除。需要新一轮采集时显式调用`RLCaptureArm(RL_CAPTURE_CAPACITY-17u)`。
-
-## 历史Motion补偿修复与V4复测（40e1b8b，2026-11-15）
-
-仅修改本集成分支；feature/rl-motion31-supported015作为只读参考，不提交到该分支。当前Recovery仍是旧tjb_recover，腿1.5×mean、轮100×mean；未换回2100。
-
-实机Motion链（含普通015及集成接管后）：PD→015补偿→最终限矩→真实驱动器/弹簧。该历史版本集成实机Recovery未调用补偿；本轮已按用户部署方案启用，见下节。仿真链：原PD→完整V4+NET；不额外叠加015补偿。V4采集是否包含当时软件补偿尚缺开关记录，因此本次不是包含独立真实弹簧的完整固件物理验证。
-
-正式sim2sim复测：tjb_v4_recheck_motion_spring_fix_r1包含Recovery-only与20ms本体交接各7组，均0/7，全部0.49–1.21秒交接前失败；motion015_v4_recheck_motion_spring_fix_r1站立两组均通过，连续保持12.984/12.982秒。数据根：/home/kellen/wheel_leg_training_data/recovery_motion_handoff。补偿的软件行为由真实C主机消费者验证，不能将V4数值结果称为补偿实机认证。
-
-## 实机两阶段统一补偿（2026-11-15）
-
-用户明确要求落实实机Recovery和Motion都保留015弹簧补偿，V4仿真不额外叠加。本轮将recovery_execute的PD输出改为两阶段共用RLControlCompensateSpring，删除仅Motion启用的运输模式标记。每5ms计算：原PD限幅→映射motor顺序→加一次补偿→最终腿±40Nm；期间保持输出。零输入调用只记录spring诊断，最终发送的是对原PD输出调用的结果，不相加两份函数结果。轮速PD、轮4.8Nm限矩、网络解码、目标运输、previous及交接门不改。
-
-Recovery尚未产生有效策略请求时沿原SAFE路径保持零输出；反馈/几何失效锁零。交接时补偿不切换、不重复、不清缓存。实际C消费者核对Recovery补偿公式/5ms保持与刷新、两阶段最终限矩、交接帧无额外项、无效几何锁零，原时序/previous/故障测试保持通过。
-
-该补偿提交e2591e9当时仍装载旧tjb_recover；后续按用户要求恢复2100，见下节。先前V4下旧tjb0/7、2100小模型6/7是原仿真记录，不是本次实机补偿效果。仿真路径未修改，因此没有以额外叠加补偿重新做V4试验。未刷机，未驱动真实电机。
-
-## 恢复2100蒸馏小模型（2026-11-15）
-
-从ddb5045仅恢复RecoveryActor C/H及Recovery三次decoder，未回退整个分支。保留e2591e9的Recovery/Motion两阶段015补偿、当前FIFO/previous/epoch、安全锁零及20ms本体交接门。
-
-腿目标公式：d=mean；R=d>=0时upper-center，否则center-lower；q=center+0.15*d+(R-0.15)*d³。中心[-0.1309740543,-0.1511767805,0.1309740543,-0.1511767805]rad，边界±1.5rad，轮100*mean rad/s。Motion仍C0poly5(height)+0.15*mean、轮80*mean。
-
-部署actor.pt SHA256为660a5686251171fba9835c28be292868e4afaec3cdd8609e7346bf6c9b03620d；128真实状态C golden最大误差mean4.2934e-7、物理目标2.2888e-5，Physical与Mean后Decode逐位一致，decoder只执行一次。主机9/9套通过（含真实shadow15情景、两阶段补偿和非端点三次解码）；工具3通过/6外部原模型缺失跳过，ARM构建通过Flash640316B、DTCM82624B、RAM_D159456B。
-
-2100独立控制/20ms交接既有V4记录均6/7，使用同一部署Actor；此轮未新跑仿真，未将额外补偿叠入V4。新固件实机能力、MCUdeadline与栈高水位仍未验证，未刷机。权重、补偿、decoder、SHA及二进制见当前manifest；真实golden证据在数据根recovery_motion_handoff/restore2100_both_spring_evidence。
+本轮原始检查证据位于数据根`recovery_motion_handoff/shared015_latest_feedback_release`，源码内修复清单见[015对齐审阅](../artifacts/recovery2100_015_alignment/REPORT.md)。未刷机、未驱动电机；板端推理deadline、栈高水位和真实闭环能力仍需实测。本轮不通过额外叠加补偿仿真来代替实机验证。

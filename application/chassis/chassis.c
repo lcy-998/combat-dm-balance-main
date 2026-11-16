@@ -890,7 +890,7 @@ void ChassisUpdateRLHandoffEvidence(const RLHandoffSample *evidence)
 
 /* One coherent local feedback copy with CAN receipt/filter-completion times.
    Sensor acquisition times remain UNKNOWN; task time is not substituted for them. */
-static RLShadowSnapshot CurrentRLSnapshot(int update_commands)
+static RLShadowSnapshot CurrentRLSnapshot(void)
 {
     RLShadowSnapshot out={0};
     float q[4],dq[4],wheel[2],r,p,dr,dp,dy;
@@ -940,8 +940,11 @@ static RLShadowSnapshot CurrentRLSnapshot(int update_commands)
     /* Same existing changeL lever and increment, now also an Actor root-height
        request. Do not feed LQR leg length l_xx or measured height to Actor. */
     taskENTER_CRITICAL();
-    if(update_commands && rl_control_state.active &&
-       (rl_control_state.recovery_session || ChassisNormalLQRState())) {
+    if(rl_control_state.recovering) {
+        /* No deferred height requests may leak from rise into Motion. */
+        rl_height_request_m=.34f;
+    } else if(rl_control_state.active &&
+              (rl_control_state.recovery_session || ChassisNormalLQRState())) {
         if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=LEG_LENGTH_STEP_M;
         if(chassis_cmd_recv.changeL==1) rl_height_request_m-=LEG_LENGTH_STEP_M;
         rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
@@ -949,8 +952,7 @@ static RLShadowSnapshot CurrentRLSnapshot(int update_commands)
     }
     const float requested_height=rl_height_request_m;
     taskEXIT_CRITICAL();
-    if(update_commands)
-        (void)RLControlSetCommandHeight(&rl_control_state,rl_control_state.recovering ? .34f : requested_height);
+    (void)RLControlSetCommandHeight(&rl_control_state,requested_height);
     out.motion.command_height_m=RLControlCommandHeight(&rl_control_state);
     out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE &&
                         (rl_control_state.recovery_session || !chassis_status));
@@ -963,47 +965,30 @@ static RLShadowSnapshot CurrentRLSnapshot(int update_commands)
     return out;
 }
 
-/* Sole owner during an explicit Recovery->Motion session. Called immediately
-   before motor transmission; ordinary015 remains on its existing5ms owner. */
-void ChassisRLRecoveryTick(void)
+/* Same015 output transaction for both skills and the legacy Motion path. */
+static void ChassisCommitControl(const RLControlState *pending,const RLControlFrame *frame,
+                                 const float selected_leg[4],const float selected_wheel[2],int use_rl)
 {
-    if(!rl_control_state.recovery_session || chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE)return;
-        RLShadowCommand command;
-        const RLShadowCommand *candidate=RLShadowReadCommand(&command)==0?&command:NULL;
-        RLShadowSnapshot current=CurrentRLSnapshot(0);
-        RLControlFillPrevious(&rl_control_state,&current);
-        if(candidate){rl_consumed_command=*candidate;rl_command_consumed=1u;}
-        const int enabled=chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE &&
-                          !upstair_flag && !upstair_flag0 && !jumpingflag;
-        const uint8_t was_recovering=rl_control_state.recovering;
-        const int executed=RLControlExecute(&rl_control_state,xTaskGetTickCount(),enabled,
-                                           &current,candidate,&rl_control_frame)==0;
-        if(executed && was_recovering && !rl_control_state.recovering &&
-           rl_control_state.handoff.committed)
-            BuzzerRequestHandoffBeep();
-        taskENTER_CRITICAL();
-        DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
-        for(unsigned i=0;i<4;i++) {
-            motors[i]->ctrl.host_position_pd=0;motors[i]->ctrl.kp_set=motors[i]->ctrl.kd_set=0;
-            motors[i]->ctrl.pos_set=motors[i]->ctrl.vel_set=0;
-            DMMotorSetTorque(motors[i],executed ? rl_control_frame.final_motor_nm[i] : 0.f);
-        }
-        lwi=executed ? rl_control_frame.wheel_current_raw[0] : 0.f;
-        rwi=executed ? rl_control_frame.wheel_current_raw[1] : 0.f;
-        motor_l->motor_controller.current_feedforward_ptr=&lwi;
-        motor_r->motor_controller.current_feedforward_ptr=&rwi;
-        taskEXIT_CRITICAL();
-        current.pd_tick_ms=rl_control_frame.adopted_tick_ms;
-        if(executed) {
-            memcpy(current.applied_leg_torque_motor_nm,rl_control_frame.final_motor_nm,
-                   sizeof(current.applied_leg_torque_motor_nm));
-            memcpy(current.applied_wheel_current_raw,rl_control_frame.wheel_current_raw,
-                   sizeof(current.applied_wheel_current_raw));
-        }
-        RLCapturePush(&current,candidate,&rl_control_frame);
-        RLControlFillPrevious(&rl_control_state,&current);
-        current.rl_active=current.chassis_ready && rl_control_state.ready && !rl_control_state.fault;
-        RLShadowPublish(&current);
+    const int handoff=use_rl && rl_control_state.recovering && !pending->recovering &&
+        pending->handoff.committed;
+    /* One software adoption transaction for all six channels. CAN
+       frames remain asynchronous; this is not remote acceptance. */
+    taskENTER_CRITICAL();
+    DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
+    for (unsigned i=0;i<4;++i) {
+        motors[i]->ctrl.host_position_pd=0u;
+        motors[i]->ctrl.kp_set=0;motors[i]->ctrl.kd_set=0;
+        motors[i]->ctrl.pos_set=0;motors[i]->ctrl.vel_set=0;
+        DMMotorSetTorque(motors[i],selected_leg[i]);
+    }
+    lwi=selected_wheel[0];rwi=selected_wheel[1];
+    rl_control_state=*pending;
+    lqr_reentry_pending=(uint8_t)use_rl;
+    if (use_rl || pending->recovery_session) rl_control_frame=*frame;
+    else {memset(&rl_control_frame,0,sizeof(rl_control_frame));
+          rl_control_frame.tick_ms=frame->tick_ms;rl_control_frame.fault=pending->fault;}
+    taskEXIT_CRITICAL();
+    if(handoff)BuzzerRequestHandoffBeep();
 }
 
 void outputTorque()
@@ -1012,7 +997,27 @@ void outputTorque()
     rl_control_frame.tick_ms=rl_pd_snapshot.tick_ms;
     rl_command_consumed=0u;
     chassis_lqr_output_valid = 0u;
-    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE)return;
+    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE) {
+        RLShadowCommand command;
+        const RLShadowCommand *candidate=RLShadowReadCommand(&command)==0?&command:NULL;
+        RLShadowSnapshot current=rl_pd_snapshot;
+        RLControlFillPrevious(&rl_control_state,&current);
+        if(candidate){rl_consumed_command=*candidate;rl_command_consumed=1u;}
+        RLControlState pending=rl_control_state;
+        RLControlFrame frame={0};
+        const int enabled=!upstair_flag && !upstair_flag0 && !jumpingflag;
+        const int use_rl=RL_CONTROL_OUTPUT_ENABLED &&
+            RLControlExecute(&pending,xTaskGetTickCount(),enabled,&current,candidate,&frame)==0;
+        float selected_leg[4]={0},selected_wheel[2]={0};
+        if(use_rl) {
+            memcpy(selected_leg,frame.final_motor_nm,sizeof(selected_leg));
+            memcpy(selected_wheel,frame.wheel_current_raw,sizeof(selected_wheel));
+        }
+        ChassisCommitControl(&pending,&frame,selected_leg,selected_wheel,use_rl);
+        motor_l->motor_controller.current_feedforward_ptr=&lwi;
+        motor_r->motor_controller.current_feedforward_ptr=&rwi;
+        return;
+    }
     /* Start the inference hold only after the leg ramp completes. */
     if(!rl_control_state.recovery_session)
         (void)RLControlStep(&rl_control_state,
@@ -1313,23 +1318,7 @@ void outputTorque()
                     memcpy(selected_leg,frame.final_motor_nm,sizeof(selected_leg));
                     memcpy(selected_wheel,frame.wheel_current_raw,sizeof(selected_wheel));
                 }
-                /* One software adoption transaction for all six channels. CAN
-                   frames remain asynchronous; this is not remote acceptance. */
-                taskENTER_CRITICAL();
-                DMMotorInstance *motors[4]={jiont_motorlf,jiont_motorlb,jiont_motorrf,jiont_motorrb};
-                for (unsigned i=0;i<4;++i) {
-                    motors[i]->ctrl.host_position_pd=0u;
-                    motors[i]->ctrl.kp_set=0;motors[i]->ctrl.kd_set=0;
-                    motors[i]->ctrl.pos_set=0;motors[i]->ctrl.vel_set=0;
-                    DMMotorSetTorque(motors[i],selected_leg[i]);
-                }
-                lwi=selected_wheel[0];rwi=selected_wheel[1];
-                rl_control_state=pending;
-                lqr_reentry_pending=(uint8_t)use_rl;
-                if (use_rl) rl_control_frame=frame;
-                else {memset(&rl_control_frame,0,sizeof(rl_control_frame));
-                      rl_control_frame.tick_ms=current.tick_ms;rl_control_frame.fault=pending.fault;}
-                taskEXIT_CRITICAL();
+                ChassisCommitControl(&pending,&frame,selected_leg,selected_wheel,use_rl);
             }
         }
         // 直接写入离散值
@@ -1521,15 +1510,14 @@ void ChassisTask()
     getLegData();
     getStateData();
     setTargetData();
-    rl_pd_snapshot=CurrentRLSnapshot(1);
-    /* The 1ms owner alone writes commands/capture/policy snapshots in this session. */
-    if(rl_control_state.recovery_session && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE) {
-        ChassisPublishFeedback();
-        return;
+    rl_pd_snapshot=CurrentRLSnapshot();
+    /* Both skills run on this ordinary015 5ms owner. Only bypass legacy
+       rise/LQR calculations while the explicit RL session owns the robot. */
+    if(!rl_control_state.recovery_session || chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE) {
+        legLengthCalc();
+        vmcCalc();
+        flyDetect();
     }
-    legLengthCalc();
-    vmcCalc();
-    flyDetect();
     outputTorque();
 
     /* Log the exact feedback used by this PD step, not a second later read. */
@@ -1545,6 +1533,12 @@ void ChassisTask()
         rl_control_frame.wheel_current_raw[0]=lwi;rl_control_frame.wheel_current_raw[1]=rwi;
         taskEXIT_CRITICAL();
     }
+    /* Capture the just-committed handoff on this same control tick. Keep the
+       original PD snapshot/command previous intact for trace causality. */
+    shadow.recovery_session=rl_control_state.recovery_session;
+    shadow.handoff_source=rl_control_state.handoff_source;
+    shadow.handoff_requested=rl_control_state.handoff.requested;
+    shadow.handoff_committed=rl_control_state.handoff.committed;
     RLCapturePush(&shadow,rl_command_consumed?&rl_consumed_command:NULL,&rl_control_frame);
     RLControlFillPrevious(&rl_control_state,&shadow);
     shadow.rl_active=(shadow.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&

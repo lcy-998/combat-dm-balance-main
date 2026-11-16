@@ -267,7 +267,7 @@ int RLMotion31ComputePdTorque(const RLMotion31Snapshot *s,
                            - 2.0f * s->joint_velocity_rad_s[i];
         }
         if (!isfinite(requested[i])) return -1;
-        const float limit = (i == 2u || i == 5u) ? 5.5f : 40.0f;
+        const float limit = (i == 2u || i == 5u) ? 4.8f : 40.0f;
         limited[i] = fminf(fmaxf(requested[i], -limit), limit);
     }
     return finite_array(limited, RL_MOTION31_ACTION_SIZE) ? 0 : -1;

@@ -21,7 +21,6 @@ int ChassisSetRLHeight(float command_height_m);
 /* Optional explicit request mailbox: consumed only in ZERO_FORCE safe mode. */
 extern volatile unsigned char g_rl_recovery_request;
 int ChassisStartRLRecovery(void);
-void ChassisRLRecoveryTick(void);
 void ChassisUpdateRLHandoffEvidence(const RLHandoffSample *evidence);
 
 #endif // CHASSIS_H

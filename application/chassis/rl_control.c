@@ -71,6 +71,13 @@ RLControlDecision RLControlStep(RLControlState *state,
 {
     RLControlDecision decision = {0};
     if (state == NULL) return decision;
+    /* Session changes only skill/lifecycle. Adoption and PD below are015. */
+    if (state->recovery_session) {
+        decision.active = normal_lqr && !state->fault && state->ready &&
+            command_usable(command,now_tick) && command->control_epoch==state->epoch &&
+            command->recovery_mode==state->recovering;
+        return decision;
+    }
     if (!normal_lqr) {
         decision.exited = state->active;
         const uint32_t next = state->epoch + (state->timing || state->active || state->fault ? 1u : 0u);
@@ -103,36 +110,28 @@ void RLControlReset(RLControlState *state)
 void RLControlFillPrevious(const RLControlState *state, RLShadowSnapshot *s)
 {
     if (state == NULL || s == NULL) return;
-    const int adopted=state->active && (!state->recovery_session || state->adopted_sequence!=0u);
     s->control_epoch = state->epoch;
-    s->controller_owner = state->active ? RL_OWNER_RL : RL_OWNER_LQR;
-    s->adopted_sequence = adopted ? state->adopted_sequence : 0u;
-    s->adopted_tick_ms = adopted ? state->adopted_tick_ms : 0u;
-    s->previous_source = adopted ? RL_PREVIOUS_ADOPTED : RL_PREVIOUS_INIT_PROXY;
-    if (adopted) {
-        memcpy(s->motion.previous_target, state->adopted_target, sizeof(state->adopted_target));
+    s->controller_owner = state->active ? RL_OWNER_RL :
+        state->recovery_session ? RL_OWNER_SAFE : RL_OWNER_LQR;
+    s->adopted_sequence = state->active ? state->adopted_sequence : 0u;
+    s->adopted_tick_ms = state->active ? state->adopted_tick_ms : 0u;
+    s->previous_source = state->active ? RL_PREVIOUS_ADOPTED : RL_PREVIOUS_INIT_PROXY;
+    if (state->active) {
+        memcpy(s->motion.previous_target,state->adopted_target,sizeof(state->adopted_target));
     } else {
-        /* Declared takeover proxy v1. Does not claim LQR executed these targets. */
-        const unsigned legs[4] = {0u,1u,3u,4u};
-        for (unsigned i=0;i<4u;++i) s->motion.previous_target[legs[i]] = s->motion.joint_position_rad[i];
-        s->motion.previous_target[2] = s->motion.joint_velocity_rad_s[2];
-        s->motion.previous_target[5] = s->motion.joint_velocity_rad_s[5];
+        /* Same declared015 q/dq proxy, never an inference prediction. */
+        const unsigned legs[4]={0,1,3,4};
+        for(unsigned j=0;j<4;j++)s->motion.previous_target[legs[j]]=s->motion.joint_position_rad[j];
+        s->motion.previous_target[2]=s->motion.joint_velocity_rad_s[2];
+        s->motion.previous_target[5]=s->motion.joint_velocity_rad_s[5];
     }
-    s->motion.previous_target_valid = 1u;
+    s->motion.previous_target_valid=1u;
     s->handoff_source=state->handoff_source;
     s->handoff_requested=state->handoff.requested;
     s->handoff_committed=state->handoff.committed;
     s->recovery_session=state->recovery_session;
     s->motion.recovery_mode=state->recovering;
-    s->motion_probe=state->recovery_session && state->recovering && state->handoff.requested;
-    if(state->recovery_session && adopted) {
-        memcpy(s->motion.previous_target,state->adopted_target,sizeof(state->adopted_target));
-        s->previous_source=RL_PREVIOUS_ADOPTED;
-        s->adopted_sequence=state->adopted_sequence;
-        s->adopted_tick_ms=state->adopted_tick_ms;
-    } else if(state->recovery_session) {
-        s->motion.previous_target[2]=s->motion.previous_target[5]=0.f;
-    }
+    s->motion_probe=state->recovering && state->handoff.requested;
 }
 
 static int execution_fault(RLControlState *state, RLControlFrame *out, unsigned reason)
@@ -174,30 +173,9 @@ int RLControlStartRecovery(RLControlState *state)
     return 0;
 }
 
-/* Explicit Recovery session. Both Recovery and Motion use ordinary015 spring
-   compensation once per PD update; mode handoff never toggles that term.
-   Called by the 1ms chassis owner: target transport5ms, PD5ms, wheels7/11ms.
-   Fault returns zero commands to the caller, never falls back to LQR mid-Swing. */
-static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
-                            const RLShadowSnapshot *x,const RLShadowCommand *c,
-                            RLControlFrame *f)
+/* Readiness only; no target, PD or output implementation here. */
+static int observe_handoff(RLControlState *s,uint32_t now,const RLShadowSnapshot *x)
 {
-    f->control_epoch=s->epoch;f->fault=s->fault;f->owner=RL_OWNER_SAFE;
-    if(s->fault)return -1;
-    if(!enabled)return execution_fault(s,f,RL_FAULT_MODE);
-    if(!RLControlFeedbackFresh(x,now) || RLMotion31ValidateSnapshot(&x->motion))
-        return execution_fault(s,f,RL_FAULT_INPUT);
-    if(s->recovery_initialized && (uint32_t)(now-s->recovery_last_ms)!=1u)
-        return execution_fault(s,f,RL_FAULT_PD);
-    if(!s->recovery_initialized){
-        const unsigned legs[4]={0,1,3,4};
-        for(unsigned j=0;j<4;j++)s->adopted_target[legs[j]]=x->motion.joint_position_rad[j];
-        s->adopted_target[2]=s->adopted_target[5]=0;
-        memcpy(s->recovery_request,s->adopted_target,sizeof(s->adopted_target));
-        for(unsigned j=0;j<32;j++)memcpy(s->recovery_targets[j],s->adopted_target,sizeof(s->adopted_target));
-        s->recovery_initialized=1;
-    }
-    s->recovery_last_ms=now;
     RLHandoffSample quality=x->handoff;
     if(!quality.valid || (uint32_t)(now-quality.tick_ms)>20u){quality.valid=0;quality.tick_ms=now;}
     if(s->recovering) {
@@ -212,7 +190,7 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
             posture_config.angular_speed_rad_s=RL_RECOVERY_POSTURE_GYRO_RAD_S;
             posture_config.leg_speed_rad_s=RL_RECOVERY_POSTURE_LEG_SPEED_RAD_S;
             double dcenter[4];float center[4];
-            if(RLMotion31SupportCenter(.34,dcenter))return execution_fault(s,f,RL_FAULT_INPUT);
+            if(RLMotion31SupportCenter(.34,dcenter))return -1;
             for(unsigned i=0;i<4;i++)center[i]=(float)dcenter[i];
             uint32_t oldest_age=(uint32_t)(now-x->imu_update_tick_ms);
             for(unsigned i=0;i<6;i++) {
@@ -220,7 +198,7 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
                 if(age>oldest_age)oldest_age=age;
             }
             /* Dwell advances only when the oldest required received feedback
-               advances; the 1ms owner cannot manufacture new evidence. */
+               advances; the control owner cannot manufacture new evidence. */
             (void)RLHandoffObservePosture(&s->handoff,&posture_config,oldest_age<=20u ? now-oldest_age : now,
                 oldest_age<=20u,
                 x->motion.joint_position_rad,x->motion.joint_velocity_rad_s,
@@ -228,67 +206,6 @@ static int recovery_execute(RLControlState *s,uint32_t now,int enabled,
                 RL_RECOVERY_POSTURE_ERROR_RAD);
         }
     }
-    if(command_usable(c,now) && c->control_epoch==s->epoch &&
-       c->recovery_mode==s->recovering &&
-       (int32_t)(c->snapshot_sequence-s->recovery_request_sequence)>0){
-        const float *target=c->preview.target;
-        if(s->recovering && c->motion_valid && c->previous_source==RL_PREVIOUS_ADOPTED &&
-           c->previous_sequence==s->adopted_sequence &&
-           RLHandoffCanCommit(&s->handoff,&RL_HANDOFF_CONFIG,c->snapshot_tick_ms,
-                               s->adopted_target,c->motion_preview.target)){
-            float decoded[6];
-            if(RLMotion31DecodeOutput(c->motion_action,c->motion_preview.observation[24]*.5f,decoded))
-                return execution_fault(s,f,RL_FAULT_COMMAND);
-            for(unsigned i=0;i<6;i++)
-                if(!isfinite(c->motion_preview.target[i]) || fabsf(decoded[i]-c->motion_preview.target[i])>.0001f)
-                    return execution_fault(s,f,RL_FAULT_COMMAND);
-            target=c->motion_preview.target;s->recovering=0;s->handoff.committed=1;s->epoch++;
-        }
-        memcpy(s->recovery_request,target,sizeof(s->recovery_request));
-        s->recovery_request_sequence=c->snapshot_sequence;s->recovery_output_ms=c->output_tick_ms;
-    }
-    if(s->recovery_request_sequence && (uint32_t)(now-s->recovery_output_ms)>RL_CONTROL_COMMAND_MAX_AGE_MS)
-        return execution_fault(s,f,RL_FAULT_COMMAND);
-    const unsigned slot=now%32u;
-    memcpy(s->recovery_targets[slot],s->recovery_request,sizeof(s->recovery_request));
-    s->recovery_target_sequence[slot]=s->recovery_request_sequence;
-    if((!s->recovery_pd_valid && now%5u==0u) ||
-       (s->recovery_pd_valid && (uint32_t)(now-s->adopted_tick_ms)>=5u)){
-        memcpy(s->adopted_target,s->recovery_targets[(now-5u)%32u],sizeof(s->adopted_target));
-        if(RLMotion31ComputePdTorque(&x->motion,s->adopted_target,s->recovery_raw_pd,s->recovery_pd))
-            return execution_fault(s,f,RL_FAULT_PD);
-        /* Explicit session cap; ordinary015 retains its existing PD contract. */
-        s->recovery_pd[2]=clampf(s->recovery_pd[2],-4.8f,4.8f);
-        s->recovery_pd[5]=clampf(s->recovery_pd[5],-4.8f,4.8f);
-        s->adopted_sequence=s->recovery_target_sequence[(now-5u)%32u];
-        s->adopted_tick_ms=now;s->recovery_pd_valid=1;
-        float motor[4];
-        if(RLMotion31MapPolicyLegTorqueToMotorOrder(s->recovery_pd,motor))
-            return execution_fault(s,f,RL_FAULT_PD);
-        /* First call is diagnostic only; only the second result is sent.
-           Both skills share this path: no second compensation at handoff. */
-        const float zero[4]={0};
-        if(RLControlCompensateSpring(zero,x->leg_length_m,x->leg_spread_rad,s->recovery_spring) ||
-           RLControlCompensateSpring(motor,x->leg_length_m,x->leg_spread_rad,s->recovery_motor))
-            return execution_fault(s,f,RL_FAULT_COMPENSATION);
-    }
-    s->recovery_wheels[slot][0]=s->recovery_pd[2];s->recovery_wheels[slot][1]=s->recovery_pd[5];
-    memcpy(f->tau_pd_nm,s->recovery_raw_pd,sizeof(s->recovery_raw_pd));
-    memcpy(f->tau_limited_nm,s->recovery_pd,sizeof(s->recovery_pd));
-    f->tau_limited_nm[2]=s->recovery_wheels[(now-7u)%32u][0];
-    f->tau_limited_nm[5]=s->recovery_wheels[(now-11u)%32u][1];
-    if(!s->recovery_request_sequence)return 1;
-    float wheel[2];
-    memcpy(f->final_motor_nm,s->recovery_motor,sizeof(s->recovery_motor));
-    memcpy(f->spring_motor_nm,s->recovery_spring,sizeof(s->recovery_spring));
-    if(RLMotion31MapPolicyWheelTorqueToForwardOrder(f->tau_limited_nm,wheel))
-        return execution_fault(s,f,RL_FAULT_PD);
-    f->wheel_current_raw[0]=clampf(-wheel[0]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
-    f->wheel_current_raw[1]=clampf(wheel[1]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
-    s->active=1;f->owner=RL_OWNER_RL;f->control_epoch=s->epoch;
-    f->adopted_sequence=s->adopted_sequence;f->adopted_tick_ms=s->adopted_tick_ms;
-    f->snapshot_sequence=x->sequence;
-    memcpy(f->adopted_target,s->adopted_target,sizeof(s->adopted_target));
     return 0;
 }
 
@@ -299,7 +216,11 @@ int RLControlExecute(RLControlState *state,
 {
     if (state == NULL || frame == NULL) return -1;
     memset(frame,0,sizeof(*frame)); frame->tick_ms=now_ms;
-    if(state->recovery_session) return recovery_execute(state,now_ms,normal_lqr,current,command,frame);
+    if(state->recovery_session) {
+        frame->owner=RL_OWNER_SAFE;frame->fault=state->fault;frame->control_epoch=state->epoch;
+        if(state->fault)return -1;
+        if(!normal_lqr)return execution_fault(state,frame,RL_FAULT_MODE);
+    }
     const RLControlDecision eligible=RLControlStep(state,now_ms,normal_lqr,command);
     frame->control_epoch=state->epoch;frame->fault=state->fault;
     if (!normal_lqr || !state->ready || state->fault) return 1;
@@ -307,6 +228,8 @@ int RLControlExecute(RLControlState *state,
         RLMotion31ValidateSnapshot(&current->motion)!=0)
         return execution_fault(state,frame,RL_FAULT_INPUT);
     RLControlState pending=*state;
+    if(state->recovering && observe_handoff(&pending,now_ms,current))
+        return execution_fault(state,frame,RL_FAULT_INPUT);
     int new_target=0;
     if (eligible.active && (!state->active ||
         (int32_t)(command->snapshot_sequence-state->adopted_sequence)>0)) {
@@ -314,13 +237,29 @@ int RLControlExecute(RLControlState *state,
             (command->previous_source==RL_PREVIOUS_ADOPTED && command->previous_sequence==state->adopted_sequence) :
             (command->previous_source==RL_PREVIOUS_INIT_PROXY && command->previous_sequence==0u);
         if (causal) {
-            memcpy(pending.adopted_target,command->preview.target,sizeof(pending.adopted_target));
+            const float *target=command->preview.target;
+            if(state->recovering && command->motion_valid && state->active &&
+               RLHandoffCanCommit(&pending.handoff,&RL_HANDOFF_CONFIG,command->snapshot_tick_ms,
+                                  state->adopted_target,command->motion_preview.target)) {
+                RLShadowCommand motion=*command;
+                motion.recovery_mode=0;motion.preview=command->motion_preview;
+                memcpy(motion.action,command->motion_action,sizeof(motion.action));
+                if(!command_usable(&motion,now_ms))
+                    return execution_fault(state,frame,RL_FAULT_COMMAND);
+                target=command->motion_preview.target;
+                pending.recovering=0;pending.handoff.committed=1;pending.epoch++;
+            }
+            memcpy(pending.adopted_target,target,sizeof(pending.adopted_target));
             pending.adopted_sequence=command->snapshot_sequence;
             pending.adopted_tick_ms=now_ms;new_target=1;
             pending.adopted_height_m=command->preview.observation[24]*.5f;
         }
     }
-    if (!state->active && !new_target) return 1; /* keep LQR until the first valid policy command */
+    if (!state->active && !new_target) {
+        /* Readiness can advance while waiting; no target/proxy is executed. */
+        state->handoff=pending.handoff;state->handoff_source=pending.handoff_source;
+        return 1;
+    }
     if (!new_target && (uint32_t)(now_ms-state->adopted_tick_ms)>RL_CONTROL_COMMAND_MAX_AGE_MS)
         return execution_fault(state,frame,RL_FAULT_COMMAND);
     float motor[4],wheel[2];
@@ -336,6 +275,7 @@ int RLControlExecute(RLControlState *state,
     frame->wheel_current_raw[0]=clampf(-wheel[0]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
     frame->wheel_current_raw[1]=clampf( wheel[1]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
     pending.active=1u; *state=pending;
+    frame->control_epoch=state->epoch;
     frame->owner=RL_OWNER_RL; frame->adopted_sequence=state->adopted_sequence;
     frame->adopted_tick_ms=state->adopted_tick_ms;frame->snapshot_sequence=current->sequence;
     memcpy(frame->adopted_target,state->adopted_target,sizeof(state->adopted_target));

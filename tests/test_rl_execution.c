@@ -79,11 +79,13 @@ static void test_counter_boundaries(void)
 static void test_schedule_phases(void)
 {
     unsigned cases=0;
+    for(unsigned skill=0;skill<3;++skill)
     for(unsigned wrap=0;wrap<2;++wrap)for(unsigned order=0;order<2;++order)
     for(unsigned phase=0;phase<10;++phase)for(unsigned cost=0;cost<10;++cost) {
         const uint32_t base=wrap?UINT32_MAX-90u:10000u;
         RLControlState state={.ramp_completed=1,.timing=1,.ready=1,.epoch=7,
             .wait_start_tick=base-6000u};
+        state.recovery_session=skill!=0;state.recovering=skill==2;
         RLControlFrame frame;
         uint32_t sequence=100;
         RLShadowSnapshot sample=feedback(base);sample.sequence=sequence++;
@@ -101,7 +103,8 @@ static void test_schedule_phases(void)
                         pending=(RLShadowCommand){.valid=1,.snapshot_sequence=sample.sequence,
                             .snapshot_tick_ms=sample.tick_ms,.output_tick_ms=now+cost,
                             .control_epoch=sample.control_epoch,.previous_source=sample.previous_source,
-                            .previous_sequence=sample.adopted_sequence};
+                            .previous_sequence=sample.adopted_sequence,
+                            .recovery_mode=sample.motion.recovery_mode};
                         pending.action[0]=.1f;
                         assert(!RLMotion31BuildPreview(&sample.motion,pending.action,&pending.preview));
                         if(cost){completion=tick+cost;inflight=1;}else delivered=pending;
@@ -123,8 +126,8 @@ static void test_schedule_phases(void)
         assert(state.active && adoptions>=10);
         ++cases;
     }
-    assert(cases==400);
-    puts("PASS 400 Actor/PD phase, inference-cost, owner-order and clock-wrap schedules");
+    assert(cases==1200);
+    puts("PASS 1200 ordinary015/Recovery/Motion Actor/PD phase, inference-cost, owner-order and clock-wrap schedules");
 }
 
 int main(void)

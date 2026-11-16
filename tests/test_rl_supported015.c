@@ -112,7 +112,7 @@ int main(void)
             float p[6]={0},v[6]={0},t[6]={0};t[ch]=10*(float)sign;
             assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));near(p[ch],2*(float)sign);
             t[ch]=100*(float)sign;
-            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));near(v[ch],5.5f*(float)sign);
+            assert(!RLMotion31ComputePdTorque(&s.motion,t,p,v));near(v[ch],4.8f*(float)sign);
         }
     }
     /* A failure in any last channel/compensation leaves the adopted six-axis
@@ -146,9 +146,9 @@ int main(void)
     assert(!RLControlExecute(&state,7000,1,&s,&c,&frame));
     near(state.adopted_target[2],80); near(state.adopted_target[5],-80);
     near(frame.tau_pd_nm[2],16); near(frame.tau_pd_nm[5],-16);
-    near(frame.tau_limited_nm[2],5.5f); near(frame.tau_limited_nm[5],-5.5f);
-    near(fabsf(frame.wheel_current_raw[0]),RL_CONTROL_WHEEL_RAW_LIMIT);
-    near(fabsf(frame.wheel_current_raw[1]),RL_CONTROL_WHEEL_RAW_LIMIT);
+    near(frame.tau_limited_nm[2],4.8f); near(frame.tau_limited_nm[5],-4.8f);
+    near(fabsf(frame.wheel_current_raw[0]),4.8f*RL_MOTION31_WHEEL_CURRENT_PER_NM);
+    near(fabsf(frame.wheel_current_raw[1]),4.8f*RL_MOTION31_WHEEL_CURRENT_PER_NM);
     s=feedback(7005,&state);
     assert(!RLMotion31BuildObservation(&s.motion,obs));
     near(obs[20],.8f); near(obs[21],-.8f);

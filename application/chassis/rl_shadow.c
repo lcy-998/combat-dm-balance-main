@@ -24,7 +24,6 @@ _Static_assert(AI_TJB_NETWORK_OUT_1_SIZE == RL_MOTION31_ACTION_SIZE,
 volatile RLShadowDebug g_rl_shadow_debug;
 static RLShadowDebug working_debug;
 static uint32_t debug_generation;
-static uint32_t actor_input_tick;
 static uint8_t inference_pending_timing;
 
 static void commit_debug(void)
@@ -113,7 +112,7 @@ static void publish_command(const RLShadowSnapshot *sample,
         command.previous_source=sample->previous_source;
         command.previous_sequence=sample->adopted_sequence;
         command.recovery_mode=sample->motion.recovery_mode;
-        command.actor_input_tick_ms=sample->recovery_session ? actor_input_tick : sample->tick_ms;
+        command.actor_input_tick_ms=sample->tick_ms;
         if(sample->motion_probe) {
             RLMotion31Snapshot motion=sample->motion;
             motion.recovery_mode=0u;
@@ -259,10 +258,6 @@ void RLShadowTask(void const *argument)
 {
     (void)argument;
     uint8_t network_ready = 0u;
-    static RLMotion31Snapshot recovery_packets[3];
-    static uint32_t recovery_ticks[3];
-    unsigned cursor=0u;uint8_t packet_initialized=0u,packet_mode=0u;
-    uint32_t packet_epoch=0u;
     if (snapshot_queue == NULL) {
         working_debug.failure = 1u;
         publish_debug(NULL);
@@ -304,29 +299,6 @@ void RLShadowTask(void const *argument)
             commit_debug();
             continue;
         }
-        if(sample.recovery_session) {
-            const int handoff_epoch=packet_initialized && packet_mode &&
-                !sample.motion.recovery_mode && sample.handoff_committed &&
-                sample.control_epoch==packet_epoch+1u;
-            if(!packet_initialized || (sample.control_epoch!=packet_epoch && !handoff_epoch)) {
-                for(unsigned i=0;i<3u;i++){recovery_packets[i]=sample.motion;recovery_ticks[i]=sample.tick_ms;}
-                cursor=0u;packet_initialized=1u;
-            }
-            packet_epoch=sample.control_epoch;packet_mode=sample.motion.recovery_mode;
-            recovery_packets[cursor%3u]=sample.motion;recovery_ticks[cursor%3u]=sample.tick_ms;
-            RLMotion31Snapshot received=recovery_packets[(cursor+1u)%3u];
-            /* The received state is old; previous is current adopted physical target.
-               Command/mode metadata are current and never taken from shadow output. */
-            memcpy(received.previous_target,sample.motion.previous_target,sizeof(received.previous_target));
-            received.previous_target_valid=sample.motion.previous_target_valid;
-            received.recovery_mode=sample.motion.recovery_mode;
-            received.command_vx_m_s=sample.motion.command_vx_m_s;
-            received.command_yaw_rad_s=sample.motion.command_yaw_rad_s;
-            received.command_height_m=sample.motion.command_height_m;
-            sample.motion=received;
-            actor_input_tick=recovery_ticks[(cursor+1u)%3u];cursor++;
-            /* tick_ms retains latest snapshot freshness; input age is separate below. */
-        } else packet_initialized=0u;
         working_debug.stage = 1u;
         working_debug.previous_target_valid = sample.motion.previous_target_valid;
         working_debug.previous_target_is_virtual = (sample.previous_source != RL_PREVIOUS_ADOPTED);
@@ -407,8 +379,7 @@ void RLShadowTask(void const *argument)
         working_debug.stage = 4u;
         /* Publish a valid policy target for the next motor-control update. */
         publish_debug(&sample);
-        working_debug.failure = sample.recovery_session ? 0u : publish_preview_torque(&sample, preview.target);
-        if(sample.recovery_session) working_debug.rl_torque_valid=1u; /* PD belongs to chassis owner */
+        working_debug.failure = publish_preview_torque(&sample, preview.target);
         working_debug.stage = working_debug.rl_torque_valid ? 5u : 4u;
         publish_command(&sample, action, &preview, working_debug.rl_torque_valid);
         commit_debug();

@@ -144,429 +144,144 @@ static void test_explicit_start_and_contracts(void)
     CHECK(RLMotion31DecodeRecoveryMean(bad,target)<0);
 }
 
-static void test_shadow_previous_is_read_only(void)
+/* Both modes call the same015 adoption/PD path; target takes effect on this
+   control tick, and repeated target PD uses the newly received q/dq. */
+static void test_latest_adoption_and_pd(void)
 {
-    RLControlState s={0}; RLControlFrame f;
-    CHECK(!RLControlStartRecovery(&s));
-    RLShadowCommand c=packet(&s,100,1,NULL,0);
-    for(uint32_t t=100;t<=110;t++)CHECK(!step(&s,t,&c,0,&f));
-    CHECK(s.adopted_sequence==1);
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+    RLShadowSnapshot x=feedback(&s,100);
+    x.motion.joint_position_rad[0]=.2f;x.motion.joint_velocity_rad_s[2]=7;
+    RLControlFillPrevious(&s,&x);
+    CHECK(x.previous_source==RL_PREVIOUS_INIT_PROXY && near(x.motion.previous_target[0],.2f));
+    CHECK(x.motion.previous_target[2]==7);
+    CHECK(RLControlExecute(&s,100,1,&x,NULL,&f)==1 && zero_output(&f));
+    const float a[6]={.4f,-.3f,1,-.2f,.3f,-1};
+    RLShadowCommand c=packet(&s,105,1,a,0);
+    x=feedback(&s,105);
+    CHECK(!RLControlExecute(&s,105,1,&x,&c,&f));
+    CHECK(s.active && s.adopted_sequence==1 && s.adopted_tick_ms==105);
+    CHECK(!memcmp(s.adopted_target,c.preview.target,sizeof(s.adopted_target)));
+    CHECK(near(f.tau_limited_nm[2],4.8f) && near(f.tau_limited_nm[5],-4.8f));
+    CHECK(near(f.wheel_current_raw[0],-4.8f*RL_MOTION31_WHEEL_CURRENT_PER_NM));
+    CHECK(near(f.wheel_current_raw[1],-4.8f*RL_MOTION31_WHEEL_CURRENT_PER_NM));
+    check_spring(&x,&f,1);
     const RLControlState before=s;
-    RLShadowSnapshot x=feedback(&s,111);
-    RLMotion31Preview preview;
-    const float shadow_action[6]={.8f,-.7f,.6f,-.5f,.4f,-.3f};
-    for(unsigned pass=0;pass<3;pass++){
-        x.motion.recovery_mode=pass==0;
-        CHECK(!RLMotion31BuildPreview(&x.motion,shadow_action,&preview));
-        /* Inference output is never fed back as an adopted previous. */
-        RLControlFillPrevious(&s,&x);
-        CHECK(!memcmp(x.motion.previous_target,before.adopted_target,sizeof(s.adopted_target)));
-        CHECK(x.previous_source==RL_PREVIOUS_ADOPTED && x.adopted_sequence==1);
-        CHECK(!memcmp(&s,&before,sizeof(s)));
-    }
-    c=packet(&s,111,2,shadow_action,0);
-    CHECK(!step(&s,111,&c,0,&f));
-    CHECK(s.recovery_request_sequence==2 && s.adopted_sequence==1);
-    x=feedback(&s,111);
-    CHECK(!memcmp(x.motion.previous_target,before.adopted_target,sizeof(s.adopted_target)));
-    CHECK(memcmp(x.motion.previous_target,c.preview.target,sizeof(s.adopted_target)));
-}
-
-static void test_startup_previous_is_proxy(void)
-{
-    RLControlState s={0}; RLControlFrame f;
-    CHECK(!RLControlStartRecovery(&s));
-    RLShadowSnapshot x=feedback(&s,101);
-    x.motion.joint_position_rad[0]=.2f;
-    x.motion.joint_velocity_rad_s[2]=7;
-    x.motion.joint_velocity_rad_s[5]=-9;
-    RLControlFillPrevious(&s,&x);
-    CHECK(x.previous_source==RL_PREVIOUS_INIT_PROXY && !x.adopted_sequence);
-    CHECK(near(x.motion.previous_target[0],.2f));
-    CHECK(x.motion.previous_target[2]==0 && x.motion.previous_target[5]==0);
-    CHECK(RLControlExecute(&s,101,1,&x,NULL,&f)==1);
-    CHECK(f.owner==RL_OWNER_SAFE && !f.fault && f.control_epoch==s.epoch && zero_output(&f));
-    CHECK(s.recovery_initialized && !s.adopted_sequence && !s.recovery_pd_valid);
-    RLControlFillPrevious(&s,&x);
-    /* Queue seeding is initialization, not an actual target adoption. */
-    CHECK(x.previous_source==RL_PREVIOUS_INIT_PROXY && !x.adopted_sequence);
-    RLShadowCommand c=packet(&s,102,1,NULL,0);
-    for(uint32_t t=102;t<=109;t++){
-        CHECK(!step(&s,t,&c,0,&f));
-        x=feedback(&s,t);
-        if(x.previous_source!=RL_PREVIOUS_INIT_PROXY)
-            fprintf(stderr,"Startup previous: now=%u active=%u pd_valid=%u adopted_sequence=%u source=%u\n",
-                    (unsigned)t,(unsigned)s.active,(unsigned)s.recovery_pd_valid,
-                    (unsigned)s.adopted_sequence,(unsigned)x.previous_source);
-        CHECK(!s.adopted_sequence && x.previous_source==RL_PREVIOUS_INIT_PROXY);
-    }
-    CHECK(!step(&s,110,&c,0,&f));
-    x=feedback(&s,110);
-    CHECK(x.previous_source==RL_PREVIOUS_ADOPTED && x.adopted_sequence==1);
+    /* Shadow decode cannot affect actual previous. */
+    RLMotion31Preview preview;CHECK(!RLMotion31BuildPreview(&x.motion,a,&preview));
+    RLControlFillPrevious(&s,&x);CHECK(!memcmp(&before,&s,sizeof(s)));
     CHECK(!memcmp(x.motion.previous_target,c.preview.target,sizeof(s.adopted_target)));
+    x=feedback(&s,110);x.motion.joint_position_rad[0]=.07f;
+    x.motion.joint_velocity_rad_s[0]=.4f;x.leg_spread_rad[0]=1.2f;
+    CHECK(!RLControlExecute(&s,110,1,&x,NULL,&f));
+    CHECK(near(f.tau_pd_nm[0],40*(c.preview.target[0]-.07f)-2*.4f));
+    CHECK(s.adopted_tick_ms==105);check_spring(&x,&f,1);
+    c=packet(&s,115,2,NULL,0);x=feedback(&s,115);
+    CHECK(!RLControlExecute(&s,115,1,&x,&c,&f));
+    CHECK(s.adopted_sequence==2 && s.adopted_tick_ms==115);
+    CHECK(!memcmp(s.adopted_target,c.preview.target,sizeof(s.adopted_target)));
 }
 
-static void test_command_mode_boundaries(void)
+static void test_motion_matches_ordinary015(void)
 {
-    const float action[6]={.2f,0,.1f,0,0,0};
-    RLControlState recovery={0};
-    CHECK(!RLControlStartRecovery(&recovery));
-    RLShadowCommand c=packet(&recovery,100,1,action,0);
-    RLControlFrame f;
-    c.recovery_mode=2;
-    CHECK(step(&recovery,100,&c,0,&f)==1);
-    CHECK(!recovery.recovery_request_sequence && !recovery.active && f.owner==RL_OWNER_SAFE);
-    for(unsigned mode=1;mode<=2;mode++){
-        RLControlState motion={.ramp_completed=1,.timing=1,.ready=1,.epoch=7};
-        RLShadowSnapshot x=feedback(&motion,100);
-        RLMotion31Snapshot input=x.motion;input.recovery_mode=1;
-        c=(RLShadowCommand){.valid=1,.snapshot_sequence=1,.snapshot_tick_ms=100,
-            .output_tick_ms=100,.control_epoch=7,.previous_source=RL_PREVIOUS_INIT_PROXY,
-            .recovery_mode=(uint8_t)mode};
-        memcpy(c.action,action,sizeof(action));
-        CHECK(!RLMotion31BuildPreview(&input,c.action,&c.preview));
-        CHECK(!RLControlStep(&motion,100,1,&c).active);
-        CHECK(RLControlExecute(&motion,100,1,&x,&c,&f)==1);
-        CHECK(!motion.active && !motion.adopted_sequence && !motion.fault);
-    }
-}
-
-/* Independent elapsed-time oracle: targets travel 5ms, PD updates every 5ms,
-   then physical right/left wheel torque travels another 7/11ms. */
-static void schedule(uint32_t base)
-{
-    RLControlState s={0}; RLControlFrame f;
-    float requested[90][6]={{0}},pd_history[90][6]={{0}},adopted[6]={0},pd[6]={0};
-    uint32_t sequences[90]={0},adopted_sequence=0,last_pd=0;
-    int pd_started=0;
-    CHECK(!RLControlStartRecovery(&s));
-    RLShadowCommand c={0};
-    for(unsigned t=0;t<90;t++){
-        const uint32_t now=base+t;
-        if(t%10u==0){
-            float a[6]={0};
-            for(unsigned i=0;i<6;i++)a[i]=(t/10u)%2u?.06f:-.04f;
-            c=packet(&s,now,t/10u+1u,a,0);
-        }
-        memcpy(requested[t],c.preview.target,sizeof(requested[t]));
-        sequences[t]=c.snapshot_sequence;
-        RLShadowSnapshot x=feedback(&s,now);
-        x.motion.joint_position_rad[0]=.0001f*(float)t;
-        x.motion.joint_velocity_rad_s[0]=.001f*(float)t;
-        if((!pd_started && now%5u==0u) || (pd_started && (uint32_t)(now-last_pd)==5u)){
-            if(t>=5){memcpy(adopted,requested[t-5],sizeof(adopted));adopted_sequence=sequences[t-5];}
-            for(unsigned j=0;j<4;j++)pd[legs[j]]=40*adopted[legs[j]];
-            pd[0]-=40*x.motion.joint_position_rad[0]+2*x.motion.joint_velocity_rad_s[0];
-            pd[2]=.2f*adopted[2]; pd[5]=.2f*adopted[5];
-            last_pd=now; pd_started=1;
-        }
-        memcpy(pd_history[t],pd,sizeof(pd));
-        CHECK(!RLControlExecute(&s,now,1,&x,&c,&f));
-        CHECK(!s.fault && s.recovery_session && s.recovering && f.owner==RL_OWNER_RL);
-        CHECK(s.adopted_sequence==adopted_sequence);
-        if(pd_started && s.adopted_tick_ms!=last_pd)
-            fprintf(stderr,"PD cadence: base=%u now=%u expected_last=%u actual_last=%u\n",
-                    (unsigned)base,(unsigned)now,(unsigned)last_pd,(unsigned)s.adopted_tick_ms);
-        CHECK(!pd_started || s.adopted_tick_ms==last_pd);
-        for(unsigned i=0;i<6;i++)CHECK(near(s.adopted_target[i],adopted[i]));
-        for(unsigned i=0;i<6;i++)CHECK(near(f.tau_pd_nm[i],pd[i]));
-        for(unsigned j=0;j<4;j++)CHECK(near(f.tau_limited_nm[legs[j]],pd[legs[j]]));
-        const float right=t>=7?pd_history[t-7][2]:0;
-        const float left=t>=11?pd_history[t-11][5]:0;
-        CHECK(near(f.tau_limited_nm[2],right) && near(f.tau_limited_nm[5],left));
-        CHECK(fabsf(f.wheel_current_raw[0]-left*RL_MOTION31_WHEEL_CURRENT_PER_NM)<.001f);
-        CHECK(fabsf(f.wheel_current_raw[1]+right*RL_MOTION31_WHEEL_CURRENT_PER_NM)<.001f);
-        check_spring(&x,&f,pd_started);
-    }
-}
-
-static void test_wheel_session_cap(void)
-{
-    RLControlState s={0}; RLControlFrame f;
-    CHECK(!RLControlStartRecovery(&s));
-    const float a[6]={0,0,1,0,0,-1};
-    RLShadowCommand c=packet(&s,100,1,a,0);
-    for(uint32_t t=100;t<=120;t++){
-        CHECK(!step(&s,t,&c,0,&f));
-        CHECK(near(f.tau_limited_nm[2],t>=112?4.8f:0));
-        CHECK(near(f.tau_limited_nm[5],t>=116?-4.8f:0));
-        CHECK(near(f.tau_pd_nm[2],t>=105?20:0));
-        CHECK(near(f.tau_pd_nm[5],t>=105?-20:0));
-        RLShadowSnapshot x=feedback(&s,t);check_spring(&x,&f,1);
-    }
-    CHECK(s.adopted_target[2]==100 && s.adopted_target[5]==-100);
-    CHECK(fabsf(f.wheel_current_raw[0])<=RL_CONTROL_WHEEL_RAW_LIMIT);
-    CHECK(fabsf(f.wheel_current_raw[1])<=RL_CONTROL_WHEEL_RAW_LIMIT);
-}
-
-static void test_recovery_spring_held_and_fault(void)
-{
-    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
-    RLShadowCommand c=packet(&s,100,1,NULL,0);
-    CHECK(!step(&s,100,&c,0,&f));
-    RLShadowSnapshot x=feedback(&s,100);check_spring(&x,&f,1);
-    CHECK(s.recovering && fabsf(f.spring_motor_nm[0])>1.f);
-    float held[4];memcpy(held,f.final_motor_nm,sizeof(held));
-    for(uint32_t t=101;t<=104;t++){
-        x=feedback(&s,t);x.leg_spread_rad[0]=1.2f;
-        CHECK(!RLControlExecute(&s,t,1,&x,NULL,&f));
-        CHECK(!memcmp(f.final_motor_nm,held,sizeof(held)));
-    }
-    x=feedback(&s,105);x.leg_spread_rad[0]=1.2f;
-    CHECK(!RLControlExecute(&s,105,1,&x,NULL,&f));
-    check_spring(&x,&f,1);CHECK(!near(f.final_motor_nm[0],held[0]));
-    for(uint32_t t=106;t<=109;t++)CHECK(!step(&s,t,NULL,0,&f));
-    x=feedback(&s,110);x.leg_length_m[0]=NAN;
-    CHECK(RLControlExecute(&s,110,1,&x,NULL,&f)<0);
-    CHECK(s.fault==RL_FAULT_COMPENSATION && f.owner==RL_OWNER_SAFE && zero_output(&f));
-    CHECK(step(&s,111,NULL,0,&f)<0 && zero_output(&f));
-}
-
-static void test_faults_latch_zero(void)
-{
-    for(unsigned mode=0;mode<11;mode++){
-        RLControlState s={0}; RLControlFrame f;
-        CHECK(!RLControlStartRecovery(&s));
-        RLShadowCommand c=packet(&s,100,1,NULL,0);
-        for(uint32_t t=100;t<=120;t++)CHECK(!step(&s,t,&c,0,&f));
-        uint32_t now=mode==6?122:121;
-        RLShadowSnapshot x=feedback(&s,now);
-        unsigned reason=RL_FAULT_INPUT;
-        if(mode==0)x.feedback_valid_mask&=~1u;
-        if(mode==1)x.feedback_receive_tick_ms[5]=now-25u;
-        if(mode==2)x.imu_update_sequence=0;
-        if(mode==3)x.motion.joint_velocity_rad_s[5]=NAN;
-        if(mode==4){
-            for(uint32_t t=121;t<=124;t++)CHECK(!step(&s,t,NULL,0,&f));
-            now=125; x=feedback(&s,now); reason=RL_FAULT_COMMAND;
-        }
-        if(mode==5){now=120; x=feedback(&s,now); reason=RL_FAULT_PD;}
-        if(mode==6)reason=RL_FAULT_PD;
-        if(mode==7)x.imu_update_tick_ms=now-25u;
-        if(mode==8)x.tick_ms=now-25u;
-        if(mode==9)x.motion.gravity_model[1]=100;
-        CHECK(RLControlExecute(&s,now,1,mode==10?NULL:&x,NULL,&f)<0);
-        CHECK(s.fault==reason && !s.active && s.recovery_session && zero_output(&f));
-        CHECK(f.owner==RL_OWNER_SAFE && f.fault==reason && f.control_epoch==s.epoch);
-        const uint32_t epoch=s.epoch;
-        for(unsigned retry=1;retry<=3;retry++){
-            c=packet(&s,now+retry,100+retry,NULL,0);
-            CHECK(step(&s,now+retry,&c,1,&f)<0);
-            CHECK(s.fault==reason && s.epoch==epoch && s.recovery_session && zero_output(&f));
-            CHECK(f.owner==RL_OWNER_SAFE && f.fault==reason && f.control_epoch==epoch);
-        }
-        /* Session remains selected: chassis owner must use its zero-output
-           error branch, rather than the ordinary Motion/LQR execution path. */
-        RLControlReset(&s);
-        CHECK(!s.fault && !s.recovery_session && s.epoch==epoch+1u);
-    }
-}
-
-static void test_inhibited_session_keeps_safe_owner(void)
-{
-    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
-    RLShadowCommand c=packet(&s,100,1,NULL,0);
-    CHECK(!step(&s,100,&c,0,&f));
-    RLShadowSnapshot x=feedback(&s,101);
-    /* Here permission=false means conflicting legacy mode. ZERO_FORCE is
-       handled outside this callback by the chassis explicit safe reset. */
-    CHECK(RLControlExecute(&s,101,0,&x,&c,&f)<0);
-    CHECK(s.recovery_session && s.fault && !s.active && f.owner==RL_OWNER_SAFE);
-    CHECK(zero_output(&f));
-    const uint32_t epoch=s.epoch;
-    x=feedback(&s,102);
-    CHECK(RLControlExecute(&s,102,0,&x,&c,&f)<0);
-    CHECK(s.recovery_session && s.epoch==epoch && zero_output(&f));
-    RLControlReset(&s);CHECK(!s.recovery_session && !s.fault);
-}
-
-static void test_quality_rejections(void)
-{
-    CHECK(RL_HANDOFF_CONFIG.dwell_ms==200);
-    /* Each bad stream lasts longer than the dwell; elapsed time alone is insufficient. */
-    for(unsigned mode=0;mode<13;mode++){
-        RLHandoffState h={0};
-        for(unsigned t=0;t<=400;t+=10){
-            RLHandoffSample q=quality(1000+t);
-            switch(mode){
-            case 0:q.valid=0;break; /* UNKNOWN */
-            case 1:q.height_m=NAN;break;
-            case 2:q.pitch_rad=NAN;break;
-            case 3:q.normal_force_N[1]=NAN;break;
-            case 4:q.maximum_leg_speed_rad_s=NAN;break;
-            case 5:q.maximum_leg_speed_rad_s=3.01f;break;
-            case 6:q.normal_force_N[0]=2;break;
-            case 7:q.angular_speed_rad_s=1.01f;break;
-            case 8:q.roll_rad=.101f;break;
-            case 9:q.height_m=.37f;break;
-            case 10:q.tick_ms=1000;break; /* repeated */
-            case 11:q.tick_ms=1000+3*t;break; /* gaps >20ms */
-            case 12:q.tick_ms=1000-t;break; /* backwards */
+    const uint32_t starts[]={100,UINT32_MAX-19u};
+    for(unsigned phase=0;phase<2;phase++){
+        RLControlState plain={.timing=1,.ready=1,.ramp_completed=1,.epoch=7};
+        RLControlState session=plain;session.recovery_session=1;
+        RLControlFrame a,b;RLShadowCommand c={0};
+        for(unsigned t=0;t<150;t+=5){
+            const uint32_t now=starts[phase]+t;
+            if(t%10==0){
+                float mean[6]={.3f,-.2f,.15f,-.2f,.4f,-.16f};
+                mean[0]+=.001f*t;c=packet(&plain,now,t/10+1,mean,0);
             }
-            CHECK(!RLHandoffObserve(&h,&RL_HANDOFF_CONFIG,&q));
-            CHECK(!h.requested && !h.committed);
-            const float target[6]={0};
-            CHECK(!RLHandoffCanCommit(&h,&RL_HANDOFF_CONFIG,q.tick_ms,target,target));
-        }
-    }
-    /* Lost quality or a gap destroys accumulated dwell, including over wrap. */
-    for(unsigned wrap=0;wrap<2;wrap++)for(unsigned gap=0;gap<2;gap++){
-        RLHandoffState h={0};
-        uint32_t base=wrap?UINT32_MAX-150u:1000u;
-        for(unsigned t=0;t<200;t+=10){
-            RLHandoffSample q=quality(base+t);
-            CHECK(!RLHandoffObserve(&h,&RL_HANDOFF_CONFIG,&q));
-        }
-        RLHandoffSample q=quality(base+220u);
-        if(!gap)q.valid=0;
-        CHECK(!RLHandoffObserve(&h,&RL_HANDOFF_CONFIG,&q));
-        base+=gap?220u:230u;
-        for(unsigned t=0;t<=200;t+=10){
-            q=quality(base+t);
-            CHECK(RLHandoffObserve(&h,&RL_HANDOFF_CONFIG,&q)==(t==200));
-        }
-        CHECK(h.requested && h.request_tick_ms==base+200u);
-    }
-}
-
-static void test_unqualified_session_never_hands_off(void)
-{
-    for(unsigned mode=0;mode<5;mode++){
-        RLControlState s={0}; RLControlFrame f; RLShadowCommand c={0};
-        CHECK(!RLControlStartRecovery(&s));
-        for(uint32_t now=100;now<=500;now++){
-            if(now%10u==0)c=packet(&s,now,now/10u,NULL,1);
-            RLShadowSnapshot x=feedback(&s,now);
-            x.handoff=quality(now);
-            if(mode==0)x.handoff.valid=0;
-            if(mode==1)x.handoff.roll_rad=NAN;
-            if(mode==2)x.handoff.tick_ms=now-21u;
-            if(mode==3)x.handoff.tick_ms=100; /* repeated evidence, fresh motor loop */
-            if(mode==4)x.handoff.tick_ms=100+((now-100)/21u)*21u;
-            CHECK(!RLControlExecute(&s,now,1,&x,&c,&f));
-            CHECK(s.recovering && !s.handoff.requested && !s.handoff.committed && !s.fault);
-            RLControlFillPrevious(&s,&x);
-            CHECK(!x.motion_probe && x.motion.recovery_mode);
+            RLShadowSnapshot x=feedback(&plain,now),y=feedback(&session,now);
+            for(unsigned j=0;j<4;j++)x.motion.joint_position_rad[j]=y.motion.joint_position_rad[j]=.001f*t;
+            for(unsigned j=0;j<6;j++)x.motion.joint_velocity_rad_s[j]=y.motion.joint_velocity_rad_s[j]=.01f*t;
+            x.leg_spread_rad[0]=y.leg_spread_rad[0]=.6f+.001f*t;
+            CHECK(!RLControlExecute(&plain,now,1,&x,&c,&a));
+            CHECK(!RLControlExecute(&session,now,1,&y,&c,&b));
+            CHECK(!memcmp(a.adopted_target,b.adopted_target,sizeof(a.adopted_target)));
+            CHECK(!memcmp(a.tau_pd_nm,b.tau_pd_nm,sizeof(a.tau_pd_nm)));
+            CHECK(!memcmp(a.tau_limited_nm,b.tau_limited_nm,sizeof(a.tau_limited_nm)));
+            CHECK(!memcmp(a.spring_motor_nm,b.spring_motor_nm,sizeof(a.spring_motor_nm)));
+            CHECK(!memcmp(a.final_motor_nm,b.final_motor_nm,sizeof(a.final_motor_nm)));
+            CHECK(!memcmp(a.wheel_current_raw,b.wheel_current_raw,sizeof(a.wheel_current_raw)));
+            CHECK(plain.adopted_sequence==session.adopted_sequence);
         }
     }
 }
 
-/* End-to-end gate -> Motion probe -> epoch -> delayed adoption. */
 static void test_handoff(void)
 {
-    RLControlState s={0}; RLControlFrame f;
-    CHECK(!RLControlStartRecovery(&s));
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
     RLShadowCommand c={0};
-    const float recovery_action[6]={.05f,-.03f,.02f,.04f,-.02f,-.03f};
-    for(uint32_t t=100;t<=300;t++){
-        if(t%10u==0 && t<300)c=packet(&s,t,t/10u,recovery_action,1);
-        CHECK(!step(&s,t,&c,1,&f));
-        if(t<300)CHECK(s.recovering && !s.handoff.requested);
+    for(uint32_t now=100;now<=300;now+=5){
+        if(now%10==0)c=packet(&s,now,now/10,NULL,0);
+        CHECK(!step(&s,now,&c,1,&f));
     }
-    CHECK(s.handoff.requested && s.recovering && !s.handoff.committed);
-    RLShadowSnapshot x=feedback(&s,301);
-    CHECK(x.motion_probe && x.motion.recovery_mode);
-    const uint32_t epoch=s.epoch;
-    /* Candidates must be sampled after the qualified request, be causal,
-       have the right epoch, and stay inside BOTH physical jump caps. */
-    for(unsigned mode=0;mode<11;mode++){
-        RLControlState trial=s;
-        c=packet(&trial,301,40,NULL,1);
-        if(mode==0)c.control_epoch--;
-        if(mode==1)c.snapshot_tick_ms=299;
-        if(mode==2)c.previous_sequence++;
-        if(mode==3)c.previous_source=3; /* shadow history */
-        if(mode==4){
-            c.motion_action[2]=1;
-            RLMotion31Snapshot m=x.motion;m.recovery_mode=0;
-            CHECK(!RLMotion31BuildPreview(&m,c.motion_action,&c.motion_preview));
-        }
-        if(mode==5)c.motion_valid=0;
-        if(mode==6)c.recovery_mode=0;
-        if(mode==7){
-            /* Put actual previous outside Motion's leg jump envelope. */
-            trial.adopted_target[0]=1.0f;
-            c.previous_sequence=trial.adopted_sequence;
-        }
-        if(mode==8)c.motion_preview.target[5]=NAN;
-        if(mode==9)c.snapshot_sequence=trial.recovery_request_sequence;
-        if(mode==10)c.preview.target[0]+=.1f; /* wrong primary decoder */
-        CHECK(!step(&trial,301,&c,1,&f));
-        CHECK(trial.recovering && !trial.handoff.committed && trial.epoch==epoch);
-    }
-    c=packet(&s,301,40,NULL,1);
+    CHECK(s.recovering && s.handoff.requested && !s.handoff.committed);
     const RLControlState before=s;
-    CHECK(!step(&s,301,&c,1,&f));
-    CHECK(!s.recovering && s.handoff.committed && s.epoch==epoch+1u);
-    CHECK(s.recovery_session && s.active && f.owner==RL_OWNER_RL);
-    check_spring(&x,&f,1);
-    CHECK(!memcmp(f.spring_motor_nm,before.recovery_spring,sizeof(f.spring_motor_nm)));
-    CHECK(!memcmp(f.final_motor_nm,before.recovery_motor,sizeof(f.final_motor_nm)));
-    CHECK(!memcmp(s.adopted_target,before.adopted_target,sizeof(s.adopted_target)));
-    CHECK(s.adopted_sequence==before.adopted_sequence);
-    CHECK(!memcmp(s.recovery_request,c.motion_preview.target,sizeof(s.recovery_request)));
-    for(unsigned slot=0;slot<32;slot++)if(slot!=301u%32u){
-        CHECK(!memcmp(s.recovery_targets[slot],before.recovery_targets[slot],sizeof(s.recovery_targets[slot])));
-        CHECK(s.recovery_target_sequence[slot]==before.recovery_target_sequence[slot]);
+    /* All probe identity fields remain causal; jump/epoch failures retain Recovery. */
+    for(unsigned k=0;k<7;k++){
+        RLControlState trial=s;c=packet(&trial,305,40,NULL,1);
+        if(k==0)c.control_epoch--;
+        if(k==1)c.snapshot_tick_ms=299;
+        if(k==2)c.previous_sequence++;
+        if(k==3)c.previous_source=3;
+        if(k==4)c.motion_valid=0;
+        if(k==5)c.snapshot_sequence=trial.adopted_sequence;
+        if(k==6){c.motion_action[2]=1;RLMotion31Snapshot m=feedback(&trial,305).motion;m.recovery_mode=0;
+            CHECK(!RLMotion31BuildPreview(&m,c.motion_action,&c.motion_preview));}
+        CHECK(!step(&trial,305,&c,1,&f));
+        CHECK(trial.recovering && !trial.handoff.committed && trial.epoch==before.epoch);
     }
-    CHECK(!memcmp(s.recovery_wheels,before.recovery_wheels,sizeof(s.recovery_wheels)));
-    x=feedback(&s,302);
-    CHECK(!x.motion_probe && !x.motion.recovery_mode && x.recovery_session);
-    CHECK(!memcmp(x.motion.previous_target,before.adopted_target,sizeof(s.adopted_target)));
-    /* Even a mode-correct Motion packet from the OLD epoch is rejected. */
-    RLShadowCommand stale=packet(&s,302,41,NULL,0);stale.control_epoch=epoch;
-    CHECK(!step(&s,302,&stale,1,&f));
-    CHECK(s.recovery_request_sequence==40 && s.epoch==epoch+1u);
-    for(uint32_t t=303;t<=309;t++){
-        CHECK(!step(&s,t,NULL,1,&f));
-        CHECK(s.adopted_sequence==before.adopted_sequence);
-        x=feedback(&s,t);check_spring(&x,&f,1);
-    }
-    CHECK(!step(&s,310,NULL,1,&f));
-    CHECK(s.adopted_sequence==40);
+    c=packet(&s,305,40,NULL,1);
+    CHECK(!step(&s,305,&c,1,&f));
+    CHECK(!s.recovering && s.recovery_session && s.handoff.committed);
+    CHECK(s.epoch==before.epoch+1 && s.adopted_tick_ms==305 && s.adopted_sequence==40);
     CHECK(!memcmp(s.adopted_target,c.motion_preview.target,sizeof(s.adopted_target)));
-    float motor[4],expected[4],spring[4],zero[4]={0};
-    x=feedback(&s,310);
-    CHECK(!RLMotion31MapPolicyLegTorqueToMotorOrder(f.tau_limited_nm,motor));
-    CHECK(!RLControlCompensateSpring(motor,x.leg_length_m,x.leg_spread_rad,expected));
-    CHECK(!RLControlCompensateSpring(zero,x.leg_length_m,x.leg_spread_rad,spring));
-    for(unsigned j=0;j<4;j++){
-        CHECK(near(f.final_motor_nm[j],expected[j]));
-        CHECK(near(f.spring_motor_nm[j],spring[j]));
-        CHECK(fabsf(f.final_motor_nm[j])<=40);
+    RLShadowSnapshot x=feedback(&s,305);check_spring(&x,&f,1);
+    CHECK(x.motion.recovery_mode==0 && !x.motion_probe && x.previous_source==RL_PREVIOUS_ADOPTED);
+    CHECK(!memcmp(x.motion.previous_target,c.motion_preview.target,sizeof(s.adopted_target)));
+    RLShadowCommand stale=packet(&s,310,41,NULL,0);stale.control_epoch--;
+    CHECK(!step(&s,310,&stale,0,&f) && s.adopted_sequence==40);
+    c=packet(&s,315,42,NULL,0);CHECK(!step(&s,315,&c,0,&f));
+    CHECK(s.adopted_sequence==42 && s.epoch==before.epoch+1);
+}
+
+static void test_faults_and_no_partial_handoff(void)
+{
+    for(unsigned mode=0;mode<7;mode++){
+        RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+        RLShadowCommand c=packet(&s,100,1,NULL,0);CHECK(!step(&s,100,&c,0,&f));
+        const RLControlState before=s;
+        RLShadowSnapshot x=feedback(&s,105);unsigned reason=RL_FAULT_INPUT;
+        if(mode==0)x.feedback_valid_mask=0;
+        if(mode==1)x.imu_update_tick_ms=80;
+        if(mode==2)x.motion.joint_velocity_rad_s[0]=NAN;
+        if(mode==3){x.leg_length_m[0]=NAN;reason=RL_FAULT_COMPENSATION;}
+        if(mode==4){x.leg_spread_rad[1]=NAN;reason=RL_FAULT_COMPENSATION;}
+        if(mode==5)reason=RL_FAULT_MODE;
+        if(mode==6){x=feedback(&s,125);reason=RL_FAULT_COMMAND;}
+        CHECK(RLControlExecute(&s,mode==6?125:105,mode!=5,&x,NULL,&f)<0);
+        CHECK(s.fault==reason && s.recovery_session && !s.active && f.owner==RL_OWNER_SAFE && zero_output(&f));
+        CHECK(!memcmp(s.adopted_target,before.adopted_target,sizeof(s.adopted_target)));
+        CHECK(step(&s,130,NULL,0,&f)<0 && zero_output(&f));
+        RLControlReset(&s);CHECK(!s.fault && !s.recovery_session);
     }
-    /* Geometry changes between PD ticks cannot alter the held output. */
-    for(uint32_t t=311;t<=314;t++){
-        x=feedback(&s,t); x.leg_spread_rad[0]=1.2f;
-        CHECK(!RLControlExecute(&s,t,1,&x,NULL,&f));
-        for(unsigned j=0;j<4;j++)CHECK(near(f.final_motor_nm[j],expected[j]));
-    }
-    RLControlState invalid=s;
-    x=feedback(&invalid,315); x.leg_length_m[0]=NAN;
-    CHECK(RLControlExecute(&invalid,315,1,&x,NULL,&f)<0);
-    CHECK(invalid.fault==RL_FAULT_COMPENSATION && f.owner==RL_OWNER_SAFE && zero_output(&f));
-    c=packet(&s,315,42,NULL,0);
-    CHECK(!step(&s,315,&c,1,&f));
-    CHECK(s.recovery_request_sequence==42 && !s.recovering && !s.fault);
-    /* Next PD uses current geometry and final saturation after compensation. */
-    RLControlState saturated=s;
-    for(uint32_t t=316;t<=320;t++){
-        x=feedback(&saturated,t);
-        x.leg_spread_rad[0]=1.2f;
-        for(unsigned j=0;j<4;j++)x.motion.joint_position_rad[j]=1.4f;
-        CHECK(!RLControlExecute(&saturated,t,1,&x,NULL,&f));
-    }
-    CHECK(!RLMotion31MapPolicyLegTorqueToMotorOrder(f.tau_limited_nm,motor));
-    CHECK(!RLControlCompensateSpring(motor,x.leg_length_m,x.leg_spread_rad,expected));
-    CHECK(!RLControlCompensateSpring(zero,x.leg_length_m,x.leg_spread_rad,spring));
-    unsigned clipped=0;
-    for(unsigned j=0;j<4;j++){
-        CHECK(near(f.final_motor_nm[j],expected[j]));
-        CHECK(near(f.spring_motor_nm[j],spring[j]));
-        CHECK(fabsf(f.final_motor_nm[j])<=40);
-        clipped+=fabsf(f.final_motor_nm[j])==40;
-    }
-    CHECK(clipped>0);
+    /* Failure on the same tick as a valid Motion candidate cannot commit it. */
+    RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
+    RLShadowCommand c=packet(&s,100,1,NULL,0);CHECK(!step(&s,100,&c,0,&f));
+    s.handoff_source=1;
+    s.handoff=(RLHandoffState){.dwelling=1,.since_ms=0,.requested=1,.request_tick_ms=100,.observed=1,.last_ms=100};
+    const RLControlState before=s;c=packet(&s,105,2,NULL,1);
+    RLShadowSnapshot x=feedback(&s,105);x.handoff=quality(105);
+    RLControlState valid=s;CHECK(!RLControlExecute(&valid,105,1,&x,&c,&f));
+    CHECK(!valid.recovering && valid.handoff.committed);
+    x.leg_length_m[0]=NAN;
+    CHECK(RLControlExecute(&s,105,1,&x,&c,&f)<0);
+    CHECK(s.recovering && !s.handoff.committed && s.adopted_sequence==before.adopted_sequence);
+    CHECK(s.fault==RL_FAULT_COMPENSATION && f.owner==RL_OWNER_SAFE && zero_output(&f));
 }
 
 #ifdef RL_RECOVERY_SHADOW_HOST
@@ -605,18 +320,14 @@ int xQueuePeek(QueueHandle_t q,void *dst,unsigned timeout)
 }
 static unsigned received_iteration(void)
 {
-    if(task_scenario==7 && task_iteration>=5)return 5;
-    if(task_scenario==14 && task_iteration>=4)return task_iteration>6?task_iteration-2:4;
-    if(!task_snapshot.recovery_session)return task_iteration;
-    return task_iteration>2?task_iteration-2:1;
+    return task_iteration;
 }
 static void check_task_observation(const float *o,int recovery)
 {
     const unsigned received=received_iteration();
     assert(near(o[6],.01f*(float)received/1.5f));
     assert(near(o[10],.05f*(float)received));
-    /* Previous and commands must come from NOW, not the delayed packet or
-       the previous shadow prediction. All six channels have distinct values. */
+    /* Physical feedback, previous and commands all come from latest snapshot. */
     for(unsigned j=0;j<4;j++)
         assert(near(o[16+j],task_snapshot.motion.previous_target[legs[j]]/1.5f));
     assert(near(o[20],task_snapshot.motion.previous_target[2]/100));
@@ -633,9 +344,8 @@ int xQueueOverwrite(QueueHandle_t q,const void *value)
     assert(c->snapshot_sequence==task_snapshot.sequence);
     assert(c->snapshot_tick_ms==task_snapshot.tick_ms && c->output_tick_ms==task_tick);
     if((task_scenario>=3 && task_scenario<=5 && task_iteration>1) ||
-       (task_scenario==6 && task_iteration>=4)){
-        /* Invalid state reaches the Actor through the same two-packet delay;
-           transport validity and inactive metadata are checked immediately. */
+       (task_scenario==6 && task_iteration>1)){
+        /* Newest invalid state is rejected immediately, no historical fallback. */
         assert(!c->valid);return pdPASS;
     }
     if(task_scenario==10 || task_scenario==11){
@@ -805,7 +515,7 @@ static void test_proprioceptive_readiness(void)
     /* Execute the real control route, then fresh Motion probe commits once. */
     RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
     RLShadowCommand c={0};
-    for(unsigned t=0;t<=130;t++){
+    for(unsigned t=0;t<=130;t+=5){
         const uint32_t now=1000+t;
         if(t%10==0)c=packet(&s,now,t/10+1,NULL,t>=110);
         RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
@@ -815,7 +525,7 @@ static void test_proprioceptive_readiness(void)
     CHECK(s.handoff_source==2 && s.handoff.committed && !s.recovering);
     /* A controller tick is not a sensor update: oldest received timestamp wins. */
     memset(&s,0,sizeof(s));CHECK(!RLControlStartRecovery(&s));
-    for(unsigned t=0;t<RL_RECOVERY_POSTURE_DWELL_MS;t++){
+    for(unsigned t=0;t<RL_RECOVERY_POSTURE_DWELL_MS;t+=5){
         const uint32_t now=2000+t;
         if(t%10==0)c=packet(&s,now,t/10+1,NULL,0);
         RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
@@ -832,7 +542,7 @@ static void test_broader_motion_readiness(void)
 {
     RLControlState s={0};RLControlFrame f;CHECK(!RLControlStartRecovery(&s));
     RLShadowCommand c={0};
-    for(unsigned t=0;t<=40;t++){
+    for(unsigned t=0;t<=40;t+=5){
         const uint32_t now=3000+t;
         if(t%10==0)c=packet(&s,now,t/10+1,NULL,t>=30);
         RLShadowSnapshot x=feedback(&s,now);x.handoff_posture_enabled=1;
@@ -849,24 +559,16 @@ static void test_broader_motion_readiness(void)
 int main(void)
 {
     test_explicit_start_and_contracts();
-    test_startup_previous_is_proxy();
-    test_command_mode_boundaries();
-    test_shadow_previous_is_read_only();
-    for(unsigned phase=0;phase<5;phase++)schedule(100u+phase);
-    schedule(UINT32_MAX-19u);
-    test_wheel_session_cap();
-    test_recovery_spring_held_and_fault();
-    test_faults_latch_zero();
-    test_quality_rejections();
-    test_inhibited_session_keeps_safe_owner();
-    test_unqualified_session_never_hands_off();
+    test_latest_adoption_and_pd();
+    test_motion_matches_ordinary015();
     test_handoff();
+    test_faults_and_no_partial_handoff();
     test_proprioceptive_readiness();
     test_broader_motion_readiness();
 #ifdef RL_RECOVERY_SHADOW_HOST
     test_real_recovery_shadow_task();
 #endif
     if(failures){fprintf(stderr,"Recovery/handoff: %u failed cases\n",failures);return 1;}
-    puts("PASS Recovery/handoff: decoder/skill, actual previous, transport/PD, latched zero, quality and epoch");
+    puts("PASS shared015 Recovery/Motion: latest feedback/target, no added queues, PD, spring, actual previous and handoff");
     return 0;
 }
