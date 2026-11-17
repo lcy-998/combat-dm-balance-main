@@ -1,15 +1,15 @@
 {
-  "version": "motion050_multiteacher_firmware_v1",
+  "version": "motion050_multiteacher_firmware_v2",
   "base_branch": "feature/rl-motion31-supported015",
   "base_commit": "7f89e6d50e5060c23fc03fd78e9211dcd1c8823b",
   "branch": "feature/rl-motion31-supported050-multiteacher",
   "actor": {
-    "path": "/home/kellen/wheel_leg_training_data/motion_multiteacher050_iterative_20261116/export_candidate_v1/actor.pt",
-    "sha256": "c21d66a2cd9af0b6d7452bc8dc4c32c3f13cc83d50173cfb14bfdab79546c87d"
+    "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/package/actor.pt",
+    "sha256": "61f46e03cd7db95ee434ea14d637e3d071bc8667d2d24d8a027b78c754fba79b"
   },
   "source_onnx": {
-    "path": "/home/kellen/wheel_leg_training_data/motion_multiteacher050_iterative_20261116/export_candidate_v1_multiheight_golden_v1/actor_single.onnx",
-    "sha256": "90cd0095e170d5689576f72707273c5c473dee519dcd90fac578ce42d6d081f4"
+    "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/review/actor_single.onnx",
+    "sha256": "811a6f274303d89c1f6b706aca64c7ce24058217e6c85a48452fe0cb8505c9e0"
   },
   "network": {
     "dimensions": [
@@ -26,7 +26,7 @@
   },
   "firmware_weights": {
     "path": "X-CUBE-AI/App/tjb_network_data_params.c",
-    "blob_sha256": "9f999d30bc41ca302ef49b3da3a94a74c08acf073657b82e5527c9024142b5cf"
+    "blob_sha256": "7fce0a98f90908c67ac8470acb72310627eb49bac4a042332a61941a6b803f3a"
   },
   "output_contract": {
     "version": "motion_multiheight020_support_center_050_80_v1",
@@ -132,9 +132,44 @@
   },
   "golden_fixture": {
     "path": "tests/data/motion050_golden.json",
-    "sha256": "d605ed040ba0351a40c75b52cbf59ee210fc4b568113c30ee987bfa188ae59a3",
-    "real_states": 16
+    "sha256": "e5e477186631b3ad92d7649978acd0fc70f51762dd58cc9067cb45cd7a42dc33",
+    "real_states": 32
   },
-  "capability": "ACCEPTED_LIMITED_MUJOCO",
-  "hardware": "NOT_RUN"
+  "capability": "DEVELOPMENT_CANDIDATE_NOT_INDEPENDENTLY_ACCEPTED",
+  "hardware": "NOT_RUN",
+  "source_checkpoint": {
+    "path": "/home/kellen/wheel_leg_training_data/motion050_turn_reteach_v5/iteration/block_001/supervision/phase_001_fit/distillation_latest.pt",
+    "sha256": "17aedf9f96abe6193a902b93a34eefebc8926e561969bc5b879d78fd9b0ef977",
+    "run": "motion050_turn_reteach_v5",
+    "block": 1,
+    "round": 8,
+    "artifact_type": "complete_BC_checkpoint_preserved"
+  },
+  "previous_actor": {
+    "path": "/home/kellen/wheel_leg_training_data/motion_multiteacher050_iterative_20261116/export_candidate_v1/actor.pt",
+    "sha256": "c21d66a2cd9af0b6d7452bc8dc4c32c3f13cc83d50173cfb14bfdab79546c87d"
+  },
+  "development": {
+    "comparison": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_turn_reteach_v10/iteration/comparisons/baseline.json",
+      "sha256": "ab7cae65e68ffbdd4b658f2d2789b2a4b8149ce81bdee081540f6c6e7bbdb4c6"
+    },
+    "conditions": 68,
+    "task_passes": 68,
+    "retention_passes": 67,
+    "signed_turn_conditions": 12,
+    "signed_turn_passes": 12,
+    "scored_dual_support_min_fraction": 0.6308,
+    "full_episode_dual_support_min_fraction": 0.65616,
+    "remaining": "turn_-1_-0.5 dq_full_RMS_rad_s exceeds paired Teacher fidelity gate",
+    "independent_final": "NOT_RUN"
+  },
+  "runtime_change_from_parent": {
+    "parent_commit": "e9462df570784ea4e25cc2ce3688b1f9ff193971",
+    "files": [
+      "X-CUBE-AI/App/tjb_network_data_params.c"
+    ],
+    "decoder_control_input_compensation_timing_limits": "unchanged",
+    "model_inference_graph": "unchanged"
+  }
 }

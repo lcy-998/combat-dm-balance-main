@@ -1,13 +1,26 @@
-# Motion050 多Teacher蒸馏：015执行逻辑
+# Motion050 v5第1块第8轮：015执行逻辑
 
 分支 `feature/rl-motion31-supported050-multiteacher` 从远端015提交
-`7f89e6d50e5060c23fc03fd78e9211dcd1c8823b` 创建。选用最终最佳050 Actor，
-SHA256 `c21d66a2cd9af0b6d7452bc8dc4c32c3f13cc83d50173cfb14bfdab79546c87d`。
-模型来源、ONNX、权重blob与合同身份见同目录 `manifest.json`。
+`7f89e6d50e5060c23fc03fd78e9211dcd1c8823b` 创建。本次在原050提交
+`e9462df570784ea4e25cc2ce3688b1f9ff193971`上，仅替换运行代码中的C权重数组。
+选择`motion050_turn_reteach_v5/iteration/block_001`第8轮，完整BC checkpoint SHA256
+`17aedf9f96abe6193a902b93a34eefebc8926e561969bc5b879d78fd9b0ef977`。
+正式导出的Actor SHA256为`61f46e03cd7db95ee434ea14d637e3d071bc8667d2d24d8a027b78c754fba79b`；
+二者权重相同，原完整BC及Adam/RNG/split不改写。替换前Actor为`c21d66a2…546c87d`。
+模型来源、ONNX、权重blob与合同身份见同目录`manifest.json`。
+
+当前模型在固定vM1 MuJoCo开发集68/68任务、67/68教师保真通过，12个四象限转弯及邻域全部通过。
+最低评分窗双轮承重63.08%，整回合65.616%，严格>60%。剩余后退-1m/s、yaw-0.5rad/s
+的全频dq保真未过。独立最终验收及实机尚未执行；不继承旧Actor的56条件最终认证。
+本次是用户指定的开发候选电控适配，转换数值一致不等于新模型已完成独立验收。
 
 ## 实际替换范围
 
-运行源码仅修改以下三个文件：
+本次相对`e9462df`的运行源码只修改`X-CUBE-AI/App/tjb_network_data_params.c`的权重数组。
+decoder、输入归一化、PD、限矩、补偿、命令、CAN和时序逐文件保持。同步更新当前模型身份、
+32条真实状态golden和验证记录，不改网络推理图或其他控制源码。
+
+以下三文件是050分支最初相对015的适配范围；本次不再修改后两个文件：
 
 - `X-CUBE-AI/App/tjb_network_data_params.c`：49734个FP32参数、198936B，仅替换权重数组。
 - `application/chassis/rl_motion31.h`：050动作合同、腿尺度0.50rad、有效高度0.20–0.40m及轮限矩4.8Nm。
@@ -38,8 +51,8 @@ MuJoCo验收采用先变高再运动，不把原015的运动中连续变高直�
 
 统一主机回归：`sh tests/run_rl_host_tests.sh`。
 Python工具回归：`python -B -m unittest discover -s tools -p 'test_*.py' -v`。
-需要numpy、onnx及主机C编译器。`tests/data/motion050_golden.json`固定16条真实状态，
-包含站立、低高度、高高度与转弯，验证C权重回读推理、实际C decoder、输入与PD；
+需要numpy、onnx及主机C编译器。`tests/data/motion050_golden.json`固定32条真实状态，
+包含基础/多高度和12种强转弯/邻域，验证C权重回读推理、实际C decoder、输入与PD；
 401个高度点独立核对中心。该fixture无需训练数据目录即可运行。
 额外的ONNX检查读取manifest来源路径，迁移后可用 `MOTION050_SOURCE_ONNX`指定同SHA文件。
 另一套25D network的历史ONNX缺失时，相关两项检查明确skip，不影响当前Motion golden。
@@ -55,11 +68,11 @@ make -j8 SHELL=/bin/sh GCC_PATH=/path/to/arm-none-eabi/bin \
   'ASM_SOURCES=startup_stm32h723xx.s Middlewares/Third_Party/SEGGER/RTT/SEGGER_RTT_ASM_ARMv7M.s'
 ```
 
-实际构建命令、日志及HEX/BIN放在数据根 `motion050_firmware_c21d66a2_20261116/`。
+实际构建命令、日志及HEX/BIN放在数据根`motion050_firmware_v5b1r8_17aedf9f_20261117/`。
 本轮8组C主机回归通过，Python工具12项通过／2项旧25D来源检查skip。
-完整128条真实状态的C数组推理最大mean误差2.3842e-7，实际固件C的解码／PD／输入编码误差0；
+完整272条真实状态的C数组推理最大mean误差3.5018e-7，实际固件C的解码／PD／输入编码误差0；
 401个高度点中心核对通过。ARM ELF/BIN内权重blob SHA与选中模型一致。
 链接FLASH434716B；DTCMRAM129536/131072B，动态栈余量尚未实测。
 逐文件身份、固件SHA与验证边界见同目录 `verification.json`。
 ARM编译和主机数值核验不等于板端推理时延、供电、机械限位或实机闭环验收。
-模型仅在固定vM1 MuJoCo下完成有限56场景×2seed复刻；实机仍为NOT_RUN。
+v5仅有固定vM1 MuJoCo的68条件开发证据，独立最终及实机仍为NOT_RUN。
