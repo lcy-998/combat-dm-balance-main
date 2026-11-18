@@ -1,104 +1,117 @@
 {
-  "version": "motion050_firmware_host_verification_v2",
-  "base_commit": "e9462df570784ea4e25cc2ce3688b1f9ff193971",
-  "source_checkpoint_sha256": "17aedf9f96abe6193a902b93a34eefebc8926e561969bc5b879d78fd9b0ef977",
-  "actor_sha256": "61f46e03cd7db95ee434ea14d637e3d071bc8667d2d24d8a027b78c754fba79b",
+  "version": "motion050_firmware_weight_delivery_v3",
+  "base_commit": "f0a793429220177bf1ddf12119914155420c6c4f",
+  "actor_sha256": "c2080c0ee9cbafd00bad893ba3e7366c4a3b09a8f6549db1e46e85f9006a80a8",
+  "source_checkpoint_sha256": "7fd4d391803638279840ee2fd614c234e45977913eae804419c93844f9173687",
+  "inference_contract_sha256": "ceca00e31d1bee776a10fe51e66f042986356970010baa248be64e20a2e3ebf7",
+  "capability": "DEVELOPMENT_CANDIDATE_NOT_INDEPENDENTLY_ACCEPTED",
+  "development": {
+    "comparison": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_teacher_replication_v4/iteration/comparisons/block_006_offline_best.json",
+      "sha256": "0e36ff330493cba71e7dc76aa1979e8b589bbdb6b6bdf7421b8bfe8e88e00f03"
+    },
+    "conditions": 111,
+    "development_seed": 6143001,
+    "teacher_qualified": 98,
+    "task_passes_teacher_qualified": 97,
+    "retention_passes_teacher_qualified": 96,
+    "source_gap_conditions": 13,
+    "scored_dual_support_min_fraction": 0.647,
+    "full_episode_dual_support_min_fraction": 0.66392,
+    "independent_final": "NOT_RUN"
+  },
+  "independent_final": "NOT_RUN",
+  "production_diff": {
+    "parent_commit": "f0a793429220177bf1ddf12119914155420c6c4f",
+    "changed_files": [
+      "X-CUBE-AI/App/tjb_network_data_params.c"
+    ],
+    "weight_template_outside_array_unchanged": true,
+    "runtime_source_sha256": {
+      "X-CUBE-AI/App/tjb_network_data_params.c": "dc207cbd1f360b222f39f9361916e11f33eb3830631cd2292d3d6487e3a75940"
+    },
+    "decoder_input_center_PD_compensation_limits_and_timing": "identical to parent050"
+  },
   "host_C_tests": {
     "groups_passed": 8,
-    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/host_tests.log"
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/host_tests.log"
   },
   "python_tools": {
     "tests_run": 14,
     "passed": 12,
     "skipped": 2,
-    "skip_reason": "unavailable original 25D network ONNX; all current Motion checks executed",
-    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/tools_tests.log"
+    "skip_reason": "unavailable legacy 25D ONNX",
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/tools_tests.log"
   },
   "golden": {
-    "committed_real_states": 32,
-    "full_real_states_checked": 272,
-    "mean_max_abs_error": 3.501772880554199e-07,
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/golden_120.log",
+    "committed_real_states": 30,
+    "full_real_states_checked": 120,
+    "mean_max_abs_error": 4.84287739e-07,
     "decoder_max_abs_error": 0.0,
     "PD_max_abs_error_Nm": 0.0,
     "limited_max_abs_error_Nm": 0.0,
     "encoder_max_abs_error": 0.0,
     "center_height_samples": 401,
-    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/golden_272.log",
     "PT_ONNX_shared_C_errors": {
-      "ONNX": 4.6193599700927734e-07,
-      "C_blob": 3.501772880554199e-07,
-      "decode": 1.4901161193847656e-07,
-      "PD": 6.67572021484375e-06,
-      "limited_PD": 6.67572021484375e-06,
+      "ONNX": 4.246830940246582e-07,
+      "C_blob": 4.842877388000488e-07,
+      "decode": 1.1920928955078125e-07,
+      "PD": 5.7220458984375e-06,
+      "limited_PD": 5.7220458984375e-06,
       "encode": 2.384185791015625e-07,
       "header": 0.0
-    }
-  },
-  "production_diff": {
-    "parent_commit": "e9462df570784ea4e25cc2ce3688b1f9ff193971",
-    "changed_files": [
-      "X-CUBE-AI/App/tjb_network_data_params.c"
-    ],
-    "unchanged_source_files": 1562,
-    "weight_template_outside_array_unchanged": true,
-    "runtime_Source_SHA256": {
-      "X-CUBE-AI/App/tjb_network_data_params.c": "2f1d44f25590a073a736efacb13549569aa04fc2db972b41de432f4fa927dad1"
     },
-    "decoder_input_center_PD_compensation_limits_and_timing": "identical to parent050"
+    "recorded_mean_max_abs_error": 0.0
   },
   "ARM_build": {
     "status": "PASS",
-    "compiler": "xpack-arm-none-eabi-gcc-14.2.1-1.1",
-    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/build_linux.log",
-    "linux_overrides": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/linux_build_plan.json",
-    "FLASH_used_bytes": 434716,
-    "DTCMRAM_used_bytes": 129536,
-    "DTCMRAM_region_bytes": 131072,
-    "ELF_weight_address": "0x80372c0",
-    "ELF_weight_blob_sha256": "7fce0a98f90908c67ac8470acb72310627eb49bac4a042332a61941a6b803f3a",
-    "BIN_weight_blob_sha256": "7fce0a98f90908c67ac8470acb72310627eb49bac4a042332a61941a6b803f3a",
-    "warnings": "inherited unused/redefined PI and RWX segment warnings; see build log"
+    "compiler": "arm-none-eabi-gcc (xPack GNU Arm Embedded GCC x86_64) 14.2.1 20241119",
+    "arm_target": "STM32H723 Cortex-M7",
+    "log": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/build_linux.log",
+    "source_sha256": "dc207cbd1f360b222f39f9361916e11f33eb3830631cd2292d3d6487e3a75940",
+    "memory": {
+      "DTCMRAM": {
+        "used_bytes": 129536,
+        "capacity_bytes": 131072
+      },
+      "FLASH": {
+        "used_bytes": 434716,
+        "capacity_bytes": 1048576
+      }
+    },
+    "arm_weight_address": "0x80372c0",
+    "weight_count_fp32": 49734,
+    "weight_blob_sha256": "1323465958cf3622a2a26c8d7d5f0cd5f56ef7cad4bf7d12e86e8ba73073b5e4",
+    "ELF_BIN_HEX_weight_match": true,
+    "BIN_changed_only_motion_weight_range": true,
+    "BIN_base_sha256": "7590b85544dc07b611a91501640ffe365f62c62e132d2554df96ca5f77a8acad",
+    "firmware_flash": "NOT_RUN",
+    "board_timing": "NOT_RUN"
   },
   "firmware": {
-    "bin": {
-      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/firmware/motion050_v5b1r8_17aedf9f.bin",
-      "bytes": 434716,
-      "sha256": "7590b85544dc07b611a91501640ffe365f62c62e132d2554df96ca5f77a8acad"
+    "elf": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/firmware/motion050_v4b6_7fd4d391.elf",
+      "bytes": 2054036,
+      "sha256": "b01e1c12fe3fcba6746a964fdfe6b65a913ca3f92b42c078cddeff53dbee398c"
     },
     "hex": {
-      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/firmware/motion050_v5b1r8_17aedf9f.hex",
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/firmware/motion050_v4b6_7fd4d391.hex",
       "bytes": 1222768,
-      "sha256": "1a0753a28c4183d5a671f513d084da7f71822c1e819ba9705cacbadfcfb2f3a3"
+      "sha256": "36a4d3d412df398a9076b7da575f44b54275f446cb59af462b69f1a7113a5bf3"
     },
-    "elf": {
-      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/firmware/motion050_v5b1r8_17aedf9f.elf",
-      "bytes": 2054036,
-      "sha256": "5f441ef545704757b302019fbd2ad7243f5616bcdb0e75d4ef5b3b4c8c31be42"
+    "bin": {
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/firmware/motion050_v4b6_7fd4d391.bin",
+      "bytes": 434716,
+      "sha256": "09bf651c386e55657b8b117e149ea7fc599827324e4cd2162a2d09cd46c48cea"
     },
     "map": {
-      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v5b1r8_17aedf9f_20261117/firmware/motion050_v5b1r8_17aedf9f.map",
-      "bytes": 1792216,
-      "sha256": "61acfb3c170f4707a443eff2ede1ee94816f2fd65857e7fb08177121b32bda94"
+      "path": "/home/kellen/wheel_leg_training_data/motion050_firmware_v4b6_7fd4d391_20261118/firmware/motion050_v4b6_7fd4d391.map",
+      "bytes": 1416568,
+      "sha256": "9a620588e4a412e2a214c1ab237421c9bf9f4ac73ed3a2e211af502bfe648425"
     }
   },
-  "capability": "DEVELOPMENT_CANDIDATE_NOT_INDEPENDENTLY_ACCEPTED",
-  "development": {
-    "comparison": {
-      "path": "/home/kellen/wheel_leg_training_data/motion050_turn_reteach_v10/iteration/comparisons/baseline.json",
-      "sha256": "ab7cae65e68ffbdd4b658f2d2789b2a4b8149ce81bdee081540f6c6e7bbdb4c6"
-    },
-    "conditions": 68,
-    "task_passes": 68,
-    "retention_passes": 67,
-    "signed_turn_conditions": 12,
-    "signed_turn_passes": 12,
-    "scored_dual_support_min_fraction": 0.6308,
-    "full_episode_dual_support_min_fraction": 0.65616,
-    "remaining": "turn_-1_-0.5 dq_full_RMS_rad_s exceeds paired Teacher fidelity gate",
-    "independent_final": "NOT_RUN"
-  },
-  "independent_final": "NOT_RUN",
   "board_inference_timing": "NOT_RUN",
   "hardware_closed_loop": "NOT_RUN",
-  "flashed": false
+  "flashed": "NOT_RUN"
 }
