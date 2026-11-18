@@ -84,7 +84,7 @@ typedef enum
 {
     CHASSIS_ZERO_FORCE = 0,    // 电流零输入
     CHASSIS_ROTATE,            // 小陀螺模式
-    CHASSIS_NO_FOLLOW,         // 不跟随，允许全向平移
+    CHASSIS_NO_FOLLOW,         // 不跟随云台，恒速小陀螺模式
     CHASSIS_FOLLOW_GIMBAL_YAW, // 跟随模式，底盘叠加角度环控制
 } chassis_mode_e;
 

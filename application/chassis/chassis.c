@@ -73,6 +73,7 @@ static ChassisCmdWatchdog chassis_cmd_watchdog;
 #define ROTATE_WZ_TARGET 1100.0f
 #define ROTATE_WZ_STEP 0.80f
 #define ROTATE_WZ_DOWN_STEP 1.60f
+#define NO_FOLLOW_ROTATE_WZ_RAD_S 10.0f
 #define LEG_SWING_CUTOFF_RAD (PI / 2.0f)
 #define UPSTAIR_ACCEL_CUTOFF -3.5f
 #define STANDUP_GIMBAL_RESET_ERR_DEG 8.0f
@@ -1456,7 +1457,8 @@ void ChassisTask()
     }
 
     // 根据控制模式设定旋转速度
-    if (last_mode == CHASSIS_ROTATE && chassis_cmd_recv.chassis_mode != CHASSIS_ROTATE && chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE)
+    if (last_mode == CHASSIS_ROTATE && chassis_cmd_recv.chassis_mode != CHASSIS_ROTATE &&
+        chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE && chassis_cmd_recv.chassis_mode != CHASSIS_NO_FOLLOW)
     {
         rotate_wz_softstop_active = 1;
         rotate_wz_exit = rotate_wz_soft;
@@ -1477,9 +1479,10 @@ void ChassisTask()
         chassis_status = 1;
         cent = 0;
         done = 0;
+        break;
     case CHASSIS_NO_FOLLOW:
-        // 底盘不旋�?但维持全向机�?一般用于调整云台姿�?
-
+        rotate_wz_softstop_active = 0;
+        chassis_wz_cmd = NO_FOLLOW_ROTATE_WZ_RAD_S * (660.0f / 8.0f);
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台
     {
