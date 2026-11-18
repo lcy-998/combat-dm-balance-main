@@ -73,7 +73,8 @@ static ChassisCmdWatchdog chassis_cmd_watchdog;
 #define ROTATE_WZ_TARGET 1100.0f
 #define ROTATE_WZ_STEP 0.80f
 #define ROTATE_WZ_DOWN_STEP 1.60f
-#define NO_FOLLOW_ROTATE_WZ_RAD_S 10.0f
+#define NO_FOLLOW_ROTATE_WZ_RAD_S 6.0f
+#define NO_FOLLOW_ROTATE_RAMP_MS 1000u
 #define LEG_SWING_CUTOFF_RAD (PI / 2.0f)
 #define UPSTAIR_ACCEL_CUTOFF -3.5f
 #define STANDUP_GIMBAL_RESET_ERR_DEG 8.0f
@@ -144,6 +145,7 @@ float rotate;
 static float rotate_wz_soft = ROTATE_WZ_START;
 static float rotate_wz_exit = 0.0f;
 static uint8_t rotate_wz_softstop_active = 0;
+static uint32_t no_follow_rotate_start_tick_ms;
 static int done = 0;
 static uint16_t upstair_flag0_cnt = 0;
 static uint8_t upstair_flag0_latch = 0;
@@ -1481,9 +1483,18 @@ void ChassisTask()
         done = 0;
         break;
     case CHASSIS_NO_FOLLOW:
+    {
         rotate_wz_softstop_active = 0;
-        chassis_wz_cmd = NO_FOLLOW_ROTATE_WZ_RAD_S * (660.0f / 8.0f);
+        uint32_t now_ms = HAL_GetTick();
+        if (last_mode != CHASSIS_NO_FOLLOW)
+            no_follow_rotate_start_tick_ms = now_ms;
+        uint32_t elapsed_ms = now_ms - no_follow_rotate_start_tick_ms;
+        if (elapsed_ms > NO_FOLLOW_ROTATE_RAMP_MS)
+            elapsed_ms = NO_FOLLOW_ROTATE_RAMP_MS;
+        chassis_wz_cmd = NO_FOLLOW_ROTATE_WZ_RAD_S * (660.0f / 8.0f) *
+                         ((float)elapsed_ms / (float)NO_FOLLOW_ROTATE_RAMP_MS);
         break;
+    }
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台
     {
         float follow_wz = 0.0f;
