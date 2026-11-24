@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 def function(source,name):
-    match=re.search(r'(?:static\s+)?(?:RLShadowSnapshot|int)\s+'+re.escape(name)+r'\([^)]*\)\s*\{',source)
+    match=re.search(r'(?:static\s+)?(?:RLShadowSnapshot|int|void)\s+'+re.escape(name)+r'\([^)]*\)\s*\{',source)
     if match is None:
         raise ValueError('Missing public boundary '+name)
     pos=match.end()
@@ -34,10 +34,12 @@ class ChassisHeightBoundary(unittest.TestCase):
         c='''
 #include "rl_control.h"
 #include "rl_stair.h"
+#include "stair_actor.h"
 #include "leg_const.hpp"
 #include <math.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 #define DEGREE_2_RAD (PI/180.0f)
 #define taskENTER_CRITICAL() ((void)0)
 #define taskEXIT_CRITICAL() ((void)0)
@@ -54,13 +56,111 @@ static float rl_height_request_m=RL_MOTION31_HEIGHT_M;
 static float v_cmd=1.2f,w_cmd=.4f;
 static int chassis_status,jumpingflag;
 static RLStairHandoff stair_handoff;
+static uint8_t stair_capture_prepared;
+static uint32_t now=100;
 static int ChassisNormalLQRState(void){return 1;}
-static uint32_t xTaskGetTickCount(void){return 100;}
+static uint32_t xTaskGetTickCount(void){return now;}
 static void getPhi(float a,float b,float c,float d,float e,float f,float g,float *p2,float *p3,float *length,float *theta){
  (void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;
  *p2=*p3=*theta=0;*length=.28f;
 }
-'''+macros+'\n'+function(source,'ChassisSetRLHeight')+'\n'+function(source,'ChassisCanDetectStair')+'\n'+function(source,'CurrentRLSnapshot')+'''
+'''+macros+'\n'+ '\n'.join(function(source, name) for name in (
+            'ChassisSetRLHeight', 'ChassisCanDetectStair', 'CurrentRLSnapshot', 'ChassisStairFrameAdopted',
+        ))+'''
+/* Real snapshot, Stair detector, decode, PD adoption and commit callback.
+   Feed synthetic wheel loads and attitude; Motion means are stubbed. */
+static float stair_tick(RLStairSample *plant)
+{
+  now+=5;
+  imu.update_tick_ms=now;
+  ++imu.update_sequence;
+  for(unsigned i=0;i<4;++i) joints[i].feedback_receive_tick_ms=now;
+  for(unsigned i=0;i<2;++i) wheels[i].feedback_receive_tick_ms=now;
+
+  RLStairSample io={0};
+  RLShadowSnapshot s=CurrentRLSnapshot(&io);
+  plant->can_enter=ChassisCanDetectStair(1);
+  plant->link_fresh=1;
+  plant->feedback_fresh=io.feedback_fresh && RLControlFeedbackFresh(&s,now);
+  plant->tick_ms=s.tick_ms;
+  plant->imu_sequence=s.imu_update_sequence;
+  plant->vx_cmd=s.motion.command_vx_m_s;
+  RLStairUpdate(&stair_handoff,plant);
+  const uint8_t actor=stair_handoff.phase==RL_STAIR_ACTIVE ? RL_ACTOR_STAIR : RL_ACTOR_MOTION;
+  (void)RLControlSelectActor(&rl_control_state,actor);
+  const int engaged=RLStairEngaged(&stair_handoff);
+  if (engaged) s.motion.command_height_m=RL_STAIR_GOAL_M;
+  RLControlFillPrevious(&rl_control_state,&s);
+  RLShadowCommand packet={
+    .valid=1,.actor=actor,.snapshot_sequence=s.sequence,
+    .snapshot_tick_ms=s.tick_ms,.output_tick_ms=now,.control_epoch=s.control_epoch,
+    .previous_source=s.previous_source,.previous_sequence=s.adopted_sequence
+  };
+  if (actor==RL_ACTOR_STAIR) {
+    assert(!RLStairBuildObservation(&s.motion,packet.preview.observation));
+    assert(!StairActorPhysical(packet.preview.observation,packet.action,packet.preview.target));
+  } else {
+    assert(!RLMotion31BuildPreview(&s.motion,packet.action,&packet.preview));
+  }
+  RLControlFrame frame;
+  assert(!RLControlExecute(&rl_control_state,now,1,&s,&packet,&frame));
+  assert(rl_control_state.adopted_height_m==s.motion.command_height_m);
+  if (engaged) ChassisStairFrameAdopted(rl_control_state.actor,frame.tick_ms);
+  return s.motion.command_height_m;
+}
+
+static void continuous_stairs(void)
+{
+  const float approach_height=.38f;
+  assert(!ChassisSetRLHeight(approach_height)); /* one height request for the flight */
+  RLControlReset(&rl_control_state);
+  RLStairReset(&stair_handoff);
+  rl_control_state.ramp_completed=rl_control_state.timing=rl_control_state.ready=1u;
+  chassis_cmd_recv.chassis_mode=CHASSIS_NO_FOLLOW;
+  chassis_cmd_recv.changeL=0;
+  joints[0].measure.state=1;
+  v_cmd=1.60f;w_cmd=0;
+  RLStairSample s={
+    .vx_estimate=1.2f, .wheel_to_root_m={approach_height,approach_height},
+    .wheel_up_estimate_n={90,90}
+  };
+  assert(stair_tick(&s)==approach_height);
+  for (unsigned i=0;i<3;++i) {
+    s.pitch=s.roll=s.pitch_rate=s.omega_squared=s.swing[0]=0;
+    s.wheel_to_root_m[0]=s.wheel_to_root_m[1]=approach_height;
+    assert(stair_tick(&s)==approach_height);
+    assert(stair_handoff.have_anchor && fabsf(stair_handoff.tread_estimate_m[0])<1e-6f);
+    stair_capture_prepared=1u;
+    s.pitch=.15f;s.pitch_rate=.4f;s.omega_squared=.16f;s.swing[0]=.30f;
+    for (unsigned j=0;j<5;++j)
+      assert(stair_tick(&s)==(j==4 ? RL_STAIR_GOAL_M : approach_height));
+    assert(RLControlOwner(&rl_control_state)==RL_OWNER_STAIR && stair_handoff.stair_adopted);
+
+    /* Raise the body about .07 m while the wheels move from the lower tread
+       to a tread .20 m higher, leaving .25 m of body clearance. */
+    for (unsigned j=0;j<64;++j) {
+      s.accel_up=j<32?2.734375f:-2.734375f;
+      assert(stair_tick(&s)==RL_STAIR_GOAL_M);
+    }
+    s.pitch=s.pitch_rate=s.omega_squared=s.swing[0]=s.accel_up=0;
+    s.wheel_to_root_m[0]=s.wheel_to_root_m[1]=RL_STAIR_GOAL_M;
+    assert(stair_tick(&s)==RL_STAIR_GOAL_M);
+    const uint32_t loaded_since=now;
+    while ((uint32_t)(now-loaded_since)<RL_STAIR_SUPPORT_MIN_MS) {
+      assert(RLControlOwner(&rl_control_state)==RL_OWNER_STAIR);
+      assert(stair_tick(&s)==RL_STAIR_GOAL_M); /* first Motion packet stays at .25 */
+    }
+    assert(RLControlOwner(&rl_control_state)==RL_OWNER_RL &&
+           stair_handoff.motion_adopted_tick==now && !stair_capture_prepared);
+    assert(!stair_handoff.have_anchor && !ChassisCanDetectStair(1));
+    assert(stair_tick(&s)==approach_height); /* no new height or arm command */
+    assert(ChassisCanDetectStair(1) && !stair_handoff.have_anchor);
+    assert(stair_tick(&s)==approach_height && !stair_handoff.have_anchor); /* body still low */
+  }
+  assert(rl_height_request_m==approach_height);
+  puts("PASS three sequential Stair/Motion handoffs with one Motion height request");
+}
+
 int main(void){
   const float prev[6]={.11f,.12f,13,.14f,.15f,-16};
   const float hip=(90-47.1033888f)*PI/180,active=(90+47.1080837f)*PI/180;
@@ -152,6 +252,7 @@ int main(void){
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
   assert(ChassisSetRLHeight(.19f)<0);
   assert(ChassisSetRLHeight(.41f)<0);assert(ChassisSetRLHeight(NAN)<0);
+  continuous_stairs();
   return 0;
 }
 '''
@@ -161,7 +262,7 @@ int main(void){
             subprocess.run([os.getenv('CC','cc'),'-std=gnu11','-O2','-Wall','-Wextra','-Werror',
                 '-I'+str(ROOT/'application/chassis'),'-I'+str(ROOT/'application/balance'),str(path),
                 str(ROOT/'application/chassis/rl_policy_core.c'),str(ROOT/'application/chassis/rl_stair.c'),str(ROOT/'application/chassis/rl_motion31.c'),
-                str(ROOT/'application/chassis/rl_control.c'),'-lm','-o',str(Path(tmp)/'snapshot')],check=True)
+                str(ROOT/'application/chassis/rl_control.c'),str(ROOT/'application/chassis/stair_actor.c'),'-lm','-o',str(Path(tmp)/'snapshot')],check=True)
             subprocess.run([str(Path(tmp)/'snapshot')],check=True)
 
 

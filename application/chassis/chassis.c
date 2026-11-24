@@ -937,7 +937,8 @@ static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair)
         rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
                                  fminf(RL_MOTION31_HEIGHT_MAX_M,rl_height_request_m));
     }
-    /* Stair uses its own height; recognition leaves Motion's request alone. */
+    /* Stair and the first return packet use .25 m. The Motion request
+       remains available for approaching the next riser after adoption. */
     const float requested_height=stair_engaged ? RL_STAIR_GOAL_M : rl_height_request_m;
     taskEXIT_CRITICAL();
     (void)RLControlSetCommandHeight(&rl_control_state,requested_height);
@@ -973,6 +974,13 @@ static void ChassisAbortStair(RLStairFault reason)
     rl_control_state.fault=RL_FAULT_STAIR_STOP;
     rl_control_frame.owner=RL_OWNER_INHIBITED;
     taskEXIT_CRITICAL();
+}
+
+static void ChassisStairFrameAdopted(uint8_t actor, uint32_t tick_ms)
+{
+    RLStairOnAdopt(&stair_handoff,actor,tick_ms);
+    if (stair_handoff.phase==RL_STAIR_IDLE)
+        stair_capture_prepared=0u;
 }
 
 void outputTorque()
@@ -1228,13 +1236,8 @@ void outputTorque()
                 else {memset(&rl_control_frame,0,sizeof(rl_control_frame));
                       rl_control_frame.tick_ms=current.tick_ms;rl_control_frame.fault=pending.fault;}
                 taskEXIT_CRITICAL();
-                if (stair_engaged) {
-                    RLStairOnAdopt(&stair_handoff, pending.actor, frame.tick_ms);
-                    if (stair_handoff.phase==RL_STAIR_IDLE) {
-                        (void)ChassisSetRLHeight(RL_STAIR_GOAL_M);
-                        stair_capture_prepared=0u;
-                    }
-                }
+                if (stair_engaged)
+                    ChassisStairFrameAdopted(pending.actor,frame.tick_ms);
             }
         }
         // 直接写入离散值
