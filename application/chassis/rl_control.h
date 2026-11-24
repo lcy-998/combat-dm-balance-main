@@ -14,10 +14,12 @@
 #define RL_PREVIOUS_INIT_PROXY 1u
 #define RL_PREVIOUS_ADOPTED 2u
 #define RL_OWNER_LQR 0u
-#define RL_OWNER_RL 1u
+#define RL_OWNER_RL 1u /* Motion050 */
+#define RL_OWNER_STAIR 2u
+#define RL_OWNER_INHIBITED 3u
 
 enum { RL_FAULT_NONE=0u, RL_FAULT_INPUT=1u, RL_FAULT_COMMAND=2u,
-       RL_FAULT_PD=3u, RL_FAULT_COMPENSATION=4u };
+       RL_FAULT_PD=3u, RL_FAULT_COMPENSATION=4u, RL_FAULT_STAIR_STOP=5u };
 typedef struct {
     float command_m;
     uint8_t initialized;
@@ -32,13 +34,24 @@ typedef struct {
     uint8_t active;
     uint8_t ready;
     uint8_t fault;
+    uint8_t actor, requested_actor, blend_remaining;
     uint32_t epoch;
     uint32_t adopted_sequence;
     uint32_t adopted_tick_ms;
     float adopted_target[6]; /* local PD adoption, not a claim of remote driver acceptance */
     float adopted_height_m; /* identity of the actually adopted Actor request */
     RLControlHeightState height;
+    float blend_origin[6]; /* actual adopted vector at a change of Actor */
 } RLControlState;
+
+static inline unsigned RLControlOwner(const RLControlState *state)
+{
+    return !state->active ? RL_OWNER_LQR :
+        (state->actor == RL_ACTOR_STAIR ? RL_OWNER_STAIR : RL_OWNER_RL);
+}
+
+/* Invalidate old in-flight commands without resetting PD or previous. */
+int RLControlSelectActor(RLControlState *state, uint8_t actor);
 typedef struct {
     uint8_t active;
     uint8_t exited;

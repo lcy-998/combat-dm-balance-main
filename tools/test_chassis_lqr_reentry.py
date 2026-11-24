@@ -33,6 +33,7 @@ def harness(source):
     end = source.index("taskEXIT_CRITICAL();", start) + len("taskEXIT_CRITICAL();")
     return r'''
 #include "rl_control.h"
+#include "rl_stair.h"
 #include "LQR.h"
 #include <assert.h>
 #include <stdbool.h>
@@ -45,6 +46,7 @@ def harness(source):
 typedef struct {
     struct {float total_angle;} measure;
     struct {unsigned host_position_pd;float kp_set,kd_set,pos_set,vel_set,tor_set;} ctrl;
+    unsigned stopped;
 } DMMotorInstance;
 static DMMotorInstance joints[4], wheels[2];
 static DMMotorInstance *jiont_motorlf=&joints[0],*jiont_motorlb=&joints[1];
@@ -55,6 +57,7 @@ static struct {__typeof__(left_result) *result;} left_leg={&left_result},right_l
 static __typeof__(left_leg) *Lleg=&left_leg,*Rleg=&right_leg;
 static struct {float vx;} chassis_cmd_recv;
 static RLControlState rl_control_state;
+static RLStairHandoff stair_handoff;
 static RLControlFrame rl_control_frame;
 static RLShadowSnapshot rl_pd_snapshot;
 static RLShadowCommand queued_command,rl_consumed_command;
@@ -64,19 +67,22 @@ static float s,s_dot,phi,phi_dot,theta_l=.04f,theta_l_dot,theta_r=.04f,theta_r_d
 static float s_tar,phi_tar,v_cmd,w_cmd,v_cmd_last,chassis_wz_cmd,del_t=.005f;
 static float theta_bal,l_xx=.16f,thetal=.04f,thetar=.04f;
 static float lwt,rwt,lwi,rwi,lfjt,lbjt,rfjt,rbjt,Rwheel,Lwheel;
-static int done=1,step_3,upstair_flag0,upstair_flag0_cnt,upstair_flag0_latch;
+static int done=1,step_3;
 static float DWT_GetDeltaT(unsigned *counter){(void)counter;return .005f;}
 static unsigned xTaskGetTickCount(void){return now;}
 static int ChassisNormalLQRState(void){return normal;}
 static void Unsetlegkd(void){}
 static void DMMotorSetTorque(DMMotorInstance *motor,float value){motor->ctrl.tor_set=value;}
+static void DMMotorStop(DMMotorInstance *motor){motor->stopped=1;}
+static void DJIMotorStop(DMMotorInstance *motor){motor->stopped=1;}
 int RLShadowReadCommand(RLShadowCommand *out){*out=queued_command;return queued?0:-1;}
-''' + declarations + '\nvoid setTargetData(void)\n' + block_after(source, 'void setTargetData()') + r'''
+''' + declarations + '\nstatic void ChassisStopMotors(void)\n' + block_after(source, 'static void ChassisStopMotors') + '\nstatic void ChassisAbortStair(RLStairFault reason)\n' + block_after(source, 'static void ChassisAbortStair') + '\nvoid setTargetData(void)\n' + block_after(source, 'void setTargetData()') + r'''
 static void finish_standup(void)
 ''' + block_after(source, 'if (theta_l < 0.50f && theta_r < 0.50f && fabs(theta_b) < 0.01)') + r'''
 static void select_output(void) {
     /* Same torque getters used by legLengthCalc before outputTorque. */
     lwt=get_lw_torque();rwt=get_rw_torque();
+    const int stair_engaged=RLStairEngaged(&stair_handoff);
 ''' + source[start:end] + r'''
 }
 static void feedback(void) {
@@ -150,7 +156,17 @@ int main(void) {
     setTargetData();assert(s_tar==s);select_output();
     assert(rl_control_state.fault==RL_FAULT_COMMAND);
     setTargetData();assert(fabsf(s_tar-(s+v_cmd*.003f+1.2f))<1e-6f);
-    puts("PASS chassis recovery, same-frame RL faults, inhibited reentry and subsequent position hold");
+    /* The exact chassis branch must stop the real output selection during
+       a Stair policy timeout, rather than using the already computed LQR. */
+    adopt_rl();stair_handoff.phase=RL_STAIR_ACTIVE;
+    assert(RLControlSelectActor(&rl_control_state,RL_ACTOR_STAIR));
+    now+=30;feedback();setTargetData();select_output();
+    assert(stair_handoff.phase==RL_STAIR_STOPPED && stair_handoff.fault==RL_STAIR_POLICY);
+    assert(rl_control_frame.owner==RL_OWNER_INHIBITED && rl_control_state.fault==RL_FAULT_STAIR_STOP);
+    assert(!rl_control_state.active && !lwi && !rwi);
+    for (unsigned i=0;i<4;++i) assert(joints[i].stopped && !joints[i].ctrl.tor_set);
+    for (unsigned i=0;i<2;++i) assert(wheels[i].stopped);
+    puts("PASS chassis LQR reentry and Stair policy timeout to zero force");
     return 0;
 }
 '''
@@ -166,7 +182,9 @@ class ChassisLqrReentry(unittest.TestCase):
             boundary = path / 'boundary.c'
             boundary.write_text(harness(source), encoding='utf-8')
             sources = [boundary, ROOT / 'application/chassis/rl_motion31.c',
-                       ROOT / 'application/chassis/rl_control.c']
+                       ROOT / 'application/chassis/rl_control.c',
+                       ROOT / 'application/chassis/rl_stair.c',
+                       ROOT / 'application/chassis/rl_policy_core.c']
             objects = []
             for index, src in enumerate(sources):
                 obj = path / f'{index}.o'

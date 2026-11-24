@@ -33,6 +33,7 @@ typedef struct {
 extern volatile RLCaptureBuffer g_rl_capture;
 /* Control owner is sole producer. Arm only from its setup/safe configuration. */
 void RLCaptureArm(uint32_t post_records);
+void RLCaptureArmForOwner(uint32_t post_records, uint32_t owner);
 void RLCapturePush(const RLShadowSnapshot *feedback, const RLShadowCommand *command,
                     const RLControlFrame *control);
 #endif

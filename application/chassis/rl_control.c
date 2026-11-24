@@ -1,4 +1,5 @@
 #include "rl_control.h"
+#include "rl_stair.h"
 
 #include <math.h>
 #include <string.h>
@@ -15,18 +16,31 @@ float RLControlCommandHeight(const RLControlState *state)
     return state!=NULL && state->height.initialized ? state->height.command_m : RL_MOTION31_HEIGHT_M;
 }
 
-static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
+static int command_usable(const RLShadowCommand *command, uint32_t now_tick, uint8_t actor)
 {
-    if (command == NULL || !command->valid || command->snapshot_sequence == 0u ||
+    if (command == NULL || !command->valid || command->actor != actor ||
+        command->snapshot_sequence == 0u ||
         (uint32_t)(now_tick - command->output_tick_ms) > RL_CONTROL_COMMAND_MAX_AGE_MS ||
         (uint32_t)(now_tick - command->snapshot_tick_ms) > RL_CONTROL_COMMAND_MAX_AGE_MS) {
         return 0;
     }
     for (unsigned i = 0; i < RL_MOTION31_ACTION_SIZE; ++i) {
-        if (!isfinite(command->action[i]) || !isfinite(command->preview.target[i])) return 0;
+        if (!isfinite(command->action[i]) || fabsf(command->action[i]) > 1.00001f ||
+            !isfinite(command->preview.target[i])) return 0;
     }
     for (unsigned i = 0; i < RL_MOTION31_OBSERVATION_SIZE; ++i) {
         if (!isfinite(command->preview.observation[i])) return 0;
+    }
+    if (actor == RL_ACTOR_STAIR) {
+        /* The generated Stair Actor already decoded its six physical targets.
+           This boundary checks identity/envelope and never decodes them again. */
+        const float context[9] = {0, 0, RL_STAIR_GOAL_M/.5f, 0, 1, 0, 1, 0, 0};
+        for (unsigned i=0; i<9; ++i)
+            if (command->preview.observation[22+i] != context[i]) return 0;
+        for (unsigned i=0; i<6; ++i)
+            if (fabsf(command->preview.target[i]) > ((i==2u || i==5u)?100.0f:1.5f)+1e-6f)
+                return 0;
+        return 1;
     }
     /* Decode using this packet's original Actor input height, not the newer
        live height. Transport legitimately overlaps a changed height command;
@@ -35,9 +49,16 @@ static int command_usable(const RLShadowCommand *command, uint32_t now_tick)
     if (RLMotion31DecodeOutput(command->action,
             command->preview.observation[24] * 0.5f, decoded) != 0) return 0;
     for (unsigned i = 0; i < 6u; ++i) {
-        if (fabsf(command->action[i]) > 1.00001f ||
-            fabsf(decoded[i] - command->preview.target[i]) > 0.0001f) return 0;
+        if (fabsf(decoded[i] - command->preview.target[i]) > 0.0001f) return 0;
     }
+    return 1;
+}
+
+int RLControlSelectActor(RLControlState *state, uint8_t actor)
+{
+    if (state->requested_actor == actor) return 0;
+    state->requested_actor = actor;
+    ++state->epoch;
     return 1;
 }
 
@@ -86,7 +107,8 @@ RLControlDecision RLControlStep(RLControlState *state,
     if (!state->ready)
         state->ready = ((uint32_t)(now_tick-state->wait_start_tick) >= RL_CONTROL_INFERENCE_DELAY_MS);
     /* This is eligibility only; RLControlExecute commits actual ownership. */
-    decision.active = state->ready && command_usable(command, now_tick) && command->control_epoch == state->epoch;
+    decision.active = state->ready && command != NULL && command->control_epoch == state->epoch &&
+        command_usable(command, now_tick, state->requested_actor);
     return decision;
 }
 
@@ -101,7 +123,8 @@ void RLControlFillPrevious(const RLControlState *state, RLShadowSnapshot *s)
 {
     if (state == NULL || s == NULL) return;
     s->control_epoch = state->epoch;
-    s->controller_owner = state->active ? RL_OWNER_RL : RL_OWNER_LQR;
+    s->controller_owner = RLControlOwner(state);
+    s->requested_actor = state->requested_actor;
     s->adopted_sequence = state->active ? state->adopted_sequence : 0u;
     s->adopted_tick_ms = state->active ? state->adopted_tick_ms : 0u;
     s->previous_source = state->active ? RL_PREVIOUS_ADOPTED : RL_PREVIOUS_INIT_PROXY;
@@ -165,7 +188,23 @@ int RLControlExecute(RLControlState *state,
             (command->previous_source==RL_PREVIOUS_ADOPTED && command->previous_sequence==state->adopted_sequence) :
             (command->previous_source==RL_PREVIOUS_INIT_PROXY && command->previous_sequence==0u);
         if (causal) {
-            memcpy(pending.adopted_target,command->preview.target,sizeof(pending.adopted_target));
+            if (state->active && state->actor != command->actor) {
+                memcpy(pending.blend_origin, state->adopted_target, sizeof(pending.blend_origin));
+                pending.blend_remaining = RL_STAIR_BLEND_PACKETS;
+            }
+            pending.actor = command->actor;
+            if (pending.blend_remaining) {
+                const float fraction = (float)(RL_STAIR_BLEND_PACKETS - --pending.blend_remaining)
+                                     / RL_STAIR_BLEND_PACKETS;
+                for (unsigned i=0; i<6; ++i) {
+                    const float origin = pending.blend_origin[i];
+                    pending.adopted_target[i] = pending.blend_remaining
+                        ? origin + fraction * (command->preview.target[i] - origin)
+                        : command->preview.target[i];
+                }
+            } else {
+                memcpy(pending.adopted_target,command->preview.target,sizeof(pending.adopted_target));
+            }
             pending.adopted_sequence=command->snapshot_sequence;
             pending.adopted_tick_ms=now_ms;new_target=1;
             pending.adopted_height_m=command->preview.observation[24]*.5f;
@@ -187,7 +226,7 @@ int RLControlExecute(RLControlState *state,
     frame->wheel_current_raw[0]=clampf(-wheel[0]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
     frame->wheel_current_raw[1]=clampf( wheel[1]*RL_MOTION31_WHEEL_CURRENT_PER_NM,-RL_CONTROL_WHEEL_RAW_LIMIT,RL_CONTROL_WHEEL_RAW_LIMIT);
     pending.active=1u; *state=pending;
-    frame->owner=RL_OWNER_RL; frame->adopted_sequence=state->adopted_sequence;
+    frame->owner=RLControlOwner(state); frame->adopted_sequence=state->adopted_sequence;
     frame->adopted_tick_ms=state->adopted_tick_ms;frame->snapshot_sequence=current->sequence;
     memcpy(frame->adopted_target,state->adopted_target,sizeof(state->adopted_target));
     return 0;

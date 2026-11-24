@@ -1,5 +1,7 @@
 #include "rl_shadow.h"
 #include "rl_control.h"
+#include "rl_stair.h"
+#include "stair_actor.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -41,6 +43,7 @@ static QueueHandle_t snapshot_queue;
 static StaticQueue_t command_queue_struct;
 static uint8_t command_queue_storage[sizeof(RLShadowCommand)];
 static QueueHandle_t command_queue;
+static TaskHandle_t inference_task;
 AI_ALIGNED(32) static uint8_t network_activations[AI_TJB_NETWORK_DATA_ACTIVATION_1_SIZE];
 static ai_handle network_handle = AI_HANDLE_NULL;
 static ai_buffer *network_input;
@@ -80,10 +83,11 @@ int RLShadowReadCommand(RLShadowCommand *command)
             xQueuePeek(command_queue, command, 0u) == pdPASS) ? 0 : -1;
 }
 
-void RLShadowPublish(const RLShadowSnapshot *sample)
+void RLShadowPublish(const RLShadowSnapshot *sample, int expedite)
 {
     if (sample != NULL && snapshot_queue != NULL) {
         (void)xQueueOverwrite(snapshot_queue, sample);
+        if (expedite && inference_task != NULL) xTaskNotifyGive(inference_task);
     }
 }
 
@@ -107,6 +111,7 @@ static void publish_command(const RLShadowSnapshot *sample,
         command.control_epoch=sample->control_epoch;
         command.previous_source=sample->previous_source;
         command.previous_sequence=sample->adopted_sequence;
+        command.actor=sample->requested_actor;
     }
     (void)xQueueOverwrite(command_queue, &command);
 }
@@ -160,7 +165,7 @@ static void publish_debug(const RLShadowSnapshot *sample)
         d->control_epoch=sample->control_epoch;
         d->adopted_sequence=sample->adopted_sequence;
         d->previous_source=sample->previous_source;
-        if (sample->controller_owner==RL_OWNER_RL) {
+        if (sample->controller_owner==RL_OWNER_RL || sample->controller_owner==RL_OWNER_STAIR) {
             memcpy(rl_leg_torque,sample->applied_leg_torque_motor_nm,sizeof(rl_leg_torque));
             rl_wheel_torque[0]=-sample->applied_wheel_current_raw[0]/RL_MOTION31_WHEEL_CURRENT_PER_NM;
             rl_wheel_torque[1]= sample->applied_wheel_current_raw[1]/RL_MOTION31_WHEEL_CURRENT_PER_NM;
@@ -238,9 +243,16 @@ void RLShadowTask(void const *argument)
         commit_debug();
         vTaskSuspend(NULL);
     }
+    inference_task = xTaskGetCurrentTaskHandle();
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
-        vTaskDelayUntil(&wake, RL_SHADOW_PERIOD);
+        const TickType_t due = wake + RL_SHADOW_PERIOD;
+        const int32_t remaining = (int32_t)(due - xTaskGetTickCount());
+        const int expedited = ulTaskNotifyTake(pdTRUE, remaining > 0 ? (TickType_t)remaining : 0u) != 0u;
+        const TickType_t started = xTaskGetTickCount();
+        /* Same cadence in steady state. A handoff wakes the existing consumer
+           immediately; obsolete results are rejected by the control epoch. */
+        wake = expedited || (int32_t)(started - due) >= (int32_t)RL_SHADOW_PERIOD ? started : due;
         working_debug.rl_torque_valid = 0u;
         working_debug.observation_valid = 0u;
         working_debug.input_error_mask = 0u;
@@ -276,7 +288,11 @@ void RLShadowTask(void const *argument)
         working_debug.previous_target_is_virtual = (sample.previous_source != RL_PREVIOUS_ADOPTED);
         RLMotion31Preview preview;
         float action[RL_MOTION31_ACTION_SIZE];
-        if (RLMotion31BuildObservation(&sample.motion, preview.observation) != 0) {
+        const int stair = sample.requested_actor == RL_ACTOR_STAIR;
+        const int observation_status = stair
+            ? RLStairBuildObservation(&sample.motion, preview.observation)
+            : RLMotion31BuildObservation(&sample.motion, preview.observation);
+        if (observation_status != 0) {
             working_debug.failure = 4u;
             working_debug.input_error_mask = input_error_mask(&sample.motion);
             publish_debug(&sample);
@@ -296,7 +312,7 @@ void RLShadowTask(void const *argument)
             commit_debug();
             continue;
         }
-        if (!network_ready) {
+        if (!stair && !network_ready) {
             if (network_init() != 0) {
                 working_debug.failure = 1u;
                 publish_debug(&sample);
@@ -307,7 +323,9 @@ void RLShadowTask(void const *argument)
             network_ready = 1u;
         }
         working_debug.inference_start_tick_ms=xTaskGetTickCount();
-        const int inference_status=network_run(preview.observation, action);
+        const int inference_status = stair
+            ? StairActorPhysical(preview.observation, action, preview.target)
+            : network_run(preview.observation, action);
         working_debug.inference_end_tick_ms=xTaskGetTickCount();
         if ((uint32_t)(working_debug.inference_end_tick_ms-working_debug.inference_start_tick_ms)>10u)
             working_debug.inference_deadline_miss_count++;
@@ -323,7 +341,7 @@ void RLShadowTask(void const *argument)
             working_debug.raw_action[i] = action[i];
         }
         working_debug.stage = 3u;
-        if (RLMotion31DecodeOutput(action, sample.motion.command_height_m,
+        if (!stair && RLMotion31DecodeOutput(action, sample.motion.command_height_m,
                                          preview.target) != 0) {
             working_debug.failure = 6u;
             publish_debug(&sample);

@@ -33,6 +33,7 @@
 #include "chassis_can_link.h"
 #include "rl_shadow.h"
 #include "rl_control.h"
+#include "rl_stair.h"
 #include "rl_capture.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -41,6 +42,7 @@
 #ifdef CHASSIS_BOARD
 static CANInstance *chassis_can;
 static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
+static Chassis_Ctrl_Cmd_s chassis_can_cmd;
 #endif
 #include "vel_meas.h"
 /* 根据robot_def.h中的macro自动计算的参数 */
@@ -72,7 +74,6 @@ static ChassisCanCtrlRxCtx chassis_ctrl_rx_ctx;
 #define LEG_LENGTH_SPEED_M_S 0.048f
 #define LEG_LENGTH_STEP_M (LEG_LENGTH_SPEED_M_S * 0.005f)
 #define LEG_SWING_CUTOFF_RAD (PI / 2.0f)
-#define UPSTAIR_ACCEL_CUTOFF -3.5f
 #define STANDUP_GIMBAL_RESET_ERR_DEG 8.0f
 #define STANDUP_GIMBAL_RESET_CONFIRM_CNT 20u
 #define STEP2_RETRACT_CONFIRM_CNT 100u
@@ -126,10 +127,8 @@ static float rotate_wz_soft = ROTATE_WZ_START;
 static float rotate_wz_exit = 0.0f;
 static uint8_t rotate_wz_softstop_active = 0;
 static int done = 0;
-static uint16_t upstair_flag0_cnt = 0;
-static uint8_t upstair_flag0_latch = 0;
 LegState leg_state_l, leg_state_r;
-uint8_t clockcent = 0, jumpingflag = 0, upstair_flag = 0, upstair_step = 0, last_mode = 0, switch_flag = 0, upstair_flag0 = 0;
+uint8_t clockcent = 0, jumpingflag = 0, last_mode = 0, switch_flag = 0;
 uint8_t step_0 = 0, step_1 = 0, step_2 = 0, step_3 = 0;
 uint8_t chassis_status = 1; // 0正常 1复位中
 float v_set = 0, radior, radiol;
@@ -137,6 +136,21 @@ uint64_t cent = 0;
 static float del_t;
 static uint8_t chassis_lqr_output_valid;
 static RLControlState rl_control_state;
+static RLStairHandoff stair_handoff;
+static uint32_t chassis_cmd_rx_tick;
+static uint8_t chassis_cmd_seen, stair_capture_armed;
+/* Debugger readback: timestamps refer to local PD adoption. */
+volatile RLStairDebug g_rl_stair_debug;
+
+#ifdef CHASSIS_BOARD
+static void ChassisCtrlReceive(CANInstance *instance)
+{
+    if (instance->rx_len != sizeof(Chassis_Ctrl_Cmd_CAN_s)) return;
+    ChassisCanCtrlRxCallback(instance);
+    chassis_cmd_rx_tick = xTaskGetTickCountFromISR();
+    chassis_cmd_seen = 1u;
+}
+#endif
 /* Keep the fallback position reference current until LQR actually outputs.
    This survives inhibited/standup frames and faults detected after calc_lqr(). */
 static uint8_t lqr_reentry_pending;
@@ -342,10 +356,10 @@ void ChassisInit()
         .can_handle = &hfdcan3,
         .tx_id = 0x11,
         .rx_id = 0x22,
-        .can_module_callback = ChassisCanCtrlRxCallback,
+        .can_module_callback = ChassisCtrlReceive,
         .id = &chassis_ctrl_rx_ctx,
     };
-    chassis_ctrl_rx_ctx.ctrl_dst = &chassis_cmd_recv;
+    chassis_ctrl_rx_ctx.ctrl_dst = &chassis_can_cmd;
     chassis_can = CANRegister(&can_config);
     CANSetDLC(chassis_can, sizeof(Chassis_Upload_Data_CAN_s));
     referee_data = UITaskInit(&huart1, &ui_data); // 裁判系统初始化,会同时初始化UI
@@ -499,7 +513,6 @@ static int ChassisNormalLQRState(void)
 {
     return chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
            !chassis_status && !(jumpingflag && clockcent < 200u) &&
-           !upstair_flag && !upstair_flag0 &&
            fabsf(theta_l) <= (PI / 4.0f) &&
            fabsf(theta_r) <= (PI / 4.0f);
 }
@@ -510,37 +523,18 @@ void legLengthCalc()
     if (chassis_status)
         l_xx = 0.15;
 
-    // 简单状态机通过拨杆调整腿长，数值是控制周期乘步长
-    switch (chassis_cmd_recv.changeL)
-    {
-    case 1:
-
-        l_xx -= LEG_LENGTH_STEP_M;
-        break;
-    case -1:
-        // jumpingflag = 1;
-        // clockcent = 0;
-        l_xx += LEG_LENGTH_STEP_M;
-        break;
-    case 2:
-        upstair_flag0 = 1;
-        upstair_flag0_latch = 0;
-        break;
-    case -2:
-        // upstair_flag = 1;
-        clockcent = 0;
-        break;
-    default:
-        l_xx += 0.0;
-        break;
+    if (!RLStairEngaged(&stair_handoff)) {
+        switch (chassis_cmd_recv.changeL) {
+        case 1: l_xx -= LEG_LENGTH_STEP_M; break;
+        case -1: l_xx += LEG_LENGTH_STEP_M; break;
+        case -2: clockcent = 0; break;
+        default: break;
+        }
+        l_xx = fmax(0.16f, l_xx);
+        l_xx = fmin(0.36f, l_xx);
+        l_xx = RLControlLegRampStep(&rl_control_state, xTaskGetTickCount(),
+                                    ChassisNormalLQRState(), l_xx);
     }
-
-    // 腿长限位
-    l_xx = fmax(0.16f, l_xx);
-    l_xx = fmin(0.36f, l_xx);
-
-    l_xx = RLControlLegRampStep(&rl_control_state, xTaskGetTickCount(),
-                                ChassisNormalLQRState(), l_xx);
 
 
     // 腿长差补偿拟通过roll补偿解决，当然之前的计算方法也可以保留，后续验证后再决定是否加入
@@ -556,23 +550,7 @@ void legLengthCalc()
     rbt = get_rb_torque();
     rwt = get_rw_torque();
     lwt = get_lw_torque();
-    if (upstair_flag0)
-    {
-        lbt *= 0.7;
-        rbt *= 0.7;
-        if (s_dot > 0.8)
-        {
-            lbt *= 0.4;
-            rbt *= 0.4;
-            thetal = 0.09f;
-            thetar = 0.09f;
-        }
-    }
-    else
-    {
-        thetal = 0.04f;
-        thetar = 0.04f;
-    }
+    thetal = thetar = 0.04f;
 }
 
 void vmcCalc()
@@ -860,10 +838,11 @@ int ChassisSetRLHeight(float command_height_m)
 
 /* One coherent local feedback copy with CAN receipt/filter-completion times.
    Sensor acquisition times remain UNKNOWN; task time is not substituted for them. */
-static RLShadowSnapshot CurrentRLSnapshot(void)
+static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair, int approach)
 {
     RLShadowSnapshot out={0};
     float q[4],dq[4],wheel[2],r,p,dr,dp,dy;
+    float accel[3];
     taskENTER_CRITICAL();
     q[0]=jiont_motorlf->measure.pos;q[1]=jiont_motorlb->measure.pos;
     q[2]=jiont_motorrf->measure.pos;q[3]=jiont_motorrb->measure.pos;
@@ -878,6 +857,11 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     out.driver_reported_wheel_current_raw[1]=motor_r->measure.real_current;
     p=IMU_data->Pitch*DEGREE_2_RAD;r=-IMU_data->Roll*DEGREE_2_RAD;
     dp=IMU_data->Gyro[0];dr=-IMU_data->Gyro[1];dy=IMU_data->Gyro[2];
+    if (stair != NULL) {
+        accel[0]=-IMU_data->Accel[1];accel[1]=-IMU_data->Accel[0];accel[2]=IMU_data->Accel[2];
+        stair->feedback_fresh=jiont_motorlf->measure.state==1 && jiont_motorlb->measure.state==1 &&
+                              jiont_motorrf->measure.state==1 && jiont_motorrb->measure.state==1;
+    }
     DMMotorInstance *legs[6]={jiont_motorrb,jiont_motorrf,NULL,jiont_motorlb,jiont_motorlf,NULL};
     for (unsigned i=0;i<6;++i) {
         if (legs[i]!=NULL) {
@@ -901,30 +885,83 @@ static RLShadowSnapshot CurrentRLSnapshot(void)
     RLMotion31MapWheelMotorSpeeds(&out.motion,wheel[0]/REDUCE_RATIO*DEGREE_2_RAD,
                                              wheel[1]/REDUCE_RATIO*DEGREE_2_RAD);
     RLMotion31MapLqrAttitude(&out.motion,r,p,dr,dp,dy);
-    float phi2,phi3,theta0;
-    getPhi(lf,lb,L_1,L_2,L_3,L_4,L_5,&phi2,&phi3,&out.leg_length_m[0],&theta0);
-    getPhi(rf,rb,L_1,L_2,L_3,L_4,L_5,&phi2,&phi3,&out.leg_length_m[1],&theta0);
+    float phi2[2],phi3[2],theta0[2];
+    getPhi(lf,lb,L_1,L_2,L_3,L_4,L_5,&phi2[0],&phi3[0],&out.leg_length_m[0],&theta0[0]);
+    getPhi(rf,rb,L_1,L_2,L_3,L_4,L_5,&phi2[1],&phi3[1],&out.leg_length_m[1],&theta0[1]);
     out.leg_spread_rad[0]=lf-lb;out.leg_spread_rad[1]=rf-rb;
+    if (stair != NULL) {
+        stair->pitch=p;stair->roll=r;stair->pitch_rate=dp;
+        stair->wheel_forward_mps[0]=-out.motion.joint_velocity_rad_s[5]*R_W;
+        stair->wheel_forward_mps[1]=-out.motion.joint_velocity_rad_s[2]*R_W;
+        stair->omega_squared=dp*dp+dr*dr+dy*dy;
+        /* Same gravity projection and calibrated axes as the VMC code. */
+        const float sin_r=sinf(r), cos_r=cosf(r), cos_p=cosf(p);
+        stair->accel_up=accel[0]*sinf(p)-accel[1]*sin_r*cos_p+accel[2]*cos_r*cos_p-G;
+        for (unsigned i=0; i<2; ++i) {
+            stair->swing[i]=PI/2.0f-theta0[i]+p;
+            stair->wheel_to_root_m[i]=out.leg_length_m[i]*cosf(stair->swing[i])*cos_r +
+                                     (i==0u ? -R_L : R_L)*sin_r+R_W;
+            stair->wheel_up_estimate_n[i]=NAN;
+        }
+        const float zero[4]={0};
+        float spring[4];
+        if (RLControlCompensateSpring(zero,out.leg_length_m,out.leg_spread_rad,spring)==0) {
+            const float *tau=out.driver_reported_leg_torque_motor_nm;
+            /* LF/LB kinematic angle = -encoder + offset; RF/RB = +encoder + offset. */
+            stair->wheel_up_estimate_n[0]=RLStairWheelLoad(lf,lb,phi2[0],phi3[0],
+                                                           spring[0]-tau[0],spring[1]-tau[1],p,r);
+            stair->wheel_up_estimate_n[1]=RLStairWheelLoad(rf,rb,phi2[1],phi3[1],
+                                                           tau[2]-spring[2],tau[3]-spring[3],p,r);
+        }
+    }
     out.lqr_pitch_rad=p;
     out.motion.command_vx_m_s=v_cmd;out.motion.command_yaw_rad_s=w_cmd;
     /* Same existing changeL lever and increment, now also an Actor root-height
        request. Do not feed LQR leg length l_xx or measured height to Actor. */
     taskENTER_CRITICAL();
-    if(rl_control_state.active && ChassisNormalLQRState()) {
+    const int stair_engaged=RLStairEngaged(&stair_handoff);
+    if(rl_control_state.active && ChassisNormalLQRState() && !stair_engaged && !approach) {
         if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=LEG_LENGTH_STEP_M;
         if(chassis_cmd_recv.changeL==1) rl_height_request_m-=LEG_LENGTH_STEP_M;
         rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
                                  fminf(RL_MOTION31_HEIGHT_MAX_M,rl_height_request_m));
     }
-    const float requested_height=rl_height_request_m;
+    const float requested_height=stair_engaged ? RL_STAIR_GOAL_M :
+        (approach ? RL_STAIR_APPROACH_M : rl_height_request_m);
     taskEXIT_CRITICAL();
     (void)RLControlSetCommandHeight(&rl_control_state,requested_height);
     out.motion.command_height_m=RLControlCommandHeight(&rl_control_state);
     out.chassis_ready=(chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE && !chassis_status);
-    out.rl_active=(out.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
+    out.rl_active=(out.chassis_ready && (stair_engaged || !jumpingflag) &&
                    rl_control_state.ready && !rl_control_state.fault);
     RLControlFillPrevious(&rl_control_state,&out);
     return out;
+}
+
+static void ChassisStopMotors(void)
+{
+    DJIMotorStop(motor_l);
+    DJIMotorStop(motor_r);
+    DMMotorStop(jiont_motorlb);
+    DMMotorStop(jiont_motorlf);
+    DMMotorStop(jiont_motorrf);
+    DMMotorStop(jiont_motorrb);
+}
+
+static void ChassisAbortStair(RLStairFault reason)
+{
+    RLStairStop(&stair_handoff, reason);
+    taskENTER_CRITICAL();
+    ChassisStopMotors();
+    lwi=rwi=0.0f;
+    DMMotorSetTorque(jiont_motorlf,0.0f);
+    DMMotorSetTorque(jiont_motorlb,0.0f);
+    DMMotorSetTorque(jiont_motorrf,0.0f);
+    DMMotorSetTorque(jiont_motorrb,0.0f);
+    RLControlReset(&rl_control_state);
+    rl_control_state.fault=RL_FAULT_STAIR_STOP;
+    rl_control_frame.owner=RL_OWNER_INHIBITED;
+    taskEXIT_CRITICAL();
 }
 
 void outputTorque()
@@ -933,18 +970,21 @@ void outputTorque()
     rl_control_frame.tick_ms=rl_pd_snapshot.tick_ms;
     rl_command_consumed=0u;
     chassis_lqr_output_valid = 0u;
-    /* Start the inference hold only after the leg ramp completes. */
-    (void)RLControlStep(&rl_control_state,
-                        xTaskGetTickCount(), ChassisNormalLQRState(), NULL);
+    if (stair_handoff.phase == RL_STAIR_STOPPED) {
+        if (rl_control_state.fault != RL_FAULT_STAIR_STOP)
+            ChassisAbortStair(stair_handoff.fault);
+        else
+            rl_control_frame.owner=RL_OWNER_INHIBITED;
+        return;
+    }
+    const int stair_engaged=RLStairEngaged(&stair_handoff);
+    /* Startup holds are for LQR to Motion, never for an Actor-to-Actor handoff. */
+    (void)RLControlStep(&rl_control_state, xTaskGetTickCount(),
+                        stair_engaged || ChassisNormalLQRState(), NULL);
     // 内部是一个状态机，处理复位中，起跳，和正常运行三个状态
     // 该函数的实现比较丑陋，但是我不打算修改了，正常工作的行为树不会很漂亮
 
     // 先累加得到关节电机力矩
-    if (upstair_flag0 == 1)
-    {
-        lbt = lbt * 0.4;
-        rbt = rbt * 0.4;
-    }
     float spring_tor_l = GetSpringTorqueByLegLength(Lleg->result->L0);
     float spring_tor_r = GetSpringTorqueByLegLength(Rleg->result->L0);
     lfjt = +Lleg->tor - tau_l.tau1 + lbt / 2 - spring_tor_l * arm_sin_f32(lmangle);
@@ -957,8 +997,8 @@ void outputTorque()
     // 非双下
     if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE)
     {
-        // 如果复位中且非上台阶
-        if (chassis_status && !upstair_flag)
+        // 如果复位中
+        if (chassis_status && !stair_engaged)
         {
             lwi = 0;
             rwi = 0;
@@ -1084,7 +1124,6 @@ void outputTorque()
                         w_cmd = 0;
                         v_cmd = 0;
                         phi_tar = phi;
-                        upstair_flag0 = 0;
                     }
                 }
                 else
@@ -1096,7 +1135,7 @@ void outputTorque()
             }
         }
         // 如果跳跃
-        else if (jumpingflag && clockcent < 80)
+        else if (!stair_engaged && jumpingflag && clockcent < 80)
         {
             UpdateLegRetractTorqueScale(false);
             clockcent++;
@@ -1105,7 +1144,7 @@ void outputTorque()
             DMMotorSetTorque(jiont_motorrf, -10.0f);
             DMMotorSetTorque(jiont_motorrb, +10.0f);
         }
-        else if (jumpingflag && clockcent < 200)
+        else if (!stair_engaged && jumpingflag && clockcent < 200)
         {
             UpdateLegRetractTorqueScale(false);
             clockcent++;
@@ -1114,57 +1153,15 @@ void outputTorque()
             DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle) * 0.5f);
             DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) * 0.5f);
         }
-        // 如果在上台阶
-        else if (upstair_flag && upstair_step == 0)
-        {
-            UpdateLegRetractTorqueScale(false);
-            SetLegSpeed(true);
-            RFW = 1.5 * PIDCalculate(&Rtheta, theta_r, 1.55f);
-            LFW = 1.5 * PIDCalculate(&Ltheta, theta_l, 1.55f);
-            DMMotorSetTorque(jiont_motorlf, LFW - spring_tor_l * arm_sin_f32(lmangle));
-            DMMotorSetTorque(jiont_motorlb, LFW + spring_tor_l * arm_sin_f32(lmangle));
-            DMMotorSetTorque(jiont_motorrf, -RFW + spring_tor_r * arm_sin_f32(rmangle));
-            DMMotorSetTorque(jiont_motorrb, -RFW - spring_tor_r * arm_sin_f32(rmangle));
-            if (fabs(theta_l - 1.5f) < 0.05f && fabs(theta_r - 1.47f) < 0.05f)
-                upstair_step++;
-        }
-        else if (upstair_flag && upstair_step == 1)
-        {
-            UpdateLegRetractTorqueScale(false);
-            UnsetLegSpeed();
-            DMMotorSetTorque(jiont_motorlf, -spring_tor_l * arm_sin_f32(lmangle) + Lleg->tor);
-            DMMotorSetTorque(jiont_motorlb, +spring_tor_l * arm_sin_f32(lmangle) - Lleg->tor);
-            DMMotorSetTorque(jiont_motorrf, +spring_tor_r * arm_sin_f32(rmangle) - Rleg->tor);
-            DMMotorSetTorque(jiont_motorrb, -spring_tor_r * arm_sin_f32(rmangle) + Rleg->tor);
-            if (Lleg->result->L0 < 0.17f && Rleg->result->L0 < 0.17f)
-                upstair_step++;
-        }
-        else if (upstair_flag && upstair_step == 2)
-        {
-            UpdateLegRetractTorqueScale(false);
-            RFW = 2 * PIDCalculate(&Rtheta, theta_r + (theta_r < 0) * PI * 2, 0.25f);
-            LFW = 2 * PIDCalculate(&Ltheta, theta_l + (theta_l < 0) * PI * 2, 0.25f);
-            DMMotorSetTorque(jiont_motorlf, LFW - spring_tor_l * arm_sin_f32(lmangle) + Lleg->tor);
-            DMMotorSetTorque(jiont_motorlb, LFW + spring_tor_l * arm_sin_f32(lmangle) - Lleg->tor);
-            DMMotorSetTorque(jiont_motorrf, -RFW + spring_tor_r * arm_sin_f32(rmangle) - Rleg->tor);
-            DMMotorSetTorque(jiont_motorrb, -RFW - spring_tor_r * arm_sin_f32(rmangle) + Rleg->tor);
-            if (theta_l < 0.75f && theta_r < 0.75f)
-                upstair_flag = 0, upstair_step = 0, reset_time = 0, chassis_status = 0, upstair_flag0_cnt = 0;
-            ;
-        }
         // 如果在正常运行
         else
         {
             // 复位时间计时
             ++reset_time;
 
-            // LQR摆角过大时停止腿部输出，防止立腿过程中过冲
-            // if (upstair_flag0 && (fabs(theta_l) > LEG_SWING_CUTOFF_RAD || fabs(theta_r) > LEG_SWING_CUTOFF_RAD || a_zb < UPSTAIR_ACCEL_CUTOFF))
-            // {
-            //     upstair_flag0_latch = 1;
-            // }
-
-            if (fabs(theta_l) > LEG_SWING_CUTOFF_RAD || fabs(theta_r) > LEG_SWING_CUTOFF_RAD || (upstair_flag0 && (a_zb < UPSTAIR_ACCEL_CUTOFF) || (fabs(theta_l) > (PI / 4) || fabs(theta_r) > (PI / 4))))
+            // LQR 摆角保护；Stair 由自己的姿态保护处理。
+            if (!stair_engaged &&
+                (fabsf(theta_l) > LEG_SWING_CUTOFF_RAD || fabsf(theta_r) > LEG_SWING_CUTOFF_RAD))
             {
                 UpdateLegRetractTorqueScale(false);
                 lwi = 0;
@@ -1173,38 +1170,6 @@ void outputTorque()
                 DMMotorSetTorque(jiont_motorlb, 0.0f);
                 DMMotorSetTorque(jiont_motorrf, 0.0f);
                 DMMotorSetTorque(jiont_motorrb, 0.0f);
-                if (upstair_flag0)
-                {
-                    if (upstair_flag0_cnt < 30)
-                    {
-                        ++upstair_flag0_cnt;
-                        DMMotorSetTorque(jiont_motorlf, 4.0f);
-                        DMMotorSetTorque(jiont_motorlb, 4.0f);
-                        DMMotorSetTorque(jiont_motorrf, -4.0f);
-                        DMMotorSetTorque(jiont_motorrb, -4.0f);
-                    }
-                    else
-                    {
-                        upstair_flag0 = 0;
-                        upstair_flag0_cnt = 0;
-                        upstair_flag0_latch = 0;
-                        upstair_flag = 0;
-                        upstair_step = 0;
-                        clockcent = 0;
-                        reset_time = 0;
-                        save_time = 0;
-                        chassis_status = 1;
-                        cent = 0;
-                        done = 0;
-                        step_0 = 0;
-                        step_1 = 0;
-                        step_2 = 0;
-                        step2_retract_confirm_cnt = 0;
-                        step_3 = 0;
-                        standup_gimbal_reset_flag = 0;
-                        standup_gimbal_reset_cnt = 0;
-                    }
-                }
             }
             else
             {
@@ -1216,8 +1181,7 @@ void outputTorque()
                 /* Existing LQR-only term. Never add it to RL output. */
                 if (v_cmd<=.03f) {selected_wheel[0]+=s_dot*500;selected_wheel[1]-=s_dot*500;}
                 for (unsigned i=0;i<2;++i) selected_wheel[i]=fmaxf(-RL_CONTROL_WHEEL_RAW_LIMIT,fminf(RL_CONTROL_WHEEL_RAW_LIMIT,selected_wheel[i]));
-                if (!upstair_flag0) {upstair_flag0_cnt=0;upstair_flag0_latch=0;}
-                chassis_lqr_output_valid=1u;
+                chassis_lqr_output_valid=(uint8_t)!stair_engaged;
                 RLShadowCommand command;
                 const RLShadowCommand *candidate=RLShadowReadCommand(&command)==0?&command:NULL;
                 RLShadowSnapshot current=rl_pd_snapshot;
@@ -1227,7 +1191,11 @@ void outputTorque()
                 RLControlFrame frame={0};
                 const int use_rl=RL_CONTROL_OUTPUT_ENABLED &&
                     RLControlExecute(&pending,xTaskGetTickCount(),
-                                     ChassisNormalLQRState(),&current,candidate,&frame)==0;
+                                     stair_engaged || ChassisNormalLQRState(),&current,candidate,&frame)==0;
+                if (stair_engaged && !use_rl) {
+                    ChassisAbortStair(RL_STAIR_POLICY);
+                    return;
+                }
                 if (use_rl) {
                     memcpy(selected_leg,frame.final_motor_nm,sizeof(selected_leg));
                     memcpy(selected_wheel,frame.wheel_current_raw,sizeof(selected_wheel));
@@ -1249,6 +1217,11 @@ void outputTorque()
                 else {memset(&rl_control_frame,0,sizeof(rl_control_frame));
                       rl_control_frame.tick_ms=current.tick_ms;rl_control_frame.fault=pending.fault;}
                 taskEXIT_CRITICAL();
+                if (stair_engaged) {
+                    RLStairOnAdopt(&stair_handoff, pending.actor, frame.tick_ms);
+                    if (stair_handoff.phase == RL_STAIR_WAIT_RELEASE)
+                        (void)ChassisSetRLHeight(RL_STAIR_GOAL_M);
+                }
             }
         }
         // 直接写入离散值
@@ -1261,12 +1234,30 @@ void outputTorque()
 void ChassisTask()
 {
 #ifdef ONE_BOARD
-    SubGetMessage(chassis_sub, &chassis_cmd_recv);
+    if (SubGetMessage(chassis_sub, &chassis_cmd_recv)) {
+        chassis_cmd_rx_tick=xTaskGetTickCount();
+        chassis_cmd_seen=1u;
+    }
 #endif
+    taskENTER_CRITICAL();
+#ifdef CHASSIS_BOARD
+    chassis_cmd_recv=chassis_can_cmd;
+#endif
+    const uint32_t link_age=xTaskGetTickCount()-chassis_cmd_rx_tick;
+    const int link_fresh=chassis_cmd_seen && link_age<=RL_STAIR_LINK_MAX_AGE_MS &&
+                         (unsigned)chassis_cmd_recv.chassis_mode<=CHASSIS_FOLLOW_GIMBAL_YAW;
+    taskEXIT_CRITICAL();
+    const int armed=chassis_cmd_recv.changeL==RL_STAIR_ARM_CHANGE_L;
+    /* An actual, freshly received stop acknowledges a Stair fault. The local
+       safety override must never impersonate this operator acknowledgement. */
+    if (chassis_cmd_recv.chassis_mode==CHASSIS_ZERO_FORCE && link_fresh)
+        RLStairReset(&stair_handoff,armed);
+    if (stair_handoff.phase==RL_STAIR_STOPPED)
+        chassis_cmd_recv.chassis_mode=CHASSIS_ZERO_FORCE;
 
     chassis_wz_cmd = chassis_cmd_recv.wz;
 
-    if (chassis_status && !upstair_flag && chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
+    if (chassis_status && chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
         fabs(chassis_cmd_recv.gimbal_error_angle) < STANDUP_GIMBAL_RESET_ERR_DEG)
     {
         if (standup_gimbal_reset_cnt < STANDUP_GIMBAL_RESET_CONFIRM_CNT)
@@ -1281,12 +1272,7 @@ void ChassisTask()
     standup_gimbal_reset_flag = (standup_gimbal_reset_cnt >= STANDUP_GIMBAL_RESET_CONFIRM_CNT);
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
-        DJIMotorStop(motor_l);
-        DJIMotorStop(motor_r);
-        DMMotorStop(jiont_motorlb);
-        DMMotorStop(jiont_motorlf);
-        DMMotorStop(jiont_motorrf);
-        DMMotorStop(jiont_motorrb);
+        ChassisStopMotors();
         chassis_status = 1;
         cent = 0;
         done = 0;
@@ -1329,7 +1315,8 @@ void ChassisTask()
     switch (chassis_cmd_recv.chassis_mode)
     {
     case CHASSIS_ZERO_FORCE:
-        if (rl_control_state.timing || rl_control_state.active || rl_control_state.fault)
+        if (stair_handoff.phase!=RL_STAIR_STOPPED &&
+            (rl_control_state.timing || rl_control_state.active || rl_control_state.fault))
             RLControlReset(&rl_control_state);
         chassis_status = 1;
         cent = 0;
@@ -1385,17 +1372,50 @@ void ChassisTask()
     getLegData();
     getStateData();
     setTargetData();
-    rl_pd_snapshot=CurrentRLSnapshot();
+    const int straight_mode=chassis_cmd_recv.chassis_mode==CHASSIS_NO_FOLLOW ||
+                            chassis_cmd_recv.chassis_mode==CHASSIS_FOLLOW_GIMBAL_YAW;
+    const int approach=armed && link_fresh && straight_mode && stair_handoff.phase==RL_STAIR_IDLE;
+    if (!armed && !RLStairEngaged(&stair_handoff)) stair_capture_armed=0u;
+    if (approach && !stair_capture_armed) {
+        RLCaptureArmForOwner(RL_CAPTURE_CAPACITY-17u, RL_OWNER_STAIR);
+        stair_capture_armed=1u;
+    }
+    RLStairSample stair_sample={.armed=armed,.link_fresh=link_fresh};
+    const int measure_stair=approach || RLStairEngaged(&stair_handoff);
+    rl_pd_snapshot=CurrentRLSnapshot(measure_stair ? &stair_sample : NULL, approach);
+    stair_sample.tick_ms=rl_pd_snapshot.tick_ms;
+    stair_sample.imu_sequence=rl_pd_snapshot.imu_update_sequence;
+    stair_sample.feedback_fresh=stair_sample.feedback_fresh &&
+                               RLControlFeedbackFresh(&rl_pd_snapshot,stair_sample.tick_ms) &&
+                               RLMotion31ValidateSnapshot(&rl_pd_snapshot.motion)==0;
+    stair_sample.vx_cmd=v_cmd;
+    stair_sample.vx_estimate=s_dot;
+    stair_sample.can_enter=approach && !chassis_status && !jumpingflag &&
+                           RLControlOwner(&rl_control_state)==RL_OWNER_RL &&
+                           rl_control_state.adopted_height_m>=RL_STAIR_APPROACH_M-0.005f &&
+                           v_cmd>=1.80f && v_cmd<=2.20f && fabsf(w_cmd)<=0.25f;
+    if (armed && !link_fresh && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE)
+        RLStairStop(&stair_handoff,RL_STAIR_STALE);
+    else
+        RLStairUpdate(&stair_handoff,&stair_sample);
+    const int expedite=RLControlSelectActor(&rl_control_state,
+                        stair_handoff.phase==RL_STAIR_ACTIVE ? RL_ACTOR_STAIR : RL_ACTOR_MOTION);
+    if (RLStairEngaged(&stair_handoff)) {
+        rl_pd_snapshot.motion.command_height_m=RL_STAIR_GOAL_M;
+        (void)RLControlSetCommandHeight(&rl_control_state,RL_STAIR_GOAL_M);
+    }
+    RLControlFillPrevious(&rl_control_state,&rl_pd_snapshot);
     legLengthCalc();
     vmcCalc();
-    flyDetect();
+    if (!RLStairEngaged(&stair_handoff) && stair_handoff.phase!=RL_STAIR_STOPPED)
+        flyDetect();
     outputTorque();
 
     /* Log the exact feedback used by this PD step, not a second later read. */
     RLShadowSnapshot shadow=rl_pd_snapshot;
     rl_control_frame.control_epoch=rl_control_state.epoch;
     rl_control_frame.fault=rl_control_state.fault;
-    if (rl_control_frame.owner!=RL_OWNER_RL) {
+    if (rl_control_frame.owner!=RL_OWNER_RL && rl_control_frame.owner!=RL_OWNER_STAIR) {
         taskENTER_CRITICAL();
         rl_control_frame.final_motor_nm[0]=jiont_motorlf->ctrl.tor_set;
         rl_control_frame.final_motor_nm[1]=jiont_motorlb->ctrl.tor_set;
@@ -1406,8 +1426,10 @@ void ChassisTask()
     }
     RLCapturePush(&shadow,rl_command_consumed?&rl_consumed_command:NULL,&rl_control_frame);
     RLControlFillPrevious(&rl_control_state,&shadow);
-    shadow.rl_active=(shadow.chassis_ready && !upstair_flag && !jumpingflag && !upstair_flag0 &&
+    shadow.rl_active=(shadow.chassis_ready && (RLStairEngaged(&stair_handoff) || !jumpingflag) &&
                       rl_control_state.ready && !rl_control_state.fault);
+    if (stair_handoff.phase==RL_STAIR_WAIT_RELEASE && stair_handoff.stair_adopted)
+        shadow.motion.command_height_m=RL_STAIR_GOAL_M;
     shadow.motion.lqr_leg_torque_motor_nm[0]=lfjt;
     shadow.motion.lqr_leg_torque_motor_nm[1]=lbjt;
     shadow.motion.lqr_leg_torque_motor_nm[2]=rfjt;
@@ -1418,9 +1440,21 @@ void ChassisTask()
     shadow.pd_tick_ms=rl_control_frame.tick_ms;
     memcpy(shadow.applied_leg_torque_motor_nm,rl_control_frame.final_motor_nm,sizeof(shadow.applied_leg_torque_motor_nm));
     memcpy(shadow.applied_wheel_current_raw,rl_control_frame.wheel_current_raw,sizeof(shadow.applied_wheel_current_raw));
-    RLShadowPublish(&shadow);
+    RLShadowPublish(&shadow, expedite && shadow.rl_active);
+    const RLStairDebug debug={
+        .tick_ms=shadow.tick_ms, .phase=stair_handoff.phase, .fault=stair_handoff.fault,
+        .owner=rl_control_frame.owner, .requested_actor=shadow.requested_actor,
+        .impact_start_tick=stair_handoff.impact_start_tick, .impact_tick=stair_handoff.impact_tick,
+        .stair_adopted_tick=stair_handoff.stair_adopted_tick,
+        .supported_tick=stair_handoff.supported_tick, .motion_adopted_tick=stair_handoff.motion_adopted_tick,
+        .wheel_up_estimate_n={stair_sample.wheel_up_estimate_n[0],stair_sample.wheel_up_estimate_n[1]},
+        .tread_estimate_m={stair_handoff.tread_estimate_m[0],stair_handoff.tread_estimate_m[1]},
+        .wheel_to_root_m={stair_sample.wheel_to_root_m[0],stair_sample.wheel_to_root_m[1]},
+        .pitch=stair_sample.pitch, .roll=stair_sample.roll, .vx_estimate=s_dot,
+    };
+    g_rl_stair_debug=debug;
 
-    chassis_feedback_data.standup_flag = (uint8_t)(chassis_status && !upstair_flag); // 1: 起身中, 0: 非起身
+    chassis_feedback_data.standup_flag = (uint8_t)chassis_status; // 1: 起身中, 0: 非起身
 #ifdef ONE_BOARD
     PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
 #endif

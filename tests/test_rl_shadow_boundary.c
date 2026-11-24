@@ -1,5 +1,6 @@
 /* Execute production RLShadowTask; only RTOS and AI inference are mocked. */
 #include "rl_control.h"
+#include "data/stair_golden_row.h"
 #include "queue.h"
 #include "tjb_network.h"
 #include <assert.h>
@@ -11,7 +12,7 @@
 static float input[31],output[6];
 static ai_buffer in={input},out={output};
 static TickType_t tick;
-static unsigned iterations,inferences,writes,scenario;
+static unsigned iterations,inferences,writes,scenario,notifications;
 static RLShadowSnapshot snapshot;
 static RLShadowCommand published;
 static QueueHandle_t snapshots,commands;
@@ -25,11 +26,17 @@ int xQueuePeek(QueueHandle_t q,void *dst,unsigned timeout)
 int xQueueOverwrite(QueueHandle_t q,const void *v)
 { if(q==commands){memcpy(&published,v,sizeof(published));++writes;}return pdPASS; }
 TickType_t xTaskGetTickCount(void){return tick;}
-void vTaskDelayUntil(TickType_t *last,TickType_t period)
+TaskHandle_t xTaskGetCurrentTaskHandle(void){return &tick;}
+void xTaskNotifyGive(TaskHandle_t handle){assert(handle==&tick);++notifications;}
+uint32_t ulTaskNotifyTake(int clear,TickType_t timeout)
 {
-    assert(period==10);
+    assert(clear==pdTRUE && timeout==10);
     if(++iterations>3)longjmp(done,1);
-    tick=*last+period; *last=tick;
+    if (scenario==4) {
+        tick+=5;
+        RLShadowPublish(&snapshot,1);
+        assert(notifications==iterations);
+    } else tick+=timeout;
     memset(&snapshot,0,sizeof(snapshot));
     snapshot.sequence=100u+iterations; snapshot.tick_ms=tick; snapshot.chassis_ready=1;
     snapshot.rl_active=scenario!=1; snapshot.control_epoch=7;
@@ -49,6 +56,28 @@ void vTaskDelayUntil(TickType_t *last,TickType_t period)
     }
     if(scenario==2)snapshot.tick_ms=tick-25u;
     if(scenario==3)snapshot.motion.gravity_model[1]=100;
+    if(scenario==4){
+        snapshot.requested_actor=RL_ACTOR_STAIR;
+        snapshot.controller_owner=RL_OWNER_STAIR;
+        snapshot.previous_source=RL_PREVIOUS_ADOPTED;
+        snapshot.adopted_sequence=99;
+        for(unsigned i=0;i<3;++i){
+            snapshot.motion.gyro_model_rad_s[i]=stair_golden_input[i]*4;
+            snapshot.motion.gravity_model[i]=stair_golden_input[3+i];
+        }
+        const unsigned leg[4]={0,1,3,4};
+        for(unsigned i=0;i<4;++i){
+            snapshot.motion.joint_position_rad[i]=stair_golden_input[6+i]*1.5f;
+            snapshot.motion.previous_target[leg[i]]=stair_golden_input[16+i]*1.5f;
+        }
+        for(unsigned i=0;i<6;++i)snapshot.motion.joint_velocity_rad_s[i]=stair_golden_input[10+i]/.05f;
+        snapshot.motion.previous_target[2]=stair_golden_input[20]*100;
+        snapshot.motion.previous_target[5]=stair_golden_input[21]*100;
+        /* Irrelevant external command values must not leak into Stair input. */
+        snapshot.motion.command_vx_m_s=2;
+        snapshot.motion.command_yaw_rad_s=1;
+    }
+    return scenario==4;
 }
 void vTaskSuspend(void *task){(void)task;assert(!"unexpected suspension");}
 ai_error ai_tjb_network_create_and_init(ai_handle *h,ai_handle *a,void *u)
@@ -78,10 +107,19 @@ int main(int argc,char **argv)
         assert(published.previous_source==RL_PREVIOUS_ADOPTED && published.previous_sequence==99);
         assert(fabsf(published.preview.target[0]-(-0.11784643339532f+.40f))<1e-6f);
         assert(published.preview.target[2]==64);
-    }else assert(!inferences && !published.valid);
-    assert(g_rl_shadow_debug.controller_owner==(!scenario?RL_OWNER_RL:RL_OWNER_LQR));
+    } else if(scenario==4) {
+        assert(!inferences && published.valid && published.actor==RL_ACTOR_STAIR);
+        assert(tick==15 && published.output_tick_ms==15 && published.control_epoch==7);
+        for(unsigned i=0;i<31;++i)assert(fabsf(published.preview.observation[i]-stair_golden_input[i])<1e-6f);
+        for(unsigned i=0;i<6;++i){
+            assert(fabsf(published.action[i]-stair_golden_mean[i])<2e-6f);
+            assert(fabsf(published.preview.target[i]-stair_golden_target[i])<1e-4f);
+        }
+    } else assert(!inferences && !published.valid);
+    assert(g_rl_shadow_debug.controller_owner==
+           (!scenario?RL_OWNER_RL:scenario==4?RL_OWNER_STAIR:RL_OWNER_LQR));
     assert(g_rl_shadow_debug.publish_seq==g_rl_shadow_debug.frame_end);
     assert(!(g_rl_shadow_debug.publish_seq&1));
-    puts("PASS supported050 real task: adopted cache, real dq and invalid/inactive boundaries");
+    puts("PASS real Actor task: periodic Motion, notified Stair, real dq and adopted cache");
     return 0;
 }

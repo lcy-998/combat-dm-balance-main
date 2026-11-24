@@ -10,11 +10,17 @@ trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015 test_rl_center_contract test_rl_height_runtime; do
+for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture test_rl_shadow_boundary test_rl_supported015 test_rl_center_contract test_rl_height_runtime test_rl_stair_handoff; do
     set -- "$repo/tests/$name.c" "$core/rl_motion31.c" "$core/rl_control.c"
     case "$name" in
         test_rl_capture) set -- "$@" "$core/rl_capture.c" ;;
+        test_rl_shadow_boundary|test_rl_stair_handoff)
+            set -- "-I$repo/application/balance" "$@" "$core/rl_stair.c" "$core/rl_policy_core.c" "$core/stair_actor.c"
+            ;;
+    esac
+    case "$name" in
         test_rl_shadow_boundary) set -- "-I$repo/tests/host" "$@" "$core/rl_shadow.c" ;;
+        test_rl_stair_handoff) set -- -DRL_KINEMATICS_HOST -Wl,--wrap=RLPolicyDecode "$@" "$repo/application/balance/legalgorithm.c" ;;
     esac
     "$cc_bin" -std=c11 -O2 -Wall -Wextra -Werror "-I$core" "$@" -lm -o "$tmp/$name"
     if [ "$name" = test_rl_capture ]; then
@@ -23,8 +29,8 @@ for name in test_rl_motion31 test_rl_spring test_rl_execution test_rl_capture te
         "$tmp/$name"
     fi
     if [ "$name" = test_rl_shadow_boundary ]; then
-        for scenario in 1 2 3; do "$tmp/$name" "$scenario"; done
+        for scenario in 1 2 3 4; do "$tmp/$name" "$scenario"; done
     fi
     printf 'PASS %s\n' "$name"
 done
-printf '8/8 host tests passed; no firmware flash, hardware access or real-time certification.\n'
+printf '9/9 host tests passed; no firmware flash, hardware access or real-time certification.\n'

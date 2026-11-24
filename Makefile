@@ -153,6 +153,9 @@ application/chassis/rl_motion31.c \
 application/chassis/rl_control.c \
 application/chassis/rl_capture.c \
 application/chassis/rl_shadow.c \
+application/chassis/rl_stair.c \
+application/chassis/stair_actor.c \
+application/chassis/rl_policy_core.c \
 application/cmd/robot_cmd.c \
 application/robot.c \
 Core/Src/i2c.c \
@@ -349,6 +352,9 @@ vpath %.S $(sort $(dir $(ASMM_SOURCES)))
 $(BUILD_DIR_STAMP):
 	mkdir -p "$(BUILD_DIR)"
 	touch "$(BUILD_DIR_STAMP)"
+
+# Keep the generated Stair math unchanged; optimize just its dense inference.
+$(BUILD_DIR)/stair_actor.o: CFLAGS += -O2
 
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR_STAMP)
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@

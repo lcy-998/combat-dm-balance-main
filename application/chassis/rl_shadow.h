@@ -5,13 +5,16 @@
 
 #include <stdint.h>
 
+enum { RL_ACTOR_MOTION=0u, RL_ACTOR_STAIR=1u };
+
 typedef struct {
     uint32_t sequence;
     uint32_t tick_ms;
     float lqr_pitch_rad; /* body pitch used by theta_l/theta_r; not an Actor input */
     uint8_t chassis_ready;
     uint8_t rl_active;
-    uint8_t controller_owner; /* 0=LQR, 1=RL; rl_active only permits inference */
+    uint8_t controller_owner; /* RL_OWNER_*: actual owner, not inference request */
+    uint8_t requested_actor;  /* queue routing only; never a new Actor input */
     uint8_t previous_source; /* 1=declared q/dq initialization proxy, 2=locally adopted target, 3=previous inference */
     uint32_t control_epoch;
     uint32_t adopted_sequence;
@@ -36,6 +39,7 @@ typedef struct {
     uint32_t output_tick_ms;
     uint8_t valid;
     uint8_t previous_source;
+    uint8_t actor;
     uint32_t control_epoch;
     uint32_t previous_sequence;
     float action[RL_MOTION31_ACTION_SIZE];
@@ -82,7 +86,7 @@ typedef struct {
 
 extern volatile RLShadowDebug g_rl_shadow_debug;
 void RLShadowQueueInit(void);
-void RLShadowPublish(const RLShadowSnapshot *sample);
+void RLShadowPublish(const RLShadowSnapshot *sample, int expedite);
 int RLShadowReadCommand(RLShadowCommand *command);
 void RLShadowTask(void const *argument);
 
