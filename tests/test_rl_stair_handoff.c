@@ -323,6 +323,85 @@ static void support_window(void)
     assert(h.supported_tick-jitter_begin==476u && h.support.duration_ms==476u);
 }
 
+static void reimpact_restarts_support(void)
+{
+    RLStairHandoff h;
+    RLStairSample s;
+    recovered(&h,&s);
+    for (unsigned i=0;i<95;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN && h.support.loaded_ms==475u);
+    const uint32_t taken=h.stair_adopted_tick;
+
+    /* High deceleration alone is not corroborated. Nor does a normal tilt
+       with no harsh deceleration move or age the established support gate. */
+    s.accel_forward=-25.0f;
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN && !h.support_suspended);
+    s.accel_forward=0.0f;
+    s.pitch_rate=.85f;
+    s.omega_squared=s.pitch_rate*s.pitch_rate;
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN && !h.support_suspended);
+
+    /* A riser can strike the guide/chassis without dropping either wheel's
+       speed abruptly. Even the just-requested Motion handoff must be revoked. */
+    s.accel_forward=-25.0f;
+    s.wheel_forward_mps[0]=s.wheel_forward_mps[1]=.70f;
+    step(&h,&s);
+    const uint32_t shock=s.tick_ms;
+    RLStairOnAdopt(&h,RL_ACTOR_MOTION,s.tick_ms);
+    assert(h.phase==RL_STAIR_ACTIVE && h.support_suspended && h.support_shock_tick==shock);
+    assert(!h.support.started && !h.support.loaded_ms && !h.last_bilateral);
+    assert(!h.supported_tick && !h.motion_adopted_tick && h.stair_adopted_tick==taken);
+
+    s.accel_forward=-3.0f;
+    for (unsigned i=0;i<20;++i) step(&h,&s);
+    assert(h.support_suspended && !h.support.started);
+    s.pitch_rate=s.omega_squared=0.0f;
+    s.accel_forward=-6.0f;
+    step(&h,&s);
+    assert(h.support_suspended && !h.support.started);
+    s.accel_forward=0.0f;
+    step(&h,&s);
+    const uint32_t resumed=s.tick_ms;
+    assert(!h.support_suspended && h.support.started && !h.support.loaded_ms);
+    for (unsigned i=0;i<94;++i) {
+        step(&h,&s);
+        assert(h.phase==RL_STAIR_ACTIVE);
+    }
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN && h.supported_tick-resumed==475u);
+}
+
+static void project_acceleration(void)
+{
+    const float x=.48f, y=-.26f, z=1.10f;
+    const float cx=cosf(x*.5f), sx=sinf(x*.5f), cy=cosf(y*.5f), sy=sinf(y*.5f);
+    const float cz=cosf(z*.5f), sz=sinf(z*.5f);
+    const float q[4]={cz*cy*cx+sz*sy*sx,cz*cy*sx-sz*sy*cx,
+                      cz*sy*cx+sz*cy*sx,sz*cy*cx-cz*sy*sx};
+    const float vertical[3]={-sinf(y),cosf(y)*sinf(x),cosf(y)*cosf(x)};
+    float a[3], up, forward;
+    for (unsigned i=0;i<3;++i) a[i]=G*vertical[i];
+    RLStairProjectAcceleration(q,a,&up,&forward);
+    assert(fabsf(up)<2e-6f && fabsf(forward)<2e-6f);
+
+    /* Tilt about raw INS X (+nose down). A pure horizontal jolt toward
+       world +Y must brake the chassis without leaking into world Z. */
+    const float nose_down[4]={cx,sx,0.0f,0.0f};
+    a[0]=0.0f;
+    a[1]=G*sinf(x)+25.0f*cosf(x);
+    a[2]=G*cosf(x)-25.0f*sinf(x);
+    RLStairProjectAcceleration(nose_down,a,&up,&forward);
+    assert(fabsf(up)<3e-6f && fabsf(forward+25.0f*cosf(x))<4e-6f);
+    a[1]+=2.0f*sinf(x); a[2]+=2.0f*cosf(x);
+    RLStairProjectAcceleration(nose_down,a,&up,&forward);
+    assert(fabsf(up-2.0f)<4e-6f);
+    const float invalid[4]={0.0f,0.0f,0.0f,0.0f};
+    RLStairProjectAcceleration(invalid,a,&up,&forward);
+    assert(isnan(up) && isnan(forward));
+}
+
 static void lift_then_return(void)
 {
     RLStairHandoff h;
@@ -478,6 +557,8 @@ int main(void)
     approach_anchor();
     handling();
     support_window();
+    reimpact_restarts_support();
+    project_acceleration();
     lift_then_return();
     measured_force();
     execution();

@@ -31,6 +31,7 @@ typedef struct {
     uint32_t tick_ms, imu_sequence;
     int link_fresh, feedback_fresh, can_enter;
     float vx_cmd, vx_estimate, pitch, roll, pitch_rate, roll_rate, omega_squared, accel_up;
+    float accel_forward; /* gravity removed, along chassis forward in the body frame */
     float swing[2], wheel_to_root_m[2], wheel_up_estimate_n[2], wheel_forward_mps[2]; /* physical L/R */
 } RLStairSample;
 
@@ -49,10 +50,12 @@ typedef struct {
     RLStairFault fault;
     uint32_t impact_start_tick, impact_tick, stair_adopted_tick, supported_tick, motion_adopted_tick;
     uint32_t last_sample_tick, imu_sequence, anchor_tick, condition_tick;
+    uint32_t support_shock_tick;
     float root_m, root_vz, bias, accel_last, height_last;
     float wheel_speed_last[2], swing_last[2], swing_at_shock[2];
     uint32_t shock_tick[2];
     uint8_t have_sample, have_anchor, condition, stair_adopted, wheel_shock_mask, last_bilateral;
+    uint8_t support_suspended;
     float tread_estimate_m[2];
     RLStairSupportWindow support;
 } RLStairHandoff;
@@ -64,6 +67,8 @@ typedef struct {
     float pitch, roll, vx_estimate;
     uint32_t support_window_ms, support_loaded_ms, support_gap_ms;
     float body_above_wheels_m;
+    uint32_t support_shock_tick, support_suspended;
+    float accel_up_mps2, accel_forward_mps2;
 } RLStairDebug;
 
 extern volatile RLStairDebug g_rl_stair_debug;
@@ -80,6 +85,10 @@ void RLStairStop(RLStairHandoff *state, RLStairFault fault);
 void RLStairReset(RLStairHandoff *state);
 
 int RLStairBuildObservation(const RLMotion31Snapshot *sample, float observation[31]);
+/* INS body axes, [w,x,y,z] body-to-world quaternion and specific force in m/s².
+ * Writes linear world-up and chassis-forward acceleration, or NaN on an invalid input. */
+void RLStairProjectAcceleration(const float quaternion[4], const float imu_accel[3],
+                                float *up, float *forward);
 /* Quasi-static five-bar estimate. Torques use the two kinematic angle signs
  * with the 050 spring compensation removed. NaN means unobservable. */
 float RLStairWheelLoad(float phi1, float phi4, float phi2, float phi3,

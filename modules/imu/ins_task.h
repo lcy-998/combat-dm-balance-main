@@ -88,6 +88,10 @@ typedef struct
  */
 attitude_t *INS_Init(void);
 
+/* Copy the quaternion from the same INS update as the attitude view.
+ * When read with that view, the caller copies both under its snapshot lock. */
+void INS_CopyQuaternion(float q[4]);
+
 /**
  * @brief 此函数放入实时系统中,以1kHz频率运行
  *        p.s. osDelay(1);

@@ -30,6 +30,7 @@ def function(source,name):
 class ChassisHeightBoundary(unittest.TestCase):
     def test_actual_snapshot_and_external_height_api_keep_axes_previous_and_motion(self):
         source=(ROOT/'application/chassis/chassis.c').read_text()
+        ins_source=(ROOT/'modules/imu/ins_task.c').read_text()
         macros='\n'.join(line for line in source.splitlines() if re.match(r'#define (?:LF|LB|RF|RB)_ENCODE_OFFSET\b|#define REDUCE_RATIO\b|#define LEG_LENGTH_(?:STEP_M|SPEED_M_S)\b',line))
         c='''
 #include "rl_control.h"
@@ -50,6 +51,7 @@ static DMMotorInstance *jiont_motorlf=&joints[0],*jiont_motorlb=&joints[1],*jion
 static DMMotorInstance *motor_l=&wheels[0],*motor_r=&wheels[1];
 static struct {float Pitch,Roll,Gyro[3],Accel[3];uint32_t update_tick_ms,update_sequence;} imu;
 static __typeof__(imu) *IMU_data=&imu;
+static struct {float q[4];} INS={{1,0,0,0}};
 static struct {int changeL,chassis_mode;} chassis_cmd_recv;
 static RLControlState rl_control_state;
 static float rl_height_request_m=RL_MOTION31_HEIGHT_M;
@@ -64,7 +66,7 @@ static void getPhi(float a,float b,float c,float d,float e,float f,float g,float
  (void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;
  *p2=*p3=*theta=0;*length=.28f;
 }
-'''+macros+'\n'+ '\n'.join(function(source, name) for name in (
+'''+function(ins_source, 'INS_CopyQuaternion')+'\n'+macros+'\n'+ '\n'.join(function(source, name) for name in (
             'ChassisSetRLHeight', 'ChassisCanDetectStair', 'CurrentRLSnapshot', 'ChassisStairFrameAdopted',
         ))+'''
 /* Real snapshot, Stair detector, decode, PD adoption and commit callback.
@@ -199,6 +201,19 @@ int main(void){
   assert(b.motion.command_height_m==.36f && fabsf(stair.accel_up)<1e-6f);
   assert(stair.feedback_fresh && stair.wheel_forward_mps[0]<0 && stair.wheel_forward_mps[1]>0);
   assert(stair.roll_rate==-.2f); /* measured tilt rate, in chassis convention */
+
+  /* Actual chassis must pass the unpermuted INS sample and matching quaternion.
+     Pressing on a tilted bumper horizontally must not move the vertical datum. */
+  const float angle=.35f,jolt=25.0f;
+  INS.q[0]=cosf(angle*.5f);INS.q[1]=sinf(angle*.5f);
+  IMU_data->Pitch=angle/DEGREE_2_RAD;
+  IMU_data->Accel[1]=G*sinf(angle)+jolt*cosf(angle);
+  IMU_data->Accel[2]=G*cosf(angle)-jolt*sinf(angle);
+  b=CurrentRLSnapshot(&stair);
+  assert(fabsf(stair.accel_up)<4e-6f && fabsf(stair.accel_forward+jolt*cosf(angle))<4e-6f);
+  assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
+  INS.q[0]=1.0f;INS.q[1]=0.0f;
+  IMU_data->Pitch=0.0f;IMU_data->Accel[1]=0.0f;IMU_data->Accel[2]=G;
 
   v_cmd=1.60f; w_cmd=1.0f;
   rl_control_state.adopted_height_m=.35f;

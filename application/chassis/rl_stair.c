@@ -10,6 +10,11 @@
 #define ANCHOR_MAX_AGE_MS 250u
 #define WHEEL_SHOCK_WINDOW_MS 20u
 #define ROBOT_WEIGHT_N ((M_B + 2.0f * (M_L + M_W)) * G)
+/* After upper support starts, hard forward braking with fast body tilt can
+ * load the legs through the riser or chassis without supporting both wheels. */
+#define SUPPORT_SHOCK_DECEL_MPS2 (2.0f * G)
+#define SUPPORT_SHOCK_TILT_RAD_S 0.60f
+#define SUPPORT_RESUME_ACCEL_MPS2 (0.50f * G)
 
 int RLStairBuildObservation(const RLMotion31Snapshot *s, float o[31])
 {
@@ -17,6 +22,25 @@ int RLStairBuildObservation(const RLMotion31Snapshot *s, float o[31])
     const float command[3] = {0.0f, 0.0f, RL_STAIR_GOAL_M};
     return RLPolicyEncode(s->gyro_model_rad_s, s->gravity_model, s->joint_position_rad,
                           s->joint_velocity_rad_s, s->previous_target, command, 1u, 0u, o);
+}
+
+void RLStairProjectAcceleration(const float q[4], const float a[3], float *up, float *forward)
+{
+    const float ww=q[0]*q[0], xx=q[1]*q[1], yy=q[2]*q[2], zz=q[3]*q[3];
+    const float norm2=ww+xx+yy+zz;
+    if (!isfinite(norm2) || fabsf(norm2-1.0f)>0.02f ||
+        !isfinite(a[0]) || !isfinite(a[1]) || !isfinite(a[2])) {
+        *up=*forward=NAN;
+        return;
+    }
+    /* World up expressed in INS axes: row Z of BodyFrameToEarthFrame.
+       INS -Y is chassis forward; use the same up vector to remove gravity. */
+    const float inv=1.0f/norm2;
+    const float ux=2.0f*(q[1]*q[3]-q[0]*q[2])*inv;
+    const float uy=2.0f*(q[2]*q[3]+q[0]*q[1])*inv;
+    const float uz=(ww-xx-yy+zz)*inv;
+    *up=ux*a[0]+uy*a[1]+uz*a[2]-G;
+    *forward=G*uy-a[1];
 }
 
 float RLStairWheelLoad(float phi1, float phi4, float phi2, float phi3,
@@ -42,6 +66,7 @@ static int known_pose(const RLStairSample *s)
 {
     return isfinite(s->pitch) && isfinite(s->roll) && isfinite(s->pitch_rate) &&
            isfinite(s->roll_rate) && isfinite(s->omega_squared) && isfinite(s->accel_up) &&
+           isfinite(s->accel_forward) &&
            isfinite(s->swing[0]) && isfinite(s->swing[1]) &&
            isfinite(s->wheel_to_root_m[0]) && isfinite(s->wheel_to_root_m[1]);
 }
@@ -147,6 +172,23 @@ static void clear_support(RLStairSupportWindow *w)
     w->head = w->count = w->started = w->last_loaded = 0u;
 }
 
+static int support_feedback_usable(RLStairHandoff *h, const RLStairSample *s)
+{
+    const float tilt_squared=s->pitch_rate*s->pitch_rate+s->roll_rate*s->roll_rate;
+    const float tilt_limit=SUPPORT_SHOCK_TILT_RAD_S*SUPPORT_SHOCK_TILT_RAD_S;
+    if (h->stair_adopted && (h->support.started || on_tread(h) || h->support_suspended) &&
+        s->accel_forward <= -SUPPORT_SHOCK_DECEL_MPS2 && tilt_squared >= tilt_limit) {
+        if (!h->support_suspended) h->support_shock_tick=s->tick_ms;
+        h->support_suspended=1u;
+        clear_support(&h->support);
+    } else if (h->support_suspended && tilt_squared < tilt_limit &&
+               fabsf(s->accel_forward) <= SUPPORT_RESUME_ACCEL_MPS2) {
+        /* The next usable sample starts a new history; never reuse pre-impact load. */
+        h->support_suspended=0u;
+    }
+    return !h->support_suspended;
+}
+
 static void trim_support(RLStairSupportWindow *w, unsigned excess_ms)
 {
     while (excess_ms) {
@@ -200,7 +242,7 @@ static int support_confirmed(RLStairHandoff *h, const RLStairSample *s, unsigned
     return load_now && w->loaded_ms >= RL_STAIR_SUPPORT_MIN_MS && raised_for_motion(s);
 }
 
-static void sample_height(RLStairHandoff *h, const RLStairSample *s)
+static void sample_height(RLStairHandoff *h, const RLStairSample *s, int support_usable)
 {
     const uint32_t dt_ms = s->tick_ms - h->last_sample_tick;
     const int contiguous = h->have_sample && dt_ms > 0u && dt_ms <= SAMPLE_MAX_GAP_MS;
@@ -210,7 +252,7 @@ static void sample_height(RLStairHandoff *h, const RLStairSample *s)
         if (!RLStairEngaged(h)) h->have_anchor = 0u;
     }
     const float height = 0.5f * (s->wheel_to_root_m[0] + s->wheel_to_root_m[1]);
-    const int bilateral = RLStairEngaged(h) && level(s) && loaded(s) &&
+    const int bilateral = support_usable && RLStairEngaged(h) && level(s) && loaded(s) &&
         fabsf(s->accel_up-h->bias) <= 1.0f && fabsf(height-RL_STAIR_GOAL_M) <= 0.04f &&
         fabsf(s->wheel_to_root_m[0]-s->wheel_to_root_m[1]) <= 0.04f;
     /* Establish the lower-floor datum during the level, loaded approach. Once
@@ -274,6 +316,7 @@ void RLStairReset(RLStairHandoff *h)
 static void forget_approach(RLStairHandoff *h)
 {
     h->condition = h->have_sample = h->have_anchor = h->wheel_shock_mask = h->last_bilateral = 0u;
+    h->support_suspended=0u;
     h->root_vz = h->bias = 0.0f;
 }
 
@@ -316,18 +359,20 @@ void RLStairUpdate(RLStairHandoff *h, const RLStairSample *s)
     const uint32_t sample_dt_ms = now-h->last_sample_tick;
     uint32_t first_shock = now;
     const int quick = h->phase == RL_STAIR_IDLE && quick_impact(h, s, &first_shock);
-    sample_height(h, s);
+    const int support_usable=!RLStairEngaged(h) || support_feedback_usable(h,s);
+    sample_height(h,s,support_usable);
     if (h->phase == RL_STAIR_IDLE) {
         const int arrived = h->have_anchor && (uint32_t)(now-h->anchor_tick) <= ANCHOR_MAX_AGE_MS;
         if ((arrived && quick) || condition_for(h, now, arrived && impact(s), RL_STAIR_IMPACT_MS)) {
             h->impact_start_tick = quick ? first_shock : h->condition_tick;
             h->impact_tick = now;
             h->stair_adopted_tick = h->supported_tick = h->motion_adopted_tick = 0u;
+            h->support_shock_tick=0u;
             h->phase = RL_STAIR_ACTIVE;
             h->condition = 0u;
             clear_support(&h->support);
         }
-    } else if (support_confirmed(h,s,sample_dt_ms)) {
+    } else if (support_usable && support_confirmed(h,s,sample_dt_ms)) {
         if (h->phase == RL_STAIR_ACTIVE) {
             h->supported_tick = now;
             h->phase = RL_STAIR_RETURN;

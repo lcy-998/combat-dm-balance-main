@@ -23,6 +23,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <stddef.h>
+#include <string.h>
 
 _Static_assert(offsetof(INS_t,update_tick_ms)-offsetof(INS_t,Gyro)==offsetof(attitude_t,update_tick_ms),
                "INS attitude view layout differs");
@@ -138,6 +139,11 @@ attitude_t *INS_Init(void)
     INS.AccelLPF = 0.0085;
     DWT_GetDeltaT(&INS_DWT_Count);
     return (attitude_t *)&INS.Gyro; // @todo: 这里偷懒了,不要这样做! 修改INT_t结构体可能会导致异常,待修复.
+}
+
+void INS_CopyQuaternion(float q[4])
+{
+    memcpy(q, INS.q, sizeof INS.q);
 }
 
 /* 注意以1kHz的频率运行此任务 */

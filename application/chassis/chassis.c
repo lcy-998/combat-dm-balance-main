@@ -853,7 +853,7 @@ static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair)
 {
     RLShadowSnapshot out={0};
     float q[4],dq[4],wheel[2],r,p,dr,dp,dy;
-    float accel[3];
+    float imu_accel[3], imu_q[4];
     taskENTER_CRITICAL();
     q[0]=jiont_motorlf->measure.pos;q[1]=jiont_motorlb->measure.pos;
     q[2]=jiont_motorrf->measure.pos;q[3]=jiont_motorrb->measure.pos;
@@ -869,7 +869,8 @@ static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair)
     p=IMU_data->Pitch*DEGREE_2_RAD;r=-IMU_data->Roll*DEGREE_2_RAD;
     dp=IMU_data->Gyro[0];dr=-IMU_data->Gyro[1];dy=IMU_data->Gyro[2];
     if (stair != NULL) {
-        accel[0]=-IMU_data->Accel[1];accel[1]=-IMU_data->Accel[0];accel[2]=IMU_data->Accel[2];
+        memcpy(imu_accel,IMU_data->Accel,sizeof imu_accel);
+        INS_CopyQuaternion(imu_q);
         stair->feedback_fresh=jiont_motorlf->measure.state==1 && jiont_motorlb->measure.state==1 &&
                               jiont_motorrf->measure.state==1 && jiont_motorrb->measure.state==1;
     }
@@ -905,9 +906,9 @@ static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair)
         stair->wheel_forward_mps[0]=-out.motion.joint_velocity_rad_s[5]*R_W;
         stair->wheel_forward_mps[1]=-out.motion.joint_velocity_rad_s[2]*R_W;
         stair->omega_squared=dp*dp+dr*dr+dy*dy;
-        /* Same gravity projection and calibrated axes as the VMC code. */
-        const float sin_r=sinf(r), cos_r=cosf(r), cos_p=cosf(p);
-        stair->accel_up=accel[0]*sinf(p)-accel[1]*sin_r*cos_p+accel[2]*cos_r*cos_p-G;
+        /* Keep pitch/roll kinematics and Actor inputs on their existing conventions. */
+        const float sin_r=sinf(r), cos_r=cosf(r);
+        RLStairProjectAcceleration(imu_q,imu_accel,&stair->accel_up,&stair->accel_forward);
         for (unsigned i=0; i<2; ++i) {
             stair->swing[i]=PI/2.0f-theta0[i]+p;
             stair->wheel_to_root_m[i]=out.leg_length_m[i]*cosf(stair->swing[i])*cos_r +
@@ -1460,6 +1461,10 @@ void ChassisTask()
         .support_loaded_ms=stair_handoff.support.loaded_ms,
         .support_gap_ms=stair_handoff.support.gap_ms,
         .body_above_wheels_m=0.5f*(stair_sample.wheel_to_root_m[0]+stair_sample.wheel_to_root_m[1]),
+        .support_shock_tick=stair_handoff.support_shock_tick,
+        .support_suspended=stair_handoff.support_suspended,
+        .accel_up_mps2=stair_sample.accel_up,
+        .accel_forward_mps2=stair_sample.accel_forward,
     };
     g_rl_stair_debug=debug;
 
