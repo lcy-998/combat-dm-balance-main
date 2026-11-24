@@ -41,7 +41,7 @@ class ChassisHeightBoundary(unittest.TestCase):
 #define DEGREE_2_RAD (PI/180.0f)
 #define taskENTER_CRITICAL() ((void)0)
 #define taskEXIT_CRITICAL() ((void)0)
-#define CHASSIS_ZERO_FORCE 0
+enum { CHASSIS_ZERO_FORCE=0, CHASSIS_ROTATE, CHASSIS_NO_FOLLOW, CHASSIS_FOLLOW_GIMBAL_YAW };
 typedef struct {struct {float pos,vel,tor,speed_aps,real_current;uint8_t state;} measure;uint32_t feedback_receive_tick_ms,feedback_sequence;} DMMotorInstance;
 static DMMotorInstance joints[4],wheels[2];
 static DMMotorInstance *jiont_motorlf=&joints[0],*jiont_motorlb=&joints[1],*jiont_motorrf=&joints[2],*jiont_motorrb=&joints[3];
@@ -71,7 +71,7 @@ int main(void){
     joints[i].measure.vel=.4f;joints[i].measure.state=1;
   }
   for(int i=0;i<2;++i){wheels[i].feedback_receive_tick_ms=100;wheels[i].feedback_sequence=1;wheels[i].measure.speed_aps=300;}
-  imu.update_tick_ms=100;imu.update_sequence=1;chassis_cmd_recv.chassis_mode=1;
+  imu.update_tick_ms=100;imu.update_sequence=1;chassis_cmd_recv.chassis_mode=CHASSIS_NO_FOLLOW;
   rl_control_state.active=1;rl_control_state.ready=1;rl_control_state.adopted_sequence=99;
   memcpy(rl_control_state.adopted_target,prev,sizeof(prev));
   assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot(NULL);
@@ -90,7 +90,7 @@ int main(void){
   chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot(NULL);
   assert(fabsf(b.motion.command_height_m-(.30f+.048f*.005f))<1e-7f);
   assert(b.motion.command_vx_m_s==1.2f && b.motion.command_yaw_rad_s==.4f);
-  chassis_cmd_recv.changeL=RL_STAIR_ARM_CHANGE_L;
+  chassis_cmd_recv.changeL=0;
   assert(!ChassisSetRLHeight(.36f));
   RLStairSample stair={0};
   IMU_data->Accel[2]=G;
@@ -100,23 +100,35 @@ int main(void){
   assert(stair.feedback_fresh && stair.wheel_forward_mps[0]<0 && stair.wheel_forward_mps[1]>0);
   assert(stair.roll_rate==-.2f); /* measured tilt rate, in chassis convention */
 
-  v_cmd=1.50f; w_cmd=1.0f;
+  v_cmd=1.60f; w_cmd=1.0f;
   rl_control_state.adopted_height_m=.35f;
   assert(!ChassisCanDetectStair(1)); /* requested .36, but not yet adopted */
   rl_control_state.adopted_height_m=.36f;
-  assert(ChassisCanDetectStair(1) && !ChassisCanDetectStair(0));
+  assert(ChassisCanDetectStair(1) && !ChassisCanDetectStair(0)); /* no arm command */
   w_cmd=-1.0f;
   assert(ChassisCanDetectStair(1));
   w_cmd=-1.01f;
   assert(!ChassisCanDetectStair(1));
   w_cmd=0;
-  v_cmd=1.49f;
-  assert(!ChassisCanDetectStair(1));
-  v_cmd=2.20f; rl_control_state.adopted_height_m=.40f;
-  assert(ChassisCanDetectStair(1));
-  v_cmd=2.21f;
-  assert(!ChassisCanDetectStair(1));
   v_cmd=1.50f;
+  assert(!ChassisCanDetectStair(1));
+  chassis_cmd_recv.changeL=2;
+  assert(!ChassisCanDetectStair(1)); /* retired switch cannot override a gate */
+  chassis_cmd_recv.changeL=0;
+  v_cmd=nextafterf(1.50f,INFINITY);
+  assert(ChassisCanDetectStair(1));
+  v_cmd=2.21f; rl_control_state.adopted_height_m=.40f;
+  assert(ChassisCanDetectStair(1)); /* no independent 2.20 m/s Stair ceiling */
+  v_cmd=INFINITY;
+  assert(!ChassisCanDetectStair(1));
+  v_cmd=1.60f;
+  chassis_cmd_recv.chassis_mode=CHASSIS_ROTATE;
+  assert(!ChassisCanDetectStair(1));
+  chassis_cmd_recv.chassis_mode=CHASSIS_FOLLOW_GIMBAL_YAW;
+  assert(ChassisCanDetectStair(1));
+  stair_handoff.phase=RL_STAIR_RETURN;
+  assert(!ChassisCanDetectStair(1));
+  stair_handoff.phase=RL_STAIR_IDLE;
   rl_control_state.actor=RL_ACTOR_STAIR;
   assert(!ChassisCanDetectStair(1));
   rl_control_state.actor=RL_ACTOR_MOTION;

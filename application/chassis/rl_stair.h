@@ -3,12 +3,10 @@
 
 #include "rl_shadow.h"
 
-/* One explicitly armed 20 cm trial. These are external handoff gates. */
-#define RL_STAIR_ARM_CHANGE_L 2
+/* External detection and handoff gates for the 20 cm Stair Actor. */
 #define RL_STAIR_APPROACH_M 0.40f
 #define RL_STAIR_APPROACH_TOL_M 0.04f
 #define RL_STAIR_APPROACH_MIN_VX_MPS 1.50f
-#define RL_STAIR_APPROACH_MAX_VX_MPS 2.20f
 #define RL_STAIR_APPROACH_MAX_YAW_RAD_S 1.0f
 #define RL_STAIR_GOAL_M 0.25f
 #define RL_STAIR_LINK_MAX_AGE_MS 50u
@@ -22,7 +20,7 @@
 #define RL_STAIR_BLEND_PACKETS 3u /* 3 x 10 ms; begin with the first valid packet */
 
 typedef enum {
-    RL_STAIR_IDLE, RL_STAIR_ACTIVE, RL_STAIR_RETURN, RL_STAIR_WAIT_RELEASE, RL_STAIR_STOPPED
+    RL_STAIR_IDLE, RL_STAIR_ACTIVE, RL_STAIR_RETURN, RL_STAIR_STOPPED=4 /* preserve debug phase IDs */
 } RLStairPhase;
 
 typedef enum {
@@ -31,7 +29,7 @@ typedef enum {
 
 typedef struct {
     uint32_t tick_ms, imu_sequence;
-    int armed, link_fresh, feedback_fresh, can_enter;
+    int link_fresh, feedback_fresh, can_enter;
     float vx_cmd, vx_estimate, pitch, roll, pitch_rate, roll_rate, omega_squared, accel_up;
     float swing[2], wheel_to_root_m[2], wheel_up_estimate_n[2], wheel_forward_mps[2]; /* physical L/R */
 } RLStairSample;
@@ -79,7 +77,7 @@ static inline int RLStairEngaged(const RLStairHandoff *state)
 void RLStairUpdate(RLStairHandoff *state, const RLStairSample *sample);
 void RLStairOnAdopt(RLStairHandoff *state, uint8_t actor, uint32_t now_ms);
 void RLStairStop(RLStairHandoff *state, RLStairFault fault);
-void RLStairReset(RLStairHandoff *state, int armed);
+void RLStairReset(RLStairHandoff *state);
 
 int RLStairBuildObservation(const RLMotion31Snapshot *sample, float observation[31]);
 /* Quasi-static five-bar estimate. Torques use the two kinematic angle signs

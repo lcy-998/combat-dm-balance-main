@@ -266,24 +266,20 @@ void RLStairStop(RLStairHandoff *h, RLStairFault fault)
     h->phase = RL_STAIR_STOPPED;
 }
 
-void RLStairReset(RLStairHandoff *h, int armed)
+void RLStairReset(RLStairHandoff *h)
 {
     memset(h, 0, sizeof(*h));
-    if (armed) h->phase = RL_STAIR_WAIT_RELEASE;
+}
+
+static void forget_approach(RLStairHandoff *h)
+{
+    h->condition = h->have_sample = h->have_anchor = h->wheel_shock_mask = h->last_bilateral = 0u;
+    h->root_vz = h->bias = 0.0f;
 }
 
 void RLStairUpdate(RLStairHandoff *h, const RLStairSample *s)
 {
     if (h->phase == RL_STAIR_STOPPED) return;
-    if (h->phase == RL_STAIR_WAIT_RELEASE) {
-        if (!s->armed) {
-            h->phase = RL_STAIR_IDLE;
-            h->condition = h->have_sample = h->have_anchor = h->stair_adopted = 0u;
-            h->wheel_shock_mask = h->last_bilateral = 0u;
-            h->root_vz = h->bias = 0.0f;
-        }
-        return;
-    }
 
     const uint32_t now = s->tick_ms;
     if (RLStairEngaged(h)) {
@@ -302,10 +298,8 @@ void RLStairUpdate(RLStairHandoff *h, const RLStairSample *s)
             RLStairStop(h, RL_STAIR_POSE);
             return;
         }
-    } else if (!s->armed || !s->can_enter || !s->link_fresh || !s->feedback_fresh ||
-               !known_pose(s)) {
-        h->condition = h->have_sample = h->have_anchor = h->wheel_shock_mask = 0u;
-        h->root_vz = h->bias = 0.0f;
+    } else if (!s->can_enter || !s->link_fresh || !s->feedback_fresh || !known_pose(s)) {
+        forget_approach(h);
         return;
     }
 
@@ -353,6 +347,10 @@ void RLStairOnAdopt(RLStairHandoff *h, uint8_t actor, uint32_t now)
         h->stair_adopted = 1u;
     } else if (h->phase == RL_STAIR_RETURN && actor == RL_ACTOR_MOTION) {
         h->motion_adopted_tick = now;
-        h->phase = RL_STAIR_WAIT_RELEASE;
+        h->phase = RL_STAIR_IDLE;
+        h->stair_adopted = 0u;
+        /* The next step needs a new level, loaded datum on its approach.
+           Keep this step's timestamps and support history for the debugger. */
+        forget_approach(h);
     }
 }

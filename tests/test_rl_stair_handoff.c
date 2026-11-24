@@ -49,7 +49,7 @@ static void hit(RLStairSample *s)
 static void ready(RLStairHandoff *h, RLStairSample *s, uint32_t start)
 {
     memset(h,0,sizeof(*h));
-    *s=(RLStairSample){.tick_ms=start,.armed=1,.link_fresh=1,.feedback_fresh=1,
+    *s=(RLStairSample){.tick_ms=start,.link_fresh=1,.feedback_fresh=1,
                        .can_enter=1,.vx_cmd=2.0f};
     flat(s,.40f);
     for (unsigned i=0;i<5;++i) step(h,s);
@@ -64,7 +64,7 @@ static void ready(RLStairHandoff *h, RLStairSample *s, uint32_t start)
 static void fast_impact(void)
 {
     RLStairHandoff h={0};
-    RLStairSample s={.tick_ms=100,.armed=1,.link_fresh=1,.feedback_fresh=1,.can_enter=1,
+    RLStairSample s={.tick_ms=100,.link_fresh=1,.feedback_fresh=1,.can_enter=1,
                      .vx_cmd=2,.wheel_forward_mps={2.0f,2.0f}};
     flat(&s,.40f);
     for (unsigned i=0;i<12;++i) step(&h,&s);
@@ -93,7 +93,7 @@ static void fast_impact(void)
 static void approach_anchor(void)
 {
     RLStairHandoff h={0};
-    RLStairSample s={.tick_ms=100,.armed=1,.link_fresh=1,.feedback_fresh=1,.can_enter=1,
+    RLStairSample s={.tick_ms=100,.link_fresh=1,.feedback_fresh=1,.can_enter=1,
                      .vx_cmd=1.50f};
     flat(&s,.36f);
     s.omega_squared=1.0f; /* level turn at 1 rad/s, no tilt rates */
@@ -134,7 +134,7 @@ static void handling(void)
     assert(!h.stair_adopted);
     RLStairOnAdopt(&h,RL_ACTOR_STAIR,s.tick_ms+5);
     assert(h.stair_adopted && h.stair_adopted_tick-impact_tick==5u);
-    s.armed=0; s.can_enter=0;
+    s.can_enter=0;
     /* Raise the body .051 m with a triangular vertical velocity profile.
        No height or contact truth is passed to the controller. */
     for (unsigned i=0;i<64;++i) {
@@ -170,23 +170,29 @@ static void handling(void)
     for (unsigned i=0;i<96;++i) step(&h,&s);
     assert(h.phase==RL_STAIR_RETURN);
     RLStairOnAdopt(&h,RL_ACTOR_MOTION,s.tick_ms+5);
-    assert(h.phase==RL_STAIR_WAIT_RELEASE && h.motion_adopted_tick-h.supported_tick==5u);
-    s.armed=1; s.can_enter=1; hit(&s);
+    assert(h.phase==RL_STAIR_IDLE && h.motion_adopted_tick-h.supported_tick==5u);
+    assert(!h.have_anchor && !h.have_sample && !h.stair_adopted);
+    s.can_enter=1;
+    hit(&s);
     for (unsigned i=0;i<8;++i) step(&h,&s);
-    assert(h.phase==RL_STAIR_WAIT_RELEASE);
-    s.armed=0; step(&h,&s);
-    assert(h.phase==RL_STAIR_IDLE);
-    s.armed=1; step(&h,&s);
-    assert(h.phase==RL_STAIR_IDLE); /* must first see a new clean approach */
+    assert(h.phase==RL_STAIR_IDLE); /* old impact cannot trigger again */
 
-    /* Debounce rejects brief/negative signatures and requires arming. */
-    RLStairReset(&h,0);
-    flat(&s,.40f); s.armed=0;
+    /* The next clean approach and impact automatically start a new action. */
+    flat(&s,.40f);
+    step(&h,&s);
+    assert(h.have_anchor);
+    hit(&s);
+    for (unsigned i=0;i<5;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_ACTIVE && !h.stair_adopted && !h.motion_adopted_tick);
+
+    /* Debounce rejects brief/negative signatures and requires an eligible command. */
+    RLStairReset(&h);
+    flat(&s,.40f); s.can_enter=0;
     for (unsigned i=0;i<6;++i) step(&h,&s);
     hit(&s);
     for (unsigned i=0;i<8;++i) step(&h,&s);
-    assert(h.phase==RL_STAIR_IDLE);
-    s.armed=1; flat(&s,.40f); step(&h,&s);
+    assert(h.phase==RL_STAIR_IDLE && !h.have_anchor);
+    s.can_enter=1; flat(&s,.40f); step(&h,&s);
     hit(&s); step(&h,&s); step(&h,&s);
     s.pitch=-.15f; step(&h,&s);
     hit(&s);
@@ -198,8 +204,17 @@ static void handling(void)
     assert(h.phase==RL_STAIR_STOPPED && h.fault==RL_STAIR_STALE);
     s.link_fresh=1; step(&h,&s);
     assert(h.phase==RL_STAIR_STOPPED);
-    RLStairReset(&h,1);
-    assert(h.phase==RL_STAIR_WAIT_RELEASE); /* stop with arm still held */
+    RLStairReset(&h);
+    assert(h.phase==RL_STAIR_IDLE && h.fault==RL_STAIR_OK && !h.have_anchor);
+    hit(&s);
+    for (unsigned i=0;i<5;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_IDLE); /* stop acknowledgement cannot reuse the old datum */
+    flat(&s,.40f);
+    step(&h,&s);
+    assert(h.have_anchor);
+    s.link_fresh=0;
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_IDLE && !h.have_anchor); /* stale before impact only disqualifies detection */
     ready(&h,&s,100u);
     s.feedback_fresh=0; step(&h,&s);
     assert(h.phase==RL_STAIR_STOPPED && h.fault==RL_STAIR_STALE);
