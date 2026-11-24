@@ -513,8 +513,8 @@ static int ChassisNormalLQRState(void)
 {
     return chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE &&
            !chassis_status && !(jumpingflag && clockcent < 200u) &&
-           fabsf(theta_l) <= (PI / 4.0f) &&
-           fabsf(theta_r) <= (PI / 4.0f);
+           fabsf(theta_l) <= RL_CONTROL_MOTION_SWING_LIMIT_RAD &&
+           fabsf(theta_r) <= RL_CONTROL_MOTION_SWING_LIMIT_RAD;
 }
 
 void legLengthCalc()
@@ -1454,9 +1454,7 @@ void ChassisTask()
         .support_window_ms=stair_handoff.support.duration_ms,
         .support_loaded_ms=stair_handoff.support.loaded_ms,
         .support_gap_ms=stair_handoff.support.gap_ms,
-        .support_mean_vx_mps=stair_handoff.support.duration_ms
-            ? (0.001f*(float)stair_handoff.support.vx_integral_mmps_ms) /
-              (float)stair_handoff.support.duration_ms : 0.0f,
+        .body_above_wheels_m=0.5f*(stair_sample.wheel_to_root_m[0]+stair_sample.wheel_to_root_m[1]),
     };
     g_rl_stair_debug=debug;
 

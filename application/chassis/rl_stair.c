@@ -1,4 +1,5 @@
 #include "rl_stair.h"
+#include "rl_control.h"
 #include "rl_policy_core.h"
 #include "leg_const.hpp"
 
@@ -9,7 +10,6 @@
 #define ANCHOR_MAX_AGE_MS 250u
 #define WHEEL_SHOCK_WINDOW_MS 20u
 #define ROBOT_WEIGHT_N ((M_B + 2.0f * (M_L + M_W)) * G)
-#define SUPPORT_MIN_VX_MMPS 350
 
 int RLStairBuildObservation(const RLMotion31Snapshot *s, float o[31])
 {
@@ -109,26 +109,31 @@ static int quick_impact(RLStairHandoff *h, const RLStairSample *s, uint32_t *fir
     return found;
 }
 
-static int stable_on_tread(const RLStairHandoff *h, const RLStairSample *s)
+static int on_tread(const RLStairHandoff *h)
 {
-    if (!level(s) || !isfinite(s->vx_estimate) ||
-        s->vx_estimate < -0.10f || s->vx_estimate > 2.50f || fabsf(s->accel_up-h->bias) > 1.0f)
-        return 0;
-    for (unsigned i=0; i<2; ++i) {
-        if (fabsf(s->wheel_to_root_m[i] - RL_STAIR_GOAL_M) > 0.025f ||
-            h->tread_estimate_m[i] < 0.12f || h->tread_estimate_m[i] > 0.28f ||
-            fabsf((s->wheel_to_root_m[i] - R_W)*tanf(s->swing[i])) > 0.10f)
+    if (!h->have_anchor) return 0;
+    for (unsigned i=0; i<2; ++i)
+        if (!(h->tread_estimate_m[i] >= 0.12f && h->tread_estimate_m[i] <= 0.28f))
             return 0;
-    }
     return 1;
+}
+
+static int raised_for_motion(const RLStairSample *s)
+{
+    /* Motion can recover residual body motion once it has two loaded wheels
+       and usable standing height. Keep its existing virtual-leg eligibility
+       so a transfer will not immediately fall out of RL into LQR. */
+    const float body_m = 0.5f*(s->wheel_to_root_m[0]+s->wheel_to_root_m[1]);
+    return body_m >= RL_STAIR_RETURN_MIN_BODY_M &&
+           fabsf(s->swing[0]) <= RL_CONTROL_MOTION_SWING_LIMIT_RAD &&
+           fabsf(s->swing[1]) <= RL_CONTROL_MOTION_SWING_LIMIT_RAD;
 }
 
 static void clear_support(RLStairSupportWindow *w)
 {
     /* Only the live spans are read. Avoid touching the whole ring on reset. */
-    w->vx_integral_mmps_ms = 0;
     w->duration_ms = w->loaded_ms = w->gap_ms = 0u;
-    w->head = w->count = w->started = 0u;
+    w->head = w->count = w->started = w->last_loaded = 0u;
 }
 
 static void trim_support(RLStairSupportWindow *w, unsigned excess_ms)
@@ -138,7 +143,6 @@ static void trim_support(RLStairSupportWindow *w, unsigned excess_ms)
         const unsigned drop = excess_ms < span->duration_ms ? excess_ms : span->duration_ms;
         w->duration_ms -= drop;
         if (span->loaded) w->loaded_ms -= drop;
-        w->vx_integral_mmps_ms -= (int32_t)span->vx_mmps*(int32_t)drop;
         excess_ms -= drop;
         span->duration_ms -= drop;
         if (!span->duration_ms) {
@@ -151,46 +155,38 @@ static void trim_support(RLStairSupportWindow *w, unsigned excess_ms)
 static int support_confirmed(RLStairHandoff *h, const RLStairSample *s, unsigned dt_ms)
 {
     RLStairSupportWindow *w = &h->support;
-    /* Allow only excursions of a known wheel-load estimate. Pose, tread,
-       speed bounds and valid feedback are still required at every sample. */
-    if (!h->stair_adopted || !stable_on_tread(h,s) || !load_known(s)) {
+    if (!h->stair_adopted || !load_known(s)) {
         clear_support(w);
         return 0;
     }
-    const float total_reaction = ROBOT_WEIGHT_N*(1.0f + (s->accel_up-h->bias)/G);
-    const int load_now = loaded(s) &&
-        s->wheel_up_estimate_n[0] + s->wheel_up_estimate_n[1] >= 0.70f*total_reaction;
+    /* Count upper support as soon as both wheels take weight, including
+       while the legs are still lifting the body to the handoff height. */
+    const int load_now = on_tread(h) && loaded(s);
     if (!dt_ms || dt_ms > SAMPLE_MAX_GAP_MS) clear_support(w);
     if (!w->started) {
-        w->started = (uint8_t)load_now;
+        w->started = w->last_loaded = (uint8_t)load_now;
         return 0;
     }
 
-    w->gap_ms = load_now ? 0u : w->gap_ms+dt_ms;
-    if (w->gap_ms > RL_STAIR_SUPPORT_GAP_MS) {
-        clear_support(w);
-        return 0;
-    }
+    w->gap_ms = load_now || w->last_loaded ? 0u : w->gap_ms+dt_ms;
     const unsigned duration = w->duration_ms+dt_ms;
-    if (duration > RL_STAIR_CONFIRM_MS) trim_support(w,duration-RL_STAIR_CONFIRM_MS);
+    if (duration > RL_STAIR_SUPPORT_WINDOW_MS)
+        trim_support(w,duration-RL_STAIR_SUPPORT_WINDOW_MS);
     if (w->count == RL_STAIR_SUPPORT_SPANS) {
         /* A schedule without capacity for the full history cannot certify it. */
         clear_support(w);
-        w->started = (uint8_t)load_now;
+        w->started = w->last_loaded = (uint8_t)load_now;
         return 0;
     }
-    /* Conservative mm/s rounding, then a time-weighted mean over the same
-       500 ms (including the allowed brief load gaps). */
-    const int16_t vx = (int16_t)floorf(1000.0f*s->vx_estimate);
+    /* Credit time from the sample that opened the interval. A recovered
+       wheel must not retroactively earn the preceding unloaded interval. */
     const unsigned tail = (w->head+w->count) % RL_STAIR_SUPPORT_SPANS;
-    w->spans[tail] = (RLStairSupportSpan){vx,(uint8_t)dt_ms,(uint8_t)load_now};
+    w->spans[tail] = (RLStairSupportSpan){.duration_ms=(uint8_t)dt_ms,.loaded=w->last_loaded};
     ++w->count;
     w->duration_ms += dt_ms;
-    if (load_now) w->loaded_ms += dt_ms;
-    w->vx_integral_mmps_ms += (int32_t)vx*(int32_t)dt_ms;
-    return load_now && w->duration_ms == RL_STAIR_CONFIRM_MS &&
-           w->loaded_ms >= RL_STAIR_SUPPORT_MIN_MS &&
-           w->vx_integral_mmps_ms >= SUPPORT_MIN_VX_MMPS*(int32_t)RL_STAIR_CONFIRM_MS;
+    if (w->last_loaded) w->loaded_ms += dt_ms;
+    w->last_loaded = (uint8_t)load_now;
+    return load_now && w->loaded_ms >= RL_STAIR_SUPPORT_MIN_MS && raised_for_motion(s);
 }
 
 static void sample_height(RLStairHandoff *h, const RLStairSample *s)
@@ -332,8 +328,8 @@ void RLStairUpdate(RLStairHandoff *h, const RLStairSample *s)
             h->phase = RL_STAIR_RETURN;
         }
     } else if (h->phase == RL_STAIR_RETURN) {
-        /* Never apply the Motion packet on a missed load sample, even if the
-           recent window is retained so we can request it again next tick. */
+        /* Recheck support and receiver eligibility before applying Motion.
+           Recent load history stays available if the pose recovers. */
         h->phase = RL_STAIR_ACTIVE;
         h->supported_tick = 0u;
     }

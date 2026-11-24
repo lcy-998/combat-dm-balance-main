@@ -9,9 +9,9 @@
 #define RL_STAIR_GOAL_M 0.25f
 #define RL_STAIR_LINK_MAX_AGE_MS 50u
 #define RL_STAIR_IMPACT_MS 20u
-#define RL_STAIR_CONFIRM_MS 500u
+#define RL_STAIR_SUPPORT_WINDOW_MS 500u /* history limit, not a minimum wait */
 #define RL_STAIR_SUPPORT_MIN_MS 475u
-#define RL_STAIR_SUPPORT_GAP_MS 10u
+#define RL_STAIR_RETURN_MIN_BODY_M 0.20f
 /* 100 spans at the nominal 5 ms PD period, with room for scheduler jitter. */
 #define RL_STAIR_SUPPORT_SPANS 128u
 #define RL_STAIR_TIMEOUT_MS 3000u
@@ -33,14 +33,12 @@ typedef struct {
 } RLStairSample;
 
 typedef struct {
-    int16_t vx_mmps;
     uint8_t duration_ms, loaded;
 } RLStairSupportSpan;
 
 typedef struct {
-    int32_t vx_integral_mmps_ms;
     uint16_t duration_ms, loaded_ms, gap_ms;
-    uint8_t head, count, started;
+    uint8_t head, count, started, last_loaded;
     RLStairSupportSpan spans[RL_STAIR_SUPPORT_SPANS];
 } RLStairSupportWindow;
 
@@ -63,7 +61,7 @@ typedef struct {
     float wheel_up_estimate_n[2], tread_estimate_m[2], wheel_to_root_m[2];
     float pitch, roll, vx_estimate;
     uint32_t support_window_ms, support_loaded_ms, support_gap_ms;
-    float support_mean_vx_mps;
+    float body_above_wheels_m;
 } RLStairDebug;
 
 extern volatile RLStairDebug g_rl_stair_debug;

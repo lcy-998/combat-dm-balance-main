@@ -118,20 +118,14 @@ static void handling(void)
     assert(fabsf(h.tread_estimate_m[0]-.2012f)<.002f);
     s.wheel_up_estimate_n[1]=90;
     s.vx_estimate=0.0f;
-    for (unsigned i=0;i<110;++i) {
-        step(&h,&s);
-        assert(h.phase==RL_STAIR_ACTIVE); /* stable but not rolling */
-    }
-    s.wheel_up_estimate_n[1]=0;
-    /* A sustained load loss resets the window before starting to roll. */
-    for (unsigned i=0;i<3;++i) step(&h,&s);
-    s.wheel_up_estimate_n[1]=90; s.vx_estimate=1.2f;
-    for (unsigned i=0;i<100;++i) {
+    step(&h,&s);
+    const uint32_t first_support=s.tick_ms;
+    for (unsigned i=0;i<94;++i) {
         step(&h,&s);
         assert(h.phase==RL_STAIR_ACTIVE);
     }
     step(&h,&s);
-    assert(h.phase==RL_STAIR_RETURN && h.supported_tick==s.tick_ms);
+    assert(h.phase==RL_STAIR_RETURN && h.supported_tick-first_support==475u);
 
     /* A loss while Motion is computing revokes permission before adoption. */
     s.wheel_up_estimate_n[0]=NAN;
@@ -139,7 +133,7 @@ static void handling(void)
     RLStairOnAdopt(&h,RL_ACTOR_MOTION,s.tick_ms);
     assert(h.phase==RL_STAIR_ACTIVE && !h.motion_adopted_tick);
     s.wheel_up_estimate_n[0]=90;
-    for (unsigned i=0;i<101;++i) step(&h,&s);
+    for (unsigned i=0;i<96;++i) step(&h,&s);
     assert(h.phase==RL_STAIR_RETURN);
     RLStairOnAdopt(&h,RL_ACTOR_MOTION,s.tick_ms+5);
     assert(h.phase==RL_STAIR_WAIT_RELEASE && h.motion_adopted_tick-h.supported_tick==5u);
@@ -217,65 +211,109 @@ static void support_window(void)
     recovered(&h,&s);
     const uint32_t first=s.tick_ms;
     for (unsigned i=1;i<=100;++i) {
-        /* Five misses: two consecutive, then three isolated. Exactly 95%;
-           the window can pass at 500 ms but not at 499 ms or earlier. */
-        s.wheel_up_estimate_n[1]=i==9 || i==10 || i==33 || i==56 || i==75 ? 0 : 90;
+        /* 20 ms loss, then another 5 ms: credit neither, and do not impose
+           a second gap threshold in addition to 475 ms of genuine support. */
+        s.wheel_up_estimate_n[1]=(i>=9 && i<=12) || i==75 ? 0 : 90;
         step(&h,&s);
         assert(h.phase==(i==100 ? RL_STAIR_RETURN : RL_STAIR_ACTIVE));
     }
     assert(h.supported_tick-first==500u);
     assert(h.support.duration_ms==500u && h.support.loaded_ms==475u);
 
-    /* Drop a wheel while the Motion packet is in flight. Revoke on that
-       control tick, then request again as the oldest bad interval ages out. */
+    /* The car can stand and turn or pitch under Motion. The current packet
+       still must have support, and a dropout cannot earn the elapsed time. */
     s.wheel_up_estimate_n[1]=0;
     step(&h,&s);
     RLStairOnAdopt(&h,RL_ACTOR_MOTION,s.tick_ms);
     assert(h.phase==RL_STAIR_ACTIVE && !h.motion_adopted_tick);
     s.wheel_up_estimate_n[1]=90;
-    for (unsigned i=2;i<9;++i) {
+    for (unsigned i=2;i<10;++i) {
         step(&h,&s);
         assert(h.phase==RL_STAIR_ACTIVE); /* six recent misses = 94% */
     }
     step(&h,&s);
-    assert(h.phase==RL_STAIR_RETURN && h.supported_tick-first==545u);
+    assert(h.phase==RL_STAIR_RETURN && h.supported_tick-first==550u);
 
-    s.pitch=0.09f; /* outside 5 degrees, still well short of safety stop */
+    /* Preserve Motion's existing leg envelope without discarding valid load
+       history. Recovering that envelope can authorize a switch immediately. */
+    s.swing[0]=0.9f;
     step(&h,&s);
-    assert(h.phase==RL_STAIR_ACTIVE && !h.support.duration_ms);
-    s.pitch=0;
-    for (unsigned i=0;i<100;++i) {
-        step(&h,&s);
-        assert(h.phase==RL_STAIR_ACTIVE);
-    }
+    assert(h.phase==RL_STAIR_ACTIVE && h.support.loaded_ms>=475u);
+    s.swing[0]=0.65f;
+    s.pitch=0.30f;
+    s.roll=-0.18f;
+    s.omega_squared=2.25f; /* e.g. 1.50 rad/s yaw */
+    s.vx_estimate=0.0f;
     step(&h,&s);
     assert(h.phase==RL_STAIR_RETURN);
 
-    /* Sustained loss clears any previously accumulated support. */
+    /* Sustained loss ages out any previous support. */
     s.wheel_up_estimate_n[0]=0;
-    for (unsigned i=0;i<3;++i) step(&h,&s);
-    assert(h.phase==RL_STAIR_ACTIVE && !h.support.duration_ms);
+    for (unsigned i=0;i<102;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_ACTIVE && !h.support.loaded_ms);
     s.wheel_up_estimate_n[0]=90;
-    for (unsigned i=0;i<100;++i) {
+    step(&h,&s);
+    const uint32_t restored=s.tick_ms;
+    for (unsigned i=0;i<94;++i) {
         step(&h,&s);
         assert(h.phase==RL_STAIR_ACTIVE);
     }
     step(&h,&s);
-    assert(h.phase==RL_STAIR_RETURN);
+    assert(h.phase==RL_STAIR_RETURN && h.supported_tick-restored==475u);
 
-    /* Irregular 7 ms periods cross the 500 ms window mid-span: prune the
-       exact excess so the oldest millisecond matters, not the frame count. */
+    /* At an irregular 7 ms cadence, confirm on the first usable control tick
+       after 475 ms, not after filling the 500 ms history. */
     recovered(&h,&s);
     const uint32_t jitter_begin=s.tick_ms;
-    s.vx_estimate=.35f;
-    for (unsigned i=1;i<=72;++i) {
+    for (unsigned i=1;i<=68;++i) {
         s.tick_ms+=7;
         ++s.imu_sequence;
         RLStairUpdate(&h,&s);
-        assert(h.phase==(i==72 ? RL_STAIR_RETURN : RL_STAIR_ACTIVE));
+        assert(h.phase==(i==68 ? RL_STAIR_RETURN : RL_STAIR_ACTIVE));
     }
-    assert(h.supported_tick-jitter_begin==504u && h.support.duration_ms==500u);
-    assert(h.support.vx_integral_mmps_ms==175000);
+    assert(h.supported_tick-jitter_begin==476u && h.support.duration_ms==476u);
+}
+
+static void lift_then_return(void)
+{
+    RLStairHandoff h;
+    RLStairSample s;
+    ready(&h,&s,100u);
+    RLStairOnAdopt(&h,RL_ACTOR_STAIR,s.tick_ms);
+    /* .20 m tread + .18 m crouched body. From the old .40 m root datum
+       descend .020 m while putting both wheels on the higher surface. */
+    for (unsigned i=0;i<40;++i) {
+        s.accel_up=i<20?-2.0f:2.0f;
+        step(&h,&s);
+    }
+    s.accel_up=0;
+    flat(&s,.18f);
+    s.pitch=.20f;
+    s.roll=.12f;
+    s.omega_squared=4.0f;
+    s.vx_estimate=-0.18f;
+    for (unsigned i=0;i<102;++i) {
+        step(&h,&s);
+        assert(h.phase==RL_STAIR_ACTIVE);
+    }
+    assert(h.support.loaded_ms==500u);
+    assert(fabsf(h.tread_estimate_m[0]-.20f)<.002f);
+    /* Raise the body by roughly .023 m under load. A brief pitch/yaw transient
+       and vertical acceleration over the old settling limit do not delay handoff. */
+    for (unsigned i=0;i<24;++i) {
+        s.accel_up=i<12?6.4f:-6.4f;
+        const float t=(i+1)*.005f;
+        const float left_time=.12f-t;
+        const float dh=i<12 ? 3.2f*t*t : .02304f-3.2f*left_time*left_time;
+        s.wheel_to_root_m[0]=s.wheel_to_root_m[1]=.18f+dh;
+        step(&h,&s);
+        if (s.wheel_to_root_m[0] >= RL_STAIR_RETURN_MIN_BODY_M) {
+            assert(h.phase==RL_STAIR_RETURN && h.support.loaded_ms==500u);
+            return;
+        }
+        assert(h.phase==RL_STAIR_ACTIVE);
+    }
+    assert(0);
 }
 
 static void hub(float a,float b,float *point,float *links)
@@ -390,6 +428,7 @@ int main(void)
     fast_impact();
     handling();
     support_window();
+    lift_then_return();
     measured_force();
     execution();
     puts("PASS atomic Stair detector, bilateral load, epoch, decode, adopted previous and both handoffs");
