@@ -517,6 +517,15 @@ static int ChassisNormalLQRState(void)
            fabsf(theta_r) <= RL_CONTROL_MOTION_SWING_LIMIT_RAD;
 }
 
+static int ChassisCanDetectStair(int approach)
+{
+    return approach && !chassis_status && !jumpingflag &&
+           RLControlOwner(&rl_control_state)==RL_OWNER_RL &&
+           fabsf(rl_control_state.adopted_height_m-RL_STAIR_APPROACH_M)<=RL_STAIR_APPROACH_TOL_M &&
+           v_cmd>=RL_STAIR_APPROACH_MIN_VX_MPS && v_cmd<=RL_STAIR_APPROACH_MAX_VX_MPS &&
+           fabsf(w_cmd)<=RL_STAIR_APPROACH_MAX_YAW_RAD_S;
+}
+
 void legLengthCalc()
 {
     // 复位时腿长压低
@@ -838,7 +847,7 @@ int ChassisSetRLHeight(float command_height_m)
 
 /* One coherent local feedback copy with CAN receipt/filter-completion times.
    Sensor acquisition times remain UNKNOWN; task time is not substituted for them. */
-static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair, int approach)
+static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair)
 {
     RLShadowSnapshot out={0};
     float q[4],dq[4],wheel[2],r,p,dr,dp,dy;
@@ -890,7 +899,7 @@ static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair, int approach)
     getPhi(rf,rb,L_1,L_2,L_3,L_4,L_5,&phi2[1],&phi3[1],&out.leg_length_m[1],&theta0[1]);
     out.leg_spread_rad[0]=lf-lb;out.leg_spread_rad[1]=rf-rb;
     if (stair != NULL) {
-        stair->pitch=p;stair->roll=r;stair->pitch_rate=dp;
+        stair->pitch=p;stair->roll=r;stair->pitch_rate=dp;stair->roll_rate=dr;
         stair->wheel_forward_mps[0]=-out.motion.joint_velocity_rad_s[5]*R_W;
         stair->wheel_forward_mps[1]=-out.motion.joint_velocity_rad_s[2]*R_W;
         stair->omega_squared=dp*dp+dr*dr+dy*dy;
@@ -920,14 +929,14 @@ static RLShadowSnapshot CurrentRLSnapshot(RLStairSample *stair, int approach)
        request. Do not feed LQR leg length l_xx or measured height to Actor. */
     taskENTER_CRITICAL();
     const int stair_engaged=RLStairEngaged(&stair_handoff);
-    if(rl_control_state.active && ChassisNormalLQRState() && !stair_engaged && !approach) {
+    if(rl_control_state.active && ChassisNormalLQRState() && !stair_engaged) {
         if(chassis_cmd_recv.changeL==-1) rl_height_request_m+=LEG_LENGTH_STEP_M;
         if(chassis_cmd_recv.changeL==1) rl_height_request_m-=LEG_LENGTH_STEP_M;
         rl_height_request_m=fmaxf(RL_MOTION31_HEIGHT_MIN_M,
                                  fminf(RL_MOTION31_HEIGHT_MAX_M,rl_height_request_m));
     }
-    const float requested_height=stair_engaged ? RL_STAIR_GOAL_M :
-        (approach ? RL_STAIR_APPROACH_M : rl_height_request_m);
+    /* changeL=+2 enables recognition; it does not replace Motion's height. */
+    const float requested_height=stair_engaged ? RL_STAIR_GOAL_M : rl_height_request_m;
     taskEXIT_CRITICAL();
     (void)RLControlSetCommandHeight(&rl_control_state,requested_height);
     out.motion.command_height_m=RLControlCommandHeight(&rl_control_state);
@@ -1382,7 +1391,7 @@ void ChassisTask()
     }
     RLStairSample stair_sample={.armed=armed,.link_fresh=link_fresh};
     const int measure_stair=approach || RLStairEngaged(&stair_handoff);
-    rl_pd_snapshot=CurrentRLSnapshot(measure_stair ? &stair_sample : NULL, approach);
+    rl_pd_snapshot=CurrentRLSnapshot(measure_stair ? &stair_sample : NULL);
     stair_sample.tick_ms=rl_pd_snapshot.tick_ms;
     stair_sample.imu_sequence=rl_pd_snapshot.imu_update_sequence;
     stair_sample.feedback_fresh=stair_sample.feedback_fresh &&
@@ -1390,10 +1399,7 @@ void ChassisTask()
                                RLMotion31ValidateSnapshot(&rl_pd_snapshot.motion)==0;
     stair_sample.vx_cmd=v_cmd;
     stair_sample.vx_estimate=s_dot;
-    stair_sample.can_enter=approach && !chassis_status && !jumpingflag &&
-                           RLControlOwner(&rl_control_state)==RL_OWNER_RL &&
-                           rl_control_state.adopted_height_m>=RL_STAIR_APPROACH_M-0.005f &&
-                           v_cmd>=1.80f && v_cmd<=2.20f && fabsf(w_cmd)<=0.25f;
+    stair_sample.can_enter=ChassisCanDetectStair(approach);
     if (armed && !link_fresh && chassis_cmd_recv.chassis_mode!=CHASSIS_ZERO_FORCE)
         RLStairStop(&stair_handoff,RL_STAIR_STALE);
     else

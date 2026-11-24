@@ -6,6 +6,10 @@
 /* One explicitly armed 20 cm trial. These are external handoff gates. */
 #define RL_STAIR_ARM_CHANGE_L 2
 #define RL_STAIR_APPROACH_M 0.40f
+#define RL_STAIR_APPROACH_TOL_M 0.04f
+#define RL_STAIR_APPROACH_MIN_VX_MPS 1.50f
+#define RL_STAIR_APPROACH_MAX_VX_MPS 2.20f
+#define RL_STAIR_APPROACH_MAX_YAW_RAD_S 1.0f
 #define RL_STAIR_GOAL_M 0.25f
 #define RL_STAIR_LINK_MAX_AGE_MS 50u
 #define RL_STAIR_IMPACT_MS 20u
@@ -28,7 +32,7 @@ typedef enum {
 typedef struct {
     uint32_t tick_ms, imu_sequence;
     int armed, link_fresh, feedback_fresh, can_enter;
-    float vx_cmd, vx_estimate, pitch, roll, pitch_rate, omega_squared, accel_up;
+    float vx_cmd, vx_estimate, pitch, roll, pitch_rate, roll_rate, omega_squared, accel_up;
     float swing[2], wheel_to_root_m[2], wheel_up_estimate_n[2], wheel_forward_mps[2]; /* physical L/R */
 } RLStairSample;
 

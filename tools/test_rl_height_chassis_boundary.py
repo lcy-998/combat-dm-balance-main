@@ -1,4 +1,4 @@
-"""CPU test of exact CurrentRLSnapshot/ChassisSetRLHeight source boundaries.
+"""CPU test of exact height, snapshot and Stair command boundaries.
 
 Only hardware/RTOS and leg-geometry IO are doubles. Never flash or mj_step.
 """
@@ -60,7 +60,7 @@ static void getPhi(float a,float b,float c,float d,float e,float f,float g,float
  (void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;
  *p2=*p3=*theta=0;*length=.28f;
 }
-'''+macros+'\n'+function(source,'ChassisSetRLHeight')+'\n'+function(source,'CurrentRLSnapshot')+'''
+'''+macros+'\n'+function(source,'ChassisSetRLHeight')+'\n'+function(source,'ChassisCanDetectStair')+'\n'+function(source,'CurrentRLSnapshot')+'''
 int main(void){
   const float prev[6]={.11f,.12f,13,.14f,.15f,-16};
   const float hip=(90-47.1033888f)*PI/180,active=(90+47.1080837f)*PI/180;
@@ -74,7 +74,7 @@ int main(void){
   imu.update_tick_ms=100;imu.update_sequence=1;chassis_cmd_recv.chassis_mode=1;
   rl_control_state.active=1;rl_control_state.ready=1;rl_control_state.adopted_sequence=99;
   memcpy(rl_control_state.adopted_target,prev,sizeof(prev));
-  assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot(NULL,0);
+  assert(!ChassisSetRLHeight(.40f));RLShadowSnapshot a=CurrentRLSnapshot(NULL);
   assert(a.motion.command_height_m==.40f);
   assert(a.motion.command_vx_m_s==1.2f && a.motion.command_yaw_rad_s==.4f);
   assert(a.previous_source==RL_PREVIOUS_ADOPTED && a.adopted_sequence==99);
@@ -84,27 +84,58 @@ int main(void){
   assert(a.motion.joint_velocity_rad_s[1]==.4f);
   assert(a.motion.joint_velocity_rad_s[3]==-.4f);
   assert(a.motion.joint_velocity_rad_s[4]==-.4f);
-  assert(!ChassisSetRLHeight(.30f));RLShadowSnapshot b=CurrentRLSnapshot(NULL,0);
+  assert(!ChassisSetRLHeight(.30f));RLShadowSnapshot b=CurrentRLSnapshot(NULL);
   assert(b.motion.command_height_m==.30f);
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
-  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot(NULL,0);
+  chassis_cmd_recv.changeL=-1;b=CurrentRLSnapshot(NULL);
   assert(fabsf(b.motion.command_height_m-(.30f+.048f*.005f))<1e-7f);
   assert(b.motion.command_vx_m_s==1.2f && b.motion.command_yaw_rad_s==.4f);
-  chassis_cmd_recv.changeL=0;
+  chassis_cmd_recv.changeL=RL_STAIR_ARM_CHANGE_L;
+  assert(!ChassisSetRLHeight(.36f));
   RLStairSample stair={0};
   IMU_data->Accel[2]=G;
-  b=CurrentRLSnapshot(&stair,1);
-  assert(b.motion.command_height_m==.40f && fabsf(stair.accel_up)<1e-6f);
+  IMU_data->Gyro[1]=.2f;
+  b=CurrentRLSnapshot(&stair);
+  assert(b.motion.command_height_m==.36f && fabsf(stair.accel_up)<1e-6f);
   assert(stair.feedback_fresh && stair.wheel_forward_mps[0]<0 && stair.wheel_forward_mps[1]>0);
+  assert(stair.roll_rate==-.2f); /* measured tilt rate, in chassis convention */
+
+  v_cmd=1.50f; w_cmd=1.0f;
+  rl_control_state.adopted_height_m=.35f;
+  assert(!ChassisCanDetectStair(1)); /* requested .36, but not yet adopted */
+  rl_control_state.adopted_height_m=.36f;
+  assert(ChassisCanDetectStair(1) && !ChassisCanDetectStair(0));
+  w_cmd=-1.0f;
+  assert(ChassisCanDetectStair(1));
+  w_cmd=-1.01f;
+  assert(!ChassisCanDetectStair(1));
+  w_cmd=0;
+  v_cmd=1.49f;
+  assert(!ChassisCanDetectStair(1));
+  v_cmd=2.20f; rl_control_state.adopted_height_m=.40f;
+  assert(ChassisCanDetectStair(1));
+  v_cmd=2.21f;
+  assert(!ChassisCanDetectStair(1));
+  v_cmd=1.50f;
+  rl_control_state.actor=RL_ACTOR_STAIR;
+  assert(!ChassisCanDetectStair(1));
+  rl_control_state.actor=RL_ACTOR_MOTION;
+  rl_control_state.active=0;
+  assert(!ChassisCanDetectStair(1));
+  rl_control_state.active=1;
+  assert(ChassisSetRLHeight(.44f)<0);
+  assert(CurrentRLSnapshot(&stair).motion.command_height_m==.36f);
+  v_cmd=1.2f;w_cmd=.4f;
+  chassis_cmd_recv.changeL=0;
   joints[0].measure.state=0;
-  (void)CurrentRLSnapshot(&stair,1);
+  (void)CurrentRLSnapshot(&stair);
   assert(!stair.feedback_fresh);
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
   stair_handoff.phase=RL_STAIR_ACTIVE;
-  b=CurrentRLSnapshot(&stair,0);
+  b=CurrentRLSnapshot(&stair);
   assert(b.motion.command_height_m==.25f && b.motion.command_vx_m_s==1.2f);
   stair_handoff.phase=RL_STAIR_IDLE;
-  assert(!ChassisSetRLHeight(.20f));b=CurrentRLSnapshot(NULL,0);
+  assert(!ChassisSetRLHeight(.20f));b=CurrentRLSnapshot(NULL);
   assert(b.motion.command_height_m==.20f);
   assert(!memcmp(b.motion.previous_target,prev,sizeof(prev)));
   assert(ChassisSetRLHeight(.19f)<0);

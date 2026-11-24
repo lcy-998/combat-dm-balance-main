@@ -30,7 +30,7 @@ static void step(RLStairHandoff *h, RLStairSample *s)
 
 static void flat(RLStairSample *s, float height)
 {
-    s->pitch=s->roll=s->pitch_rate=s->omega_squared=0;
+    s->pitch=s->roll=s->pitch_rate=s->roll_rate=s->omega_squared=0;
     s->swing[0]=s->swing[1]=0;
     s->wheel_to_root_m[0]=s->wheel_to_root_m[1]=height;
     s->wheel_up_estimate_n[0]=s->wheel_up_estimate_n[1]=90;
@@ -88,6 +88,40 @@ static void fast_impact(void)
     step(&h,&s);
     assert(h.phase==RL_STAIR_ACTIVE && h.impact_start_tick==wheel_edge);
     assert(h.impact_tick-wheel_edge==10);
+}
+
+static void approach_anchor(void)
+{
+    RLStairHandoff h={0};
+    RLStairSample s={.tick_ms=100,.armed=1,.link_fresh=1,.feedback_fresh=1,.can_enter=1,
+                     .vx_cmd=1.50f};
+    flat(&s,.36f);
+    s.omega_squared=1.0f; /* level turn at 1 rad/s, no tilt rates */
+    step(&h,&s);
+    assert(h.have_anchor && h.anchor_tick==s.tick_ms);
+    const uint32_t anchor=h.anchor_tick;
+
+    /* Recent support cannot be refreshed while the body is rolling quickly. */
+    s.roll_rate=.50f; s.omega_squared=1.25f;
+    for (unsigned i=0;i<51;++i) step(&h,&s);
+    assert(h.anchor_tick==anchor);
+    s.roll_rate=0;
+    hit(&s);
+    for (unsigned i=0;i<5;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_IDLE); /* previous upright sample is >250 ms old */
+
+    flat(&s,.36f);
+    s.omega_squared=1.0f;
+    s.wheel_up_estimate_n[0]=0;
+    step(&h,&s);
+    assert(h.anchor_tick==anchor);
+    s.wheel_up_estimate_n[0]=90;
+    step(&h,&s);
+    assert(h.anchor_tick==s.tick_ms);
+    hit(&s);
+    s.omega_squared+=1.0f;
+    for (unsigned i=0;i<5;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_ACTIVE && h.impact_tick-h.impact_start_tick==20u);
 }
 
 static void handling(void)
@@ -426,6 +460,7 @@ static void execution(void)
 int main(void)
 {
     fast_impact();
+    approach_anchor();
     handling();
     support_window();
     lift_then_return();

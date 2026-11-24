@@ -41,7 +41,7 @@ float RLStairWheelLoad(float phi1, float phi4, float phi2, float phi3,
 static int known_pose(const RLStairSample *s)
 {
     return isfinite(s->pitch) && isfinite(s->roll) && isfinite(s->pitch_rate) &&
-           isfinite(s->omega_squared) && isfinite(s->accel_up) &&
+           isfinite(s->roll_rate) && isfinite(s->omega_squared) && isfinite(s->accel_up) &&
            isfinite(s->swing[0]) && isfinite(s->swing[1]) &&
            isfinite(s->wheel_to_root_m[0]) && isfinite(s->wheel_to_root_m[1]);
 }
@@ -58,10 +58,21 @@ static int loaded(const RLStairSample *s)
            s->wheel_up_estimate_n[0] + s->wheel_up_estimate_n[1] >= 0.60f * ROBOT_WEIGHT_N;
 }
 
+static int upright(const RLStairSample *s)
+{
+    return fabsf(s->pitch) <= 5.0f * DEG_2_RAD && fabsf(s->roll) <= 5.0f * DEG_2_RAD;
+}
+
 static int level(const RLStairSample *s)
 {
-    return fabsf(s->pitch) <= 5.0f * DEG_2_RAD && fabsf(s->roll) <= 5.0f * DEG_2_RAD &&
-           s->omega_squared <= 0.35f * 0.35f;
+    return upright(s) && s->omega_squared <= 0.35f * 0.35f;
+}
+
+static int approach_upright(const RLStairSample *s)
+{
+    /* Turning about vertical does not disturb an upright support datum. */
+    return upright(s) &&
+           s->pitch_rate*s->pitch_rate + s->roll_rate*s->roll_rate <= 0.35f*0.35f;
 }
 
 static int impact(const RLStairSample *s)
@@ -204,7 +215,7 @@ static void sample_height(RLStairHandoff *h, const RLStairSample *s)
         fabsf(s->wheel_to_root_m[0]-s->wheel_to_root_m[1]) <= 0.04f;
     /* Establish the lower-floor datum during the level, loaded approach. Once
        the nose pitches down, keep it in the same short IMU integration frame. */
-    if (!RLStairEngaged(h) && level(s) && loaded(s) && height > 0.30f &&
+    if (!RLStairEngaged(h) && approach_upright(s) && loaded(s) && height > 0.30f &&
         fabsf(s->accel_up) <= 1.0f) {
         const float sample_vz = (contiguous && h->have_anchor &&
                                  h->anchor_tick == h->last_sample_tick)
