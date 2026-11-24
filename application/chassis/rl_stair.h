@@ -10,6 +10,10 @@
 #define RL_STAIR_LINK_MAX_AGE_MS 50u
 #define RL_STAIR_IMPACT_MS 20u
 #define RL_STAIR_CONFIRM_MS 500u
+#define RL_STAIR_SUPPORT_MIN_MS 475u
+#define RL_STAIR_SUPPORT_GAP_MS 10u
+/* 100 spans at the nominal 5 ms PD period, with room for scheduler jitter. */
+#define RL_STAIR_SUPPORT_SPANS 128u
 #define RL_STAIR_TIMEOUT_MS 3000u
 #define RL_STAIR_BLEND_PACKETS 3u /* 3 x 10 ms; begin with the first valid packet */
 
@@ -29,15 +33,28 @@ typedef struct {
 } RLStairSample;
 
 typedef struct {
+    int16_t vx_mmps;
+    uint8_t duration_ms, loaded;
+} RLStairSupportSpan;
+
+typedef struct {
+    int32_t vx_integral_mmps_ms;
+    uint16_t duration_ms, loaded_ms, gap_ms;
+    uint8_t head, count, started;
+    RLStairSupportSpan spans[RL_STAIR_SUPPORT_SPANS];
+} RLStairSupportWindow;
+
+typedef struct {
     RLStairPhase phase;
     RLStairFault fault;
     uint32_t impact_start_tick, impact_tick, stair_adopted_tick, supported_tick, motion_adopted_tick;
     uint32_t last_sample_tick, imu_sequence, anchor_tick, condition_tick;
-    float root_m, root_vz, bias, accel_last, support_travel_m, height_last;
+    float root_m, root_vz, bias, accel_last, height_last;
     float wheel_speed_last[2], swing_last[2], swing_at_shock[2];
     uint32_t shock_tick[2];
     uint8_t have_sample, have_anchor, condition, stair_adopted, wheel_shock_mask, last_bilateral;
     float tread_estimate_m[2];
+    RLStairSupportWindow support;
 } RLStairHandoff;
 
 typedef struct {
@@ -45,6 +62,8 @@ typedef struct {
     uint32_t impact_start_tick, impact_tick, stair_adopted_tick, supported_tick, motion_adopted_tick;
     float wheel_up_estimate_n[2], tread_estimate_m[2], wheel_to_root_m[2];
     float pitch, roll, vx_estimate;
+    uint32_t support_window_ms, support_loaded_ms, support_gap_ms;
+    float support_mean_vx_mps;
 } RLStairDebug;
 
 extern volatile RLStairDebug g_rl_stair_debug;

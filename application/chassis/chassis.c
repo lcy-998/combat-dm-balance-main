@@ -1451,6 +1451,12 @@ void ChassisTask()
         .tread_estimate_m={stair_handoff.tread_estimate_m[0],stair_handoff.tread_estimate_m[1]},
         .wheel_to_root_m={stair_sample.wheel_to_root_m[0],stair_sample.wheel_to_root_m[1]},
         .pitch=stair_sample.pitch, .roll=stair_sample.roll, .vx_estimate=s_dot,
+        .support_window_ms=stair_handoff.support.duration_ms,
+        .support_loaded_ms=stair_handoff.support.loaded_ms,
+        .support_gap_ms=stair_handoff.support.gap_ms,
+        .support_mean_vx_mps=stair_handoff.support.duration_ms
+            ? (0.001f*(float)stair_handoff.support.vx_integral_mmps_ms) /
+              (float)stair_handoff.support.duration_ms : 0.0f,
     };
     g_rl_stair_debug=debug;
 

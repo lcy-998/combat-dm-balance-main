@@ -122,7 +122,9 @@ static void handling(void)
         step(&h,&s);
         assert(h.phase==RL_STAIR_ACTIVE); /* stable but not rolling */
     }
-    s.wheel_up_estimate_n[1]=0; step(&h,&s);
+    s.wheel_up_estimate_n[1]=0;
+    /* A sustained load loss resets the window before starting to roll. */
+    for (unsigned i=0;i<3;++i) step(&h,&s);
     s.wheel_up_estimate_n[1]=90; s.vx_estimate=1.2f;
     for (unsigned i=0;i<100;++i) {
         step(&h,&s);
@@ -191,6 +193,89 @@ static void handling(void)
     assert(fabsf(h.tread_estimate_m[0])<.003f && h.phase==RL_STAIR_ACTIVE);
     while (s.tick_ms-h.impact_tick<RL_STAIR_TIMEOUT_MS) step(&h,&s);
     assert(h.phase==RL_STAIR_STOPPED && h.fault==RL_STAIR_TIMEOUT);
+}
+
+/* Establish a repeatable stand-above-tread state using the same causal
+   simulated acceleration and wheel geometry as the end-to-end gate test. */
+static void recovered(RLStairHandoff *h,RLStairSample *s)
+{
+    ready(h,s,200u);
+    RLStairOnAdopt(h,RL_ACTOR_STAIR,s->tick_ms);
+    for (unsigned i=0;i<64;++i) {
+        s->accel_up=i<32?2.0f:-2.0f;
+        step(h,s);
+    }
+    s->accel_up=0;
+    flat(s,.25f);
+    step(h,s);
+}
+
+static void support_window(void)
+{
+    RLStairHandoff h;
+    RLStairSample s;
+    recovered(&h,&s);
+    const uint32_t first=s.tick_ms;
+    for (unsigned i=1;i<=100;++i) {
+        /* Five misses: two consecutive, then three isolated. Exactly 95%;
+           the window can pass at 500 ms but not at 499 ms or earlier. */
+        s.wheel_up_estimate_n[1]=i==9 || i==10 || i==33 || i==56 || i==75 ? 0 : 90;
+        step(&h,&s);
+        assert(h.phase==(i==100 ? RL_STAIR_RETURN : RL_STAIR_ACTIVE));
+    }
+    assert(h.supported_tick-first==500u);
+    assert(h.support.duration_ms==500u && h.support.loaded_ms==475u);
+
+    /* Drop a wheel while the Motion packet is in flight. Revoke on that
+       control tick, then request again as the oldest bad interval ages out. */
+    s.wheel_up_estimate_n[1]=0;
+    step(&h,&s);
+    RLStairOnAdopt(&h,RL_ACTOR_MOTION,s.tick_ms);
+    assert(h.phase==RL_STAIR_ACTIVE && !h.motion_adopted_tick);
+    s.wheel_up_estimate_n[1]=90;
+    for (unsigned i=2;i<9;++i) {
+        step(&h,&s);
+        assert(h.phase==RL_STAIR_ACTIVE); /* six recent misses = 94% */
+    }
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN && h.supported_tick-first==545u);
+
+    s.pitch=0.09f; /* outside 5 degrees, still well short of safety stop */
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_ACTIVE && !h.support.duration_ms);
+    s.pitch=0;
+    for (unsigned i=0;i<100;++i) {
+        step(&h,&s);
+        assert(h.phase==RL_STAIR_ACTIVE);
+    }
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN);
+
+    /* Sustained loss clears any previously accumulated support. */
+    s.wheel_up_estimate_n[0]=0;
+    for (unsigned i=0;i<3;++i) step(&h,&s);
+    assert(h.phase==RL_STAIR_ACTIVE && !h.support.duration_ms);
+    s.wheel_up_estimate_n[0]=90;
+    for (unsigned i=0;i<100;++i) {
+        step(&h,&s);
+        assert(h.phase==RL_STAIR_ACTIVE);
+    }
+    step(&h,&s);
+    assert(h.phase==RL_STAIR_RETURN);
+
+    /* Irregular 7 ms periods cross the 500 ms window mid-span: prune the
+       exact excess so the oldest millisecond matters, not the frame count. */
+    recovered(&h,&s);
+    const uint32_t jitter_begin=s.tick_ms;
+    s.vx_estimate=.35f;
+    for (unsigned i=1;i<=72;++i) {
+        s.tick_ms+=7;
+        ++s.imu_sequence;
+        RLStairUpdate(&h,&s);
+        assert(h.phase==(i==72 ? RL_STAIR_RETURN : RL_STAIR_ACTIVE));
+    }
+    assert(h.supported_tick-jitter_begin==504u && h.support.duration_ms==500u);
+    assert(h.support.vx_integral_mmps_ms==175000);
 }
 
 static void hub(float a,float b,float *point,float *links)
@@ -304,6 +389,7 @@ int main(void)
 {
     fast_impact();
     handling();
+    support_window();
     measured_force();
     execution();
     puts("PASS atomic Stair detector, bilateral load, epoch, decode, adopted previous and both handoffs");
